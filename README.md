@@ -4,6 +4,7 @@
 ## Документация
 
 - [AGENTS.md — контекст проекта и единые правила разработки](AGENTS.md)
+- [Постоянный контекст для новых задач и агентов](context/README.md)
 - [Технический проект: архитектура, стек, MAX, агент и данные](docs/engineering/README.md)
 - [Последовательность работ и три параллельных трека](docs/engineering/07-workstreams.md)
 - [Проверка MVP и фиксация сдаваемой версии](docs/engineering/08-verification-and-release.md)
