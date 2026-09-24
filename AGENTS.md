@@ -50,6 +50,7 @@
 | Проверка результата Z12 | Частично, проверено с fake case/poll/outbox | `src/dom_domych/domain/resolution/models.py`, `application/resolution/service.py`, `tests/fakes/resolution.py`, `tests/domain/test_resolution_service.py`; нет K CasePort, PostgreSQL UoW и MAX-доставки |
 | Итог результата Z13 | Частично, проверено с fake case/poll/outbox | Те же модули resolution: `closed` только после положительного опроса, `reopened` при отрицательном, `resolution_unconfirmed` при нехватке ответов; нет K production transition/jobs |
 | PDF QA Z15 | Частично, локальные 4 образца проверены | `docs/release/zamira-pdf-qa.md`; MAX mobile/web и PDF после outbox не проверены |
+| Материалы Z16 | Частично, локальный handoff готов | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
 | Python-проект, зависимости, CI и deploy | Не реализованы | Есть только независимый Z-модуль под `src/`; нет `pyproject.toml`, `uv.lock`, `deploy/` |
 | MAX-клиент, агент, БД, хранение опросов | Не реализованы | Нет кода интеграций и миграций |
 | Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z13; нет PostgreSQL integration tests и проверенного стенда |
