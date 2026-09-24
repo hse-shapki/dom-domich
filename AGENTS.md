@@ -43,12 +43,13 @@
 | Callback handler Z05 | Частично, проверено на нормализованном fake событии | `src/dom_domych/application/polls/callback.py`, `tests/domain/test_poll_callback.py`; реальный MAX callback/actor mapping A10 не подключён |
 | InitiativeService Z06 | Частично, проверено с fake CasePort и atomic repository | `src/dom_domych/domain/initiatives/models.py`, `application/initiatives/service.py`, `tests/domain/test_initiative_service.py`; нет K CasePort, PostgreSQL UoW и реального отзыва MAX action tokens |
 | Публичные карточки Z07 | Частично, проверено unit-тестами | `src/dom_domych/application/cards/builders.py`, `tests/domain/test_public_cards.py`; DTO не подключён к A DeliveryPort/edit/coalescing |
+| Напоминания и итог инициативы Z08 | Частично, проверено с fake rights/outbox | `src/dom_domych/application/initiatives/followup.py`, `tests/fakes/initiative_followup.py`, `tests/domain/test_initiative_followup.py`; нет A DeliveryPort/jobs и K перехода в исполнение |
 | FileStore и снимок документа Z09 | Частично, проверено локальными тестами | `src/dom_domych/infrastructure/files/local.py`, `domain/documents/snapshot.py`, `tests/infrastructure/test_local_file_store.py`, `tests/domain/test_document_snapshot.py`; нет БД, PDF job и MAX download |
 | PDF-рендер Z10 | Частично, проверено тестами и просмотром образцов | `src/dom_domych/infrastructure/documents/renderer.py`, `tests/infrastructure/test_pdf_renderer.py`, `output/pdf/`; нет durable job/outbox и MAX download |
 | DemoExecutor Z11 | Частично, проверено с атомарным fake store | `src/dom_domych/domain/executor/models.py`, `application/executor/service.py`, `tests/fakes/executor.py`, `tests/domain/test_demo_executor.py`; нет PostgreSQL repository/outbox и связи с RequestService |
 | Python-проект, зависимости, CI и deploy | Не реализованы | Есть только независимый Z-модуль под `src/`; нет `pyproject.toml`, `uv.lock`, `deploy/` |
 | MAX-клиент, агент, БД, хранение опросов | Не реализованы | Нет кода интеграций и миграций |
-| Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z07 и Z09–Z11; нет PostgreSQL integration tests и проверенного стенда |
+| Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z11; нет PostgreSQL integration tests и проверенного стенда |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.
 

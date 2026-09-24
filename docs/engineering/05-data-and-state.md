@@ -160,6 +160,8 @@ stateDiagram-v2
 
 [Публичные карточки](../../src/dom_domych/application/cards/builders.py) Z07 отдают текст и `edit_key/source_version` для A DeliveryPort: три раздельные шкалы инициативы (`answered/eligible`, `yes/eligible`, `yes/answered`), подтверждения проблемы и внешний/внутренний статус без раскрытия персональных ответов. Демо-порог помечен как настройка, `done` исполнителя не называется закрытием дела. MAX edit/coalescing и доставка ещё не проверены.
 
+[InitiativeFollowupService](../../src/dom_domych/application/initiatives/followup.py) Z08 вычисляет неответивших по frozen poll, запрашивает **текущие** права на личную доставку и передаёт кандидатов в repository для атомарной повторной проверки, частотного лимита и outbox. Демо-параметры: 30 минут между напоминаниями, максимум два на жителя, остановка за пять минут до закрытия. Отсутствие ответа и недоставка не меняют `eligible` или tally. После финализации poll отдельное решение `supported/not_supported` сохраняется один раз; только `initiative.supported` передаётся K для общего маршрута исполнения. Fake проверен, production A DeliveryPort/jobs и K RequestService ещё не связаны.
+
 ## 5. Границы транзакций
 
 | Операция | Атомарный результат |
