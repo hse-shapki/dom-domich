@@ -47,9 +47,10 @@
 | FileStore и снимок документа Z09 | Частично, проверено локальными тестами | `src/dom_domych/infrastructure/files/local.py`, `domain/documents/snapshot.py`, `tests/infrastructure/test_local_file_store.py`, `tests/domain/test_document_snapshot.py`; нет БД, PDF job и MAX download |
 | PDF-рендер Z10 | Частично, проверено тестами и просмотром образцов | `src/dom_domych/infrastructure/documents/renderer.py`, `tests/infrastructure/test_pdf_renderer.py`, `output/pdf/`; нет durable job/outbox и MAX download |
 | DemoExecutor Z11 | Частично, проверено с атомарным fake store | `src/dom_domych/domain/executor/models.py`, `application/executor/service.py`, `tests/fakes/executor.py`, `tests/domain/test_demo_executor.py`; нет PostgreSQL repository/outbox и связи с RequestService |
+| Проверка результата Z12 | Частично, проверено с fake case/poll/outbox | `src/dom_domych/domain/resolution/models.py`, `application/resolution/service.py`, `tests/fakes/resolution.py`, `tests/domain/test_resolution_service.py`; нет K CasePort, PostgreSQL UoW и MAX-доставки |
 | Python-проект, зависимости, CI и deploy | Не реализованы | Есть только независимый Z-модуль под `src/`; нет `pyproject.toml`, `uv.lock`, `deploy/` |
 | MAX-клиент, агент, БД, хранение опросов | Не реализованы | Нет кода интеграций и миграций |
-| Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z11; нет PostgreSQL integration tests и проверенного стенда |
+| Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z12; нет PostgreSQL integration tests и проверенного стенда |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.
 

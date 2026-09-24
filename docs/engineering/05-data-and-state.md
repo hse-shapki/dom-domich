@@ -154,6 +154,8 @@ stateDiagram-v2
 
 `requests.external_status` хранится отдельно от `cases.workflow_status` и результата опроса. Пометка исполнителя `done` не равна `closed`.
 
+[ResolutionService](../../src/dom_domych/application/resolution/service.py) Z12 после доверенного demo `done` открывает отдельный poll для **исходного** `AudienceSnapshot`, проверяя дом, request и право worker. Репозиторный контракт требует в одной UoW перевести дело в `checking_resolution`, сохранить poll, уведомления, deadline и done event key. При `eligible=0` создаётся проверка без адресатов, чтобы финализация дала `resolution_unconfirmed`, а не ложное закрытие. Пока это доказано только на fake; K CasePort, PostgreSQL и MAX-доставка ещё не подключены.
+
 Инициатива использует ветку `proposal → voting → decision_ready|not_supported → preparing_request → ...`. При недостижении поддержки сохраняется понятный результат без выдуманного исполнения. Вся поддержанная инициатива затем использует общий контроль выполнения.
 
 [InitiativeService](../../src/dom_domych/application/initiatives/service.py) Z06 сейчас принимает существующее дело `kind=initiative` через `CasePort`, проверяет автора/дом и атомарно связывает редакцию текста с новым опросом через свой repository contract. При изменении текста старый [PollState](../../src/dom_domych/domain/polls/models.py) переходит в `cancelled`, старые action tokens должны отзывать в той же UoW, а новый опрос начинается с нуля; ответы старой редакции остаются в истории. Fake проверяет переходы и конкурентные правки, но общий K CasePort, production UoW и отзыв токенов A ещё не подключены.
