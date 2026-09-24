@@ -158,6 +158,8 @@ stateDiagram-v2
 
 [InitiativeService](../../src/dom_domych/application/initiatives/service.py) Z06 сейчас принимает существующее дело `kind=initiative` через `CasePort`, проверяет автора/дом и атомарно связывает редакцию текста с новым опросом через свой repository contract. При изменении текста старый [PollState](../../src/dom_domych/domain/polls/models.py) переходит в `cancelled`, старые action tokens должны отзывать в той же UoW, а новый опрос начинается с нуля; ответы старой редакции остаются в истории. Fake проверяет переходы и конкурентные правки, но общий K CasePort, production UoW и отзыв токенов A ещё не подключены.
 
+[Публичные карточки](../../src/dom_domych/application/cards/builders.py) Z07 отдают текст и `edit_key/source_version` для A DeliveryPort: три раздельные шкалы инициативы (`answered/eligible`, `yes/eligible`, `yes/answered`), подтверждения проблемы и внешний/внутренний статус без раскрытия персональных ответов. Демо-порог помечен как настройка, `done` исполнителя не называется закрытием дела. MAX edit/coalescing и доставка ещё не проверены.
+
 ## 5. Границы транзакций
 
 | Операция | Атомарный результат |
