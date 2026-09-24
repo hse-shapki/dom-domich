@@ -12,6 +12,7 @@
 | Корневые правила для агентов | Есть | `AGENTS.md` |
 | Постоянный контекст | Есть | `context/README.md`, `decisions.md`, `product.md`, `engineering.md`, `current-state.md` |
 | Чистые доменные правила опросов Z01 | Проверены на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`: 23 теста |
+| Предложение контрактов Z00 | Частично: описано, не согласовано на A01 | `docs/engineering/09-z-interfaces.md`; общих DTO и contract tests пока нет |
 | Python-проект и зависимости | Не реализованы | Есть независимый Z-модуль в `src/`, но нет `pyproject.toml`, `uv.lock` и общего пакета A00 |
 | БД, миграции, MAX-клиент, агент, хранение опросов, PDF | Не обнаружены | Нет кода интеграций и `migrations/` |
 | Рабочий стенд и внешние проверки | Не подтверждены | Нет `deploy/`; доступ MAX/модели в этом проекте не проверялся |
