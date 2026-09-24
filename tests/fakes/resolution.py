@@ -68,6 +68,10 @@ class FakeResolutionStore:
                     existing.case_id != state.case_id
                     or existing.request_id != state.request_id
                     or existing.original_audience_id != state.original_audience_id
+                    or (
+                        key in self.starts_by_key
+                        and existing.done_event_id != state.done_event_id
+                    )
                 ):
                     raise ResolutionConflict("start operation key was reused")
                 return existing
@@ -103,9 +107,14 @@ class FakeResolutionStore:
             key = (house_id, operation_key)
             existing_id = self.finalize_by_key.get(key)
             if existing_id is not None:
-                if existing_id != check_id:
+                previous = self.states[existing_id]
+                if (
+                    existing_id != check_id
+                    or previous.poll_id != poll.definition.poll_id
+                    or previous.poll_version_at_decision != poll.version
+                ):
                     raise ResolutionConflict("finalization key was reused")
-                return self.states[existing_id]
+                return previous
             current = self.states.get(check_id)
             if current is None or current.house_id != house_id:
                 raise ResolutionConflict("check not found in this house")

@@ -298,3 +298,32 @@ async def test_empty_audience_is_unconfirmed_and_old_finalize_job_is_noop() -> N
     assert cases.case.workflow_status == "resolution_unconfirmed"
     assert store.events.count(("resolution.unconfirmed", CASE_ID)) == 1
     assert CASE_ID not in store.cancelled_case_jobs
+
+
+@pytest.mark.asyncio
+async def test_reused_keys_with_changed_events_or_poll_are_rejected() -> None:
+    service, _, store, clock = setup()
+    state = await start(service)
+    with pytest.raises(ResolutionConflict, match="start operation key"):
+        await service.start_check(
+            CASE_ID,
+            done_operation(),
+            synthetic_id("different-done-event"),
+            floor_audience(),
+            demo_resolution_policy(),
+            timedelta(hours=2),
+            WORKER,
+            operation_key="start-check",
+        )
+    poll = with_answers(store.polls[state.poll_id], yes=7, no=0)
+    store.polls[state.poll_id] = poll
+    clock.current = poll.definition.closes_at
+    await service.finalize(state.check_id, poll, WORKER, operation_key="finalize-key")
+
+    with pytest.raises(ResolutionConflict, match="finalization key"):
+        await service.finalize(
+            state.check_id,
+            replace(poll, version=poll.version - 1),
+            WORKER,
+            operation_key="finalize-key",
+        )
