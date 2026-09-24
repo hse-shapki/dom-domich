@@ -18,15 +18,16 @@
 | PollService Z04 | Частично: поведение и конкуренция проверены на fake | `src/dom_domych/domain/polls/models.py`, `src/dom_domych/application/polls/service.py`, `tests/domain/test_poll_service.py`; нет PostgreSQL repository/migration и MAX callback |
 | Callback handler Z05 | Частично: token/actor/revision/expiry проверены на fake | `src/dom_domych/application/polls/callback.py`, `tests/domain/test_poll_callback.py`; нет A10 MAX transport/action storage |
 | FileStore и immutable snapshot Z09 | Частично: проверены локально | `src/dom_domych/infrastructure/files/local.py`, `src/dom_domych/domain/documents/snapshot.py`, тесты в `tests/infrastructure/` и `tests/domain/test_document_snapshot.py`; нет PDF worker и PostgreSQL metadata |
+| PDF-рендер Z10 | Частично: 4 шаблона проверены локально | `src/dom_domych/infrastructure/documents/renderer.py`, `tests/infrastructure/test_pdf_renderer.py`, 4 синтетических образца в `output/pdf/`; нет durable PDF job/outbox и MAX download |
 | Python-проект и зависимости | Не реализованы | Есть независимый Z-модуль в `src/`, но нет `pyproject.toml`, `uv.lock` и общего пакета A00 |
-| БД, миграции, MAX-клиент, агент, хранение опросов, PDF-рендер | Не обнаружены | Нет кода интеграций и `migrations/` |
+| БД, миграции, MAX-клиент, агент, хранение опросов | Не обнаружены | Нет кода интеграций и `migrations/` |
 | Рабочий стенд и внешние проверки | Не подтверждены | Нет `deploy/`; доступ MAX/модели в этом проекте не проверялся |
 
 Эти строки описывают только осмотр репозитория. Они не доказывают отсутствие внешнего аккаунта или бота у команды. И наоборот, схема в Markdown не доказывает готовность реализации.
 
 ## Следующий шаг по утверждённому плану
 
-Продолжить G0 из [плана трёх пулов](implementation-plan.md): Алина делает A00 (Python-каркас), Катерина и Замира — K00/Z00 (предложения стыков), затем A01 закрепляет contracts. Предложение Z00 и fixture Z02 готовы для согласования; Z01 проверен на unit-уровне, Z03–Z05 — на fakes, Z09 — локально. Следующий независимый блок — PDF-рендер Z10 или инициативы Z06–Z08 через fake Case/Delivery ports. Реальный MAX callback требует A10; доступ MAX/LLM и готовность интеграций проверяются отдельно.
+Продолжить G0 из [плана трёх пулов](implementation-plan.md): Алина делает A00 (Python-каркас), Катерина и Замира — K00/Z00 (предложения стыков), затем A01 закрепляет contracts. Предложение Z00 и fixture Z02 готовы для согласования; Z01 проверен на unit-уровне, Z03–Z05 — на fakes, Z09–Z10 — локально. Следующий независимый блок — инициативы Z06–Z08 или demo executor Z11 через fake ports. Реальный MAX callback требует A10; доступ MAX/LLM и готовность интеграций проверяются отдельно.
 
 ## Как обновлять после задачи
 

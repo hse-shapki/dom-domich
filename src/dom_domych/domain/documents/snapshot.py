@@ -67,6 +67,7 @@ class DocumentSnapshot:
     audience_revision: int
     poll_id: UUID | None
     poll_revision: int | None
+    policy_revision: str | None
     request_id: UUID | None
     request_revision: int | None
     title: str
@@ -95,6 +96,8 @@ class DocumentSnapshot:
             raise ValueError("created_at must use UTC")
         if self.tally is not None and self.poll_id is None:
             raise ValueError("vote tally needs a poll reference")
+        if self.tally is not None and not self.policy_revision:
+            raise ValueError("vote tally needs a policy revision")
         if len({item.resident_id for item in self.notices}) != len(self.notices):
             raise ValueError("notice register cannot repeat a resident")
 
@@ -112,6 +115,7 @@ class DocumentSnapshot:
             "audience_revision": self.audience_revision,
             "poll_id": str(self.poll_id) if self.poll_id is not None else None,
             "poll_revision": self.poll_revision,
+            "policy_revision": self.policy_revision,
             "request_id": str(self.request_id) if self.request_id is not None else None,
             "request_revision": self.request_revision,
             "title": self.title,

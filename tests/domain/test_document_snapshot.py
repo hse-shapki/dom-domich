@@ -27,6 +27,7 @@ def snapshot() -> DocumentSnapshot:
         audience_revision=2,
         poll_id=synthetic_id("document-poll"),
         poll_revision=4,
+        policy_revision="demo-initiative-v1",
         request_id=None,
         request_revision=None,
         title="Позиция жителей по велопарковке",
@@ -63,6 +64,7 @@ def test_snapshot_hash_is_stable_and_changes_with_facts_or_revisions() -> None:
     assert (
         replace(first, template_revision="resident-position-v2").sha256 != first.sha256
     )
+    assert replace(first, policy_revision="demo-initiative-v2").sha256 != first.sha256
 
 
 def test_snapshot_cannot_be_mutated_after_capture() -> None:
