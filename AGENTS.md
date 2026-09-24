@@ -38,6 +38,7 @@
 | Постоянный контекст для будущих задач | Описан, поддерживать актуальным | `context/README.md`, `decisions.md`, `current-state.md`, `product.md`, `engineering.md` |
 | Доменные правила опросов Z01 | Проверено на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`; 23 проверки |
 | Синтетический дом и fake directory Z02 | Проверено как test fixture | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`; 4 проверки, с A02 ещё не объединён |
+| AudienceService Z03 | Частично, проверено с fake directory | `src/dom_domych/domain/audiences/models.py`, `application/audiences/service.py`, `tests/domain/test_audience_service.py`; PostgreSQL-репозиторий и миграция ещё нужны |
 | Python-проект, зависимости, CI и deploy | Не реализованы | Есть только независимый Z-модуль под `src/`; нет `pyproject.toml`, `uv.lock`, `deploy/` |
 | MAX-клиент, агент, БД, хранение опросов, документы, исполнение | Не реализованы | Нет кода интеграций и миграций |
 | Тесты и проверенный стенд | Частично | Есть unit tests Z01 и проверка fixtures Z02; нет интеграционных тестов и проверенного стенда |

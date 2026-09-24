@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from dom_domych.domain.audiences.models import RiserRef
+
 
 def synthetic_id(name: str) -> UUID:
     return uuid5(NAMESPACE_URL, f"dom-domich-demo:{name}")
@@ -24,11 +26,15 @@ class FixtureResidency:
     house_id: UUID
     entrance: int
     floor: int
-    riser_ids: frozenset[UUID]
+    risers: frozenset[RiserRef]
     confirmed: bool
     adult: bool
     active: bool
     dm_reachable: bool
+
+    @property
+    def riser_ids(self) -> frozenset[UUID]:
+        return frozenset(item.riser_id for item in self.risers)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +92,12 @@ def _residency(
         house_id=house_id,
         entrance=entrance,
         floor=floor,
-        riser_ids=risers,
+        risers=frozenset(
+            RiserRef(
+                riser_id=item, kind="heating" if item == RISER_E2_HEAT else "cold_water"
+            )
+            for item in risers
+        ),
         confirmed=confirmed,
         adult=adult,
         active=active,
