@@ -49,6 +49,7 @@
 | DemoExecutor Z11 | Частично, проверено с атомарным fake store | `src/dom_domych/domain/executor/models.py`, `application/executor/service.py`, `tests/fakes/executor.py`, `tests/domain/test_demo_executor.py`; нет PostgreSQL repository/outbox и связи с RequestService |
 | Проверка результата Z12 | Частично, проверено с fake case/poll/outbox | `src/dom_domych/domain/resolution/models.py`, `application/resolution/service.py`, `tests/fakes/resolution.py`, `tests/domain/test_resolution_service.py`; нет K CasePort, PostgreSQL UoW и MAX-доставки |
 | Итог результата Z13 | Частично, проверено с fake case/poll/outbox | Те же модули resolution: `closed` только после положительного опроса, `reopened` при отрицательном, `resolution_unconfirmed` при нехватке ответов; нет K production transition/jobs |
+| PDF QA Z15 | Частично, локальные 4 образца проверены | `docs/release/zamira-pdf-qa.md`; MAX mobile/web и PDF после outbox не проверены |
 | Python-проект, зависимости, CI и deploy | Не реализованы | Есть только независимый Z-модуль под `src/`; нет `pyproject.toml`, `uv.lock`, `deploy/` |
 | MAX-клиент, агент, БД, хранение опросов | Не реализованы | Нет кода интеграций и миграций |
 | Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z13; нет PostgreSQL integration tests и проверенного стенда |
