@@ -6,6 +6,7 @@ import pytest
 
 from dom_domych.application.resolution.service import ResolutionService
 from dom_domych.domain.executor.models import DemoOperation, ExternalStatus
+from dom_domych.domain.polls.models import PollState, VoteChoice
 from dom_domych.domain.polls.policy import demo_resolution_policy
 from dom_domych.domain.resolution.models import (
     ResolutionConflict,
@@ -175,3 +176,125 @@ async def test_unregistered_or_not_done_does_not_start_check() -> None:
             operation_key="not-done",
         )
     assert store.states == {}
+
+
+def with_answers(poll: PollState, yes: int, no: int) -> PollState:
+    for index in range(yes + no):
+        poll = poll.record_answer(
+            synthetic_id(f"resident-{index + 1}"),
+            VoteChoice.YES if index < yes else VoteChoice.NO,
+            synthetic_id(f"resolution-answer-{index}"),
+            poll.definition.opens_at + timedelta(minutes=1),
+        ).state
+    return poll.finalize(poll.definition.closes_at).state
+
+
+@pytest.mark.asyncio
+async def test_positive_resident_result_closes_case_and_cancels_future_jobs() -> None:
+    service, cases, store, clock = setup()
+    state = await start(service)
+    poll = with_answers(store.polls[state.poll_id], yes=7, no=0)
+    store.polls[state.poll_id] = poll
+    clock.current = poll.definition.closes_at
+
+    result = await service.finalize(
+        state.check_id, poll, WORKER, operation_key="finish"
+    )
+    repeated = await service.finalize(
+        state.check_id, poll, WORKER, operation_key="finish"
+    )
+
+    assert result == repeated
+    assert result.status is ResolutionStatus.CLOSED
+    assert cases.case.workflow_status == "closed"
+    assert CASE_ID in store.cancelled_case_jobs
+    assert state.poll_id not in store.deadline_jobs
+    assert store.events[-1] == ("resolution.confirmed", CASE_ID)
+
+
+@pytest.mark.asyncio
+async def test_negative_answers_take_priority_and_reopen_case() -> None:
+    service, cases, store, clock = setup()
+    state = await start(service)
+    poll = with_answers(store.polls[state.poll_id], yes=5, no=2)
+    store.polls[state.poll_id] = poll
+    clock.current = poll.definition.closes_at
+
+    result = await service.finalize(
+        state.check_id, poll, WORKER, operation_key="finish"
+    )
+
+    assert result.status is ResolutionStatus.REOPENED
+    assert cases.case.workflow_status == "reopened"
+    assert store.events[-1] == ("resolution.rejected", CASE_ID)
+    assert CASE_ID not in store.cancelled_case_jobs
+
+
+@pytest.mark.asyncio
+async def test_low_response_does_not_count_as_success() -> None:
+    service, cases, store, clock = setup()
+    state = await start(service)
+    poll = with_answers(store.polls[state.poll_id], yes=1, no=0)
+    store.polls[state.poll_id] = poll
+    clock.current = poll.definition.closes_at
+
+    result = await service.finalize(
+        state.check_id, poll, WORKER, operation_key="finish"
+    )
+
+    assert result.status is ResolutionStatus.UNCONFIRMED
+    assert cases.case.workflow_status == "resolution_unconfirmed"
+    assert store.events[-1] == ("resolution.unconfirmed", CASE_ID)
+
+
+@pytest.mark.asyncio
+async def test_stale_poll_snapshot_cannot_finalize_case() -> None:
+    service, cases, store, clock = setup()
+    state = await start(service)
+    poll = with_answers(store.polls[state.poll_id], yes=7, no=0)
+    store.polls[state.poll_id] = poll
+    clock.current = poll.definition.closes_at
+
+    with pytest.raises(ResolutionConflict, match="poll changed"):
+        await service.finalize(
+            state.check_id,
+            replace(poll, version=poll.version - 1),
+            WORKER,
+            operation_key="stale",
+        )
+    assert cases.case.workflow_status == "checking_resolution"
+
+
+@pytest.mark.asyncio
+async def test_empty_audience_is_unconfirmed_and_old_finalize_job_is_noop() -> None:
+    service, cases, store, clock = setup()
+    state = await service.start_check(
+        CASE_ID,
+        done_operation(),
+        DONE_EVENT_ID,
+        replace(floor_audience(), members=()),
+        demo_resolution_policy(),
+        timedelta(hours=2),
+        WORKER,
+        operation_key="empty-check",
+    )
+    poll = (
+        store.polls[state.poll_id]
+        .finalize(store.polls[state.poll_id].definition.closes_at)
+        .state
+    )
+    store.polls[state.poll_id] = poll
+    clock.current = poll.definition.closes_at
+
+    first = await service.finalize(
+        state.check_id, poll, WORKER, operation_key="finalize-once"
+    )
+    old_job = await service.finalize(
+        state.check_id, poll, WORKER, operation_key="stale-job"
+    )
+
+    assert first == old_job
+    assert first.status is ResolutionStatus.UNCONFIRMED
+    assert cases.case.workflow_status == "resolution_unconfirmed"
+    assert store.events.count(("resolution.unconfirmed", CASE_ID)) == 1
+    assert CASE_ID not in store.cancelled_case_jobs

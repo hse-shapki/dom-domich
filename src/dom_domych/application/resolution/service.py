@@ -60,6 +60,17 @@ class ResolutionStore(Protocol):
         """В одной UoW: case checking, poll, outbox, deadline и done event key."""
         ...
 
+    async def finalize_atomic(
+        self,
+        check_id: UUID,
+        house_id: UUID,
+        poll: PollState,
+        at: datetime,
+        operation_key: str,
+    ) -> ResolutionState:
+        """Под lock: итог poll, case transition, outbox и нейтрализация jobs."""
+        ...
+
 
 class Clock(Protocol):
     def now(self) -> datetime: ...
@@ -139,6 +150,21 @@ class ResolutionService:
             poll,
             tuple(item.resident_id for item in original_audience.members),
             operation_key,
+        )
+
+    async def finalize(
+        self,
+        check_id: UUID,
+        poll: PollState,
+        context: TrustedResolutionContext,
+        *,
+        operation_key: str,
+    ) -> ResolutionState:
+        self._require(context, "resolution.finalize")
+        if not operation_key:
+            raise ValueError("operation key is required")
+        return await self.store.finalize_atomic(
+            check_id, context.house_id, poll, self.clock.now(), operation_key
         )
 
     @staticmethod

@@ -2,12 +2,14 @@
 
 import asyncio
 from dataclasses import dataclass, replace
+from datetime import datetime
 from uuid import UUID
 
-from dom_domych.domain.polls.models import PollState
+from dom_domych.domain.polls.models import PollState, PollStatus
 from dom_domych.domain.resolution.models import (
     ResolutionConflict,
     ResolutionState,
+    ResolutionStatus,
 )
 
 
@@ -41,8 +43,10 @@ class FakeResolutionStore:
         self.polls: dict[UUID, PollState] = {}
         self.starts_by_key: dict[tuple[UUID, str], UUID] = {}
         self.starts_by_done_event: dict[tuple[UUID, UUID], UUID] = {}
+        self.finalize_by_key: dict[tuple[UUID, str], UUID] = {}
         self.notifications: dict[UUID, tuple[UUID, ...]] = {}
         self.deadline_jobs: set[UUID] = set()
+        self.cancelled_case_jobs: set[UUID] = set()
         self.events: list[tuple[str, UUID]] = []
 
     async def start_once(
@@ -86,3 +90,55 @@ class FakeResolutionStore:
             )
             self.events.append(("resolution.started", state.case_id))
             return state
+
+    async def finalize_atomic(
+        self,
+        check_id: UUID,
+        house_id: UUID,
+        poll: PollState,
+        at: datetime,
+        operation_key: str,
+    ) -> ResolutionState:
+        async with self._lock:
+            key = (house_id, operation_key)
+            existing_id = self.finalize_by_key.get(key)
+            if existing_id is not None:
+                if existing_id != check_id:
+                    raise ResolutionConflict("finalization key was reused")
+                return self.states[existing_id]
+            current = self.states.get(check_id)
+            if current is None or current.house_id != house_id:
+                raise ResolutionConflict("check not found in this house")
+            persisted_poll = self.polls[current.poll_id]
+            if persisted_poll != poll or poll.status is not PollStatus.CLOSED:
+                raise ResolutionConflict("poll changed before resolution decision")
+            updated = current.decide(poll, at)
+            if updated is current:
+                return current
+            case = self.cases.case
+            if (
+                case.case_id != current.case_id
+                or case.workflow_status != "checking_resolution"
+                or case.version != current.case_version_at_start + 1
+            ):
+                raise ResolutionConflict("case changed before resolution decision")
+            workflow = {
+                ResolutionStatus.CLOSED: "closed",
+                ResolutionStatus.REOPENED: "reopened",
+                ResolutionStatus.UNCONFIRMED: "resolution_unconfirmed",
+            }[updated.status]
+            self.states[check_id] = updated
+            self.cases.case = replace(
+                case, workflow_status=workflow, version=case.version + 1
+            )
+            self.finalize_by_key[key] = check_id
+            self.deadline_jobs.discard(poll.definition.poll_id)
+            if updated.status is ResolutionStatus.CLOSED:
+                self.cancelled_case_jobs.add(current.case_id)
+            event = {
+                ResolutionStatus.CLOSED: "resolution.confirmed",
+                ResolutionStatus.REOPENED: "resolution.rejected",
+                ResolutionStatus.UNCONFIRMED: "resolution.unconfirmed",
+            }[updated.status]
+            self.events.append((event, current.case_id))
+            return updated
