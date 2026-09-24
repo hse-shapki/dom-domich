@@ -36,4 +36,4 @@
 
 ## Независимые проверки до интеграции
 
-Z использует fake `HouseContextPort`, `CasePort`, `DeliveryPort`, `JobPort` на [синтетическом доме Z02](../../context/tasks-zamira.md), затем сравнивает их contract tests с реализациями A/K. Чистые [правила Z01](../../src/dom_domych/domain/polls/policy.py) уже могут проверяться без общего пакета. PostgreSQL concurrency/migration tests, настоящий callback и MAX mobile/web относятся к G1–Release и не объявляются пройденными по fake.
+Z использует [синтетический дом Z02](../../tests/fixtures/zamira_house.py) и fake resident directory; fake `CasePort`, `DeliveryPort`, `JobPort` добавляются с соответствующими use cases. Затем contract tests сравнят их с реализациями A/K. Чистые [правила Z01](../../src/dom_domych/domain/polls/policy.py) уже проверяются без общего пакета. PostgreSQL concurrency/migration tests, настоящий callback и MAX mobile/web относятся к G1–Release и не объявляются пройденными по fake.
