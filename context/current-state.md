@@ -15,6 +15,7 @@
 | Предложение контрактов Z00 | Частично: описано, не согласовано на A01 | `docs/engineering/09-z-interfaces.md`; общих DTO и contract tests пока нет |
 | Синтетический дом Z02 | Проверен как fixture, не интегрирован с A02 | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`: 4 теста |
 | AudienceService Z03 | Частично: выбор и история snapshot проверены на fake | `src/dom_domych/domain/audiences/models.py`, `src/dom_domych/application/audiences/service.py`, `tests/domain/test_audience_service.py`; нет PostgreSQL repository/migration |
+| PollService Z04 | Частично: поведение и конкуренция проверены на fake | `src/dom_domych/domain/polls/models.py`, `src/dom_domych/application/polls/service.py`, `tests/domain/test_poll_service.py`; нет PostgreSQL repository/migration и MAX callback |
 | Python-проект и зависимости | Не реализованы | Есть независимый Z-модуль в `src/`, но нет `pyproject.toml`, `uv.lock` и общего пакета A00 |
 | БД, миграции, MAX-клиент, агент, хранение опросов, PDF | Не обнаружены | Нет кода интеграций и `migrations/` |
 | Рабочий стенд и внешние проверки | Не подтверждены | Нет `deploy/`; доступ MAX/модели в этом проекте не проверялся |
@@ -23,7 +24,7 @@
 
 ## Следующий шаг по утверждённому плану
 
-Продолжить G0 из [плана трёх пулов](implementation-plan.md): Алина делает A00 (Python-каркас), Катерина и Замира — K00/Z00 (предложения стыков), затем A01 закрепляет contracts. Предложение Z00 и fixture Z02 готовы для согласования; Z01 проверен на unit-уровне, Z03 — на fake directory. Следующий независимый шаг Z — PollService на этих snapshots. Реальный доступ MAX/LLM и готовность интеграций проверяются отдельно.
+Продолжить G0 из [плана трёх пулов](implementation-plan.md): Алина делает A00 (Python-каркас), Катерина и Замира — K00/Z00 (предложения стыков), затем A01 закрепляет contracts. Предложение Z00 и fixture Z02 готовы для согласования; Z01 проверен на unit-уровне, Z03/Z04 — на fakes. Следующий стык Z05 требует доверенного callback A10; до него можно развивать инициативы Z06–Z08 через fake Case/Delivery ports. Реальный доступ MAX/LLM и готовность интеграций проверяются отдельно.
 
 ## Как обновлять после задачи
 

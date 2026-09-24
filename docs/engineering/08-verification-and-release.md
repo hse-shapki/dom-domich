@@ -106,4 +106,4 @@ HTTP contracts MAX проверяем через HTTPX MockTransport, FastAPI in
 4. Сохранить модель/шаблоны/prompts/config revisions и image digests, чтобы стенд соответствовал сдаче.
 5. После дедлайна не менять переданную версию и не подменять её на стенде. Дальнейшая разработка — отдельная ветка; submitted tag не передвигается.
 
-Сейчас реализованы только чистые правила и выбор аудитории Z с unit/fake tests. Сквозные сценарии, MAX mobile/web, PostgreSQL concurrency и релизные пункты не проверены; текущий статус — в [контексте](../../context/current-state.md).
+Сейчас реализованы чистые правила, выбор аудитории и доменные переходы опроса Z с unit/fake tests. Сквозные сценарии, MAX mobile/web, PostgreSQL concurrency и релизные пункты не проверены; текущий статус — в [контексте](../../context/current-state.md).
