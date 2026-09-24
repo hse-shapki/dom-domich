@@ -156,6 +156,8 @@ stateDiagram-v2
 
 Инициатива использует ветку `proposal → voting → decision_ready|not_supported → preparing_request → ...`. При недостижении поддержки сохраняется понятный результат без выдуманного исполнения. Вся поддержанная инициатива затем использует общий контроль выполнения.
 
+[InitiativeService](../../src/dom_domych/application/initiatives/service.py) Z06 сейчас принимает существующее дело `kind=initiative` через `CasePort`, проверяет автора/дом и атомарно связывает редакцию текста с новым опросом через свой repository contract. При изменении текста старый [PollState](../../src/dom_domych/domain/polls/models.py) переходит в `cancelled`, старые action tokens должны отзывать в той же UoW, а новый опрос начинается с нуля; ответы старой редакции остаются в истории. Fake проверяет переходы и конкурентные правки, но общий K CasePort, production UoW и отзыв токенов A ещё не подключены.
+
 ## 5. Границы транзакций
 
 | Операция | Атомарный результат |

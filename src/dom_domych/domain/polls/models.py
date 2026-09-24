@@ -29,6 +29,7 @@ class PollKind(StrEnum):
 class PollStatus(StrEnum):
     OPEN = "open"
     CLOSED = "closed"
+    CANCELLED = "cancelled"
 
 
 class VoteChoice(StrEnum):
@@ -132,6 +133,8 @@ class PollState:
             raise ValueError("open poll cannot have final outcome")
         if self.status == PollStatus.CLOSED and self.outcome is None:
             raise ValueError("closed poll needs final outcome")
+        if self.status == PollStatus.CANCELLED and self.outcome is not None:
+            raise ValueError("cancelled poll cannot have outcome")
 
     @property
     def tally(self) -> VoteTally:
@@ -167,7 +170,7 @@ class PollState:
             return PollMutation(
                 self, AnswerResult(AnswerStatus.LATE, self.version, None)
             )
-        if self.status == PollStatus.CLOSED:
+        if self.status != PollStatus.OPEN:
             return PollMutation(
                 self, AnswerResult(AnswerStatus.CLOSED, self.version, None)
             )
@@ -226,7 +229,7 @@ class PollState:
 
         if now.tzinfo is None or now.utcoffset() != timedelta(0):
             raise ValueError("now must use UTC")
-        if self.status == PollStatus.CLOSED:
+        if self.status != PollStatus.OPEN:
             return PollMutation(self)
         if now < self.definition.closes_at:
             raise ValueError("poll deadline has not arrived")
@@ -241,3 +244,11 @@ class PollState:
             self, status=PollStatus.CLOSED, version=self.version + 1, outcome=outcome
         )
         return PollMutation(updated, events=("poll.finalized",))
+
+    def cancel(self) -> PollMutation:
+        """Инвалидирует старые голоса/кнопки при изменении предмета опроса."""
+
+        if self.status != PollStatus.OPEN:
+            return PollMutation(self)
+        updated = replace(self, status=PollStatus.CANCELLED, version=self.version + 1)
+        return PollMutation(updated, events=("poll.cancelled",))
