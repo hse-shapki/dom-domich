@@ -4,7 +4,12 @@ import asyncio
 from datetime import datetime
 from uuid import UUID
 
-from dom_domych.domain.polls.models import PollMutation, PollState, VoteChoice
+from dom_domych.domain.polls.models import (
+    PollDefinition,
+    PollMutation,
+    PollState,
+    VoteChoice,
+)
 
 
 class FakePollRepository:
@@ -85,6 +90,14 @@ class FakePollRepository:
                 self.by_id[poll_id] = mutation.state
                 self.events.extend(mutation.events)
             return mutation
+
+    async def get_definition(
+        self, poll_id: UUID, house_id: UUID
+    ) -> PollDefinition | None:
+        current = self.by_id.get(poll_id)
+        if current is None or current.definition.house_id != house_id:
+            return None
+        return current.definition
 
     def _get_scoped(self, poll_id: UUID, house_id: UUID) -> PollState:
         current = self.by_id.get(poll_id)
