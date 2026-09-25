@@ -32,6 +32,8 @@
 
 Авторизационный заголовок MAX привязан к его API origin. Загрузку по выданному upload URL выполняет отдельный транспорт по документированному формату; нельзя автоматически пересылать секреты на произвольный host/redirect. Состояние диалогов хранится в PostgreSQL, не в памяти клиента.
 
+A11 реализует `MaxMediaTransport` с отдельным HTTP client без Bot API токена, HTTPS allowlist для CDN `oneme.ru`/`okcdn.ru`, запретом redirect и ограничением 20 МБ для демо. PDF из house-scoped FileStore загружается multipart через URL `POST /uploads`, полученный token сохраняется в outbox и переиспользуется при `attachment.not.ready`. Фото извлекается только из сохранённого MAX attachment payload; `MaxEvidenceLoader` проверяет дом чата и подтверждённого автора до скачивания, затем FileStore проверяет MIME и сигнатуру. Добавлены process-local общий/dialog/callback rate limits и coalescing ещё не отправленных edit по исходной карточке; один outbox consumer на токен остаётся operational invariant. Повтор импорта evidence пока должен дедуплицировать вызывающий K use case по event/attachment; live mobile/web и реальные лимиты MAX ещё не проверены. [MAX media](https://dev.max.ru/docs-api/use-cases/sending-messages/media), [POST uploads](https://dev.max.ru/docs-api/methods/POST/uploads).
+
 Production-стенд принимает webhook по HTTPS на 443, с доверенным сертификатом. При создании подписки задаём secret, на входе сравниваем `X-Max-Bot-Api-Secret`. MAX требует ответ `200` в течение 30 секунд; наше правило — сохранять inbox и отвечать сразу, не ждать LLM. Если БД не приняла событие, не подтверждаем сохранение. [Webhook](https://dev.max.ru/docs-api/methods/POST/subscriptions).
 
 Dev polling допускается только без активного webhook. Сохраняем полученные события перед продвижением marker; без marker возможна потеря предшествующих событий. Для событий группового чата боту нужны права администратора. [Long Polling](https://dev.max.ru/docs-api/methods/GET/updates).
@@ -42,13 +44,13 @@ Dev polling допускается только без активного webhoo
 
 | MAX Update | Внутреннее событие | Обработка |
 |---|---|---|
-| `bot_started` | `resident.onboarding_started` | Привязка жителя, выбор квартиры, проверка лички |
+| `bot_started` | `bot.started` | Транспортное событие; A06 запускает онбординг |
 | `message_created` | `message.received` | Сохранение, контекст, агент |
-| `message_callback` | `interaction.received` | Проверка действия и участника, запись ответа без LLM |
-| `message_edited` | `message.revised` | Новая ревизия, при необходимости пересмотр фактов |
+| `message_callback` | `callback.received` | Проверка действия и участника, запись ответа без LLM |
+| `message_edited` | `message.edited` | Новая ревизия, при необходимости пересмотр фактов |
 | `message_removed` | `message.removed` | Отметка удаления и политика хранения; не считать старый текст новым подтверждением |
 | `bot_added` / `bot_removed` | `house.bot_membership_changed` | Связь с разрешённым тестовым домом, остановка недоступных доставок |
-| `bot_stopped` | `resident.bot_stopped` | Приостановка личных уведомлений |
+| `bot_stopped` | `bot.stopped` | Транспортное событие; A06/A13 приостанавливают ЛС |
 | `bot_admin_permissions_changed` | `house.bot_permissions_changed` | Проверка доступа к групповым событиям |
 
 Источник списка: [Update](https://dev.max.ru/docs-api/objects/Update). Конкретные поля каждого варианта сверяем с официальной схемой и реальными fixtures. На входе — Pydantic discriminated union по `update_type`, неизвестный вариант сохраняем для диагностики и не исполняем как команду; у Update не предполагаем универсальный `update_id`.
@@ -72,7 +74,7 @@ correlation_id / causation_id
 
 ## 4. Адресная личка
 
-Онбординг команды: каждый тестовый житель открывает личный диалог с ботом, проходит привязку к квартире и получает проверочное сообщение. Отмечаем `dm_status=reachable|unknown|stopped|failed`.
+Онбординг команды: demo operator с доверенной capability `demo.residency_confirm` после проверки квартиры и совершеннолетия выдаёт одноразовый код (в БД только digest). Житель пишет боту `/start <код>` в личке; A06 связывает MAX user ID из Update с записью жителя и квартирой, подтверждает проживание и отвечает после commit. `/house <номер>` переключает дом при нескольких подтверждённых связях, `bot_stopped` снимает доступность лички. Сейчас хранится `dm_reachable` как bool; детальные статусы `unknown/stopped/failed` и выдача кода через реального operator остаются для интеграции. Код нельзя принимать из общего чата.
 
 Не предполагаем, что membership в групповом чате гарантирует возможность личной доставки. Это проверяется на реальных аккаунтах. При неуспехе не раскрываем квартиру или персональный ответ в общем чате; показываем общую инструкцию открыть бота и фиксируем недоставку. Состав подходящей аудитории не сокращаем до успешно уведомлённых.
 
@@ -81,6 +83,8 @@ correlation_id / causation_id
 ## 5. Карточки, кнопки и идентификаторы
 
 Используем `inline_keyboard` с короткими callback-кнопками. В payload — случайный непрозрачный `action_token`; серверная запись связывает его с action, poll, audience member, сроком и версией карточки. Не кладём персональные данные или полномочия в payload.
+
+Чистый [handler Z05](../../src/dom_domych/application/polls/callback.py) проверяет серверную запись токена и вызывает PollService. A10 добавил `PostgresPollActionStore` (в БД только digest токена) и `MaxPollCallbackTransport`: он подтверждает callback через `POST /answers`, проверяет MAX actor по реестру подтверждённых совершеннолетних жильцов, привязку чата к дому и передаёт handler доверенный контекст. Локальные PostgreSQL/MockTransport tests проходят; wiring к production PollRepository и проверка кнопки в mobile/web MAX ещё нужны. Повтор callback с тем же событием должен отсеиваться inbox и PollRepository, а не по одноразовому использованию token: житель может поменять голос в рамках открытого окна.
 
 Нажатие не доказывает право голоса: handler проверяет MAX actor, принадлежность snapshot аудитории и актуальность опроса. Для общих карточек токен может быть общий, но проверка права участника обязательна. Пересылка карточки не является механизмом распространения интерактивного интерфейса: документация указывает, что кнопки при пересылке не переносятся. [Клавиатура](https://dev.max.ru/docs-api/use-cases/sending-messages/keyboard).
 

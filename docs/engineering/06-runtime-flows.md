@@ -85,6 +85,8 @@ flowchart TD
 
 В demo executor номера имеют тестовый префикс, а события — `source=demo_executor`. Для ускоренного показа используем DemoClock; на карточке и в материалах указано ускорение времени.
 
+Сервис [DemoExecutorService](../../src/dom_domych/application/executor/service.py) Z11 уже задаёт типизированные команды `submit/register/set_status/get_status`. Он принимает только утверждённую ссылку на черновик из доверенного RequestService и проверяет capability для отправки, регистрации и служебного изменения статуса. [Доменная модель](../../src/dom_domych/domain/executor/models.py) сохраняет `source=demo_executor`, выдаёт номер `DEMO-*` только при регистрации и не содержит перехода workflow дела в `closed`. Fake store проверяет идемпотентность, запрет второй операции для того же request и атомарные события, но production PostgreSQL repository/outbox и связка с RequestService ещё не готовы. Поэтому тестовый номер в реальном MAX пока не появляется.
+
 ## 4. Обращение и документы
 
 1. RequestService проверяет маршрут, обязательные факты, evidence и применимое правило.
