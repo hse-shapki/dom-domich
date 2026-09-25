@@ -13,8 +13,8 @@
 - [Журнал продуктовых решений](docs/open-questions.md)
 
 В репозитории есть Python-проект, независимые модули Замиры и локально проверенные части платформы
-Алины: webhook, реестр, inbox/outbox/jobs, callback, онбординг, файлы, rate limits, dev polling и
-production Compose/Caddy-конфигурация. Сквозной агент, production repositories K/Z и живой стенд
+Алины: webhook, реестр, inbox/outbox/jobs, callback, онбординг, файлы, rate limits, dev polling,
+retention/release audit и production Compose/Caddy-конфигурация. Сквозной агент, production repositories K/Z и живой стенд
 MAX ещё не подключены; точное состояние — в [контексте](context/current-state.md).
 
 Локальная проверка: `uv sync --locked`, затем `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/dom_domych`, `uv run pytest`.
@@ -23,5 +23,5 @@ MAX ещё не подключены; точное состояние — в [к
 `DATABASE_URL` из `.env.example`, выполнить `uv run alembic upgrade head`. Синтетический seed
 запускается только с тестовым именем БД (`dom_domych_test`):
 `uv run python -m scripts.seed_demo_house`. Production-конфигурация и безопасный порядок
-backup/restore описаны в [runbook Алины](docs/release/alina-operations.md). Docker Compose schema
+backup/restore описаны в [эксплуатационном runbook](docs/release/platform-operations.md). Docker Compose schema
 проверена, но daemon и реальный PostgreSQL 17/pgvector в текущей среде не запустились.

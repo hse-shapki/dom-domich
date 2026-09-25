@@ -21,3 +21,9 @@
 | types-ReportLab | Apache-2.0 | https://github.com/python/typeshed/blob/main/LICENSE |
 
 Инвентарь составлен по публичным файлам лицензий upstream; наличие записи не заменяет проверку license metadata в установленном окружении и условий для bundled шрифта.
+
+Повторный транзитивный audit A17 запускается `scripts.release_audit licenses`. На locked окружении
+25.09.2026 он перечислил 41 distribution: лицензии 40 внешних пакетов определились из
+`License-Expression`, `License` или classifiers; единственный `UNKNOWN` — собственный пакет
+`dom-domych`, потому что команда ещё не выбрала лицензию проекта. `pathspec` определяется по
+classifier как MPL-2.0. Финальный NOTICE формируется только после выбора лицензии проекта.

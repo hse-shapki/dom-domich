@@ -23,7 +23,7 @@
 | [12. PostgreSQL core](12-postgres-core.md) | Core-миграция, UoW, seed и house-scoped реестр |
 | [13. MAX-клиент](13-max-client-status.md) | Реализованные методы Bot API и оставшиеся live-проверки |
 | [14. Webhook/inbox](14-webhook-inbox.md) | Нормализация MAX Update и durable ingress |
-| [Эксплуатация A12–A17](../release/alina-operations.md) | Compose/Caddy, backup/restore и release checklist |
+| [Эксплуатация A12–A17](../release/platform-operations.md) | Compose/Caddy, backup/restore и release checklist |
 
 ## Что считаем актуальным
 
