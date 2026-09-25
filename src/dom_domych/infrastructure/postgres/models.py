@@ -170,3 +170,27 @@ class OutboxDeliveryRow(Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     max_message_id: Mapped[str | None] = mapped_column(String(100))
     error_code: Mapped[str | None] = mapped_column(String(100))
+
+
+class ScheduledJobRow(Base):
+    __tablename__ = "scheduled_jobs"
+    __table_args__ = (
+        UniqueConstraint("house_id", "operation_key"),
+        Index("ix_scheduled_jobs_due", "status", "due_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    house_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("houses.id"), nullable=False
+    )
+    operation_key: Mapped[str] = mapped_column(String(250), nullable=False)
+    event_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    entity_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    expected_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(100))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(100))

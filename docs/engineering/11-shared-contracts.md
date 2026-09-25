@@ -21,6 +21,14 @@ worker сопоставляет с подтверждённым проживан
 остаётся в `waiting_attachment`. После сетевого timeout статус `delivery_unknown`: повтор без
 проверки может продублировать сообщение; MAX не даёт этому adapter гарантии exactly-once.
 
+Для `JobPort` adapter A09 — `PostgresJobQueue(session)` в той же UoW, что и изменение сущности.
+`event_name` — значение `EventName` для события с entity payload, `due_at` — UTC,
+`expected_version` — версия на момент постановки. `JobScheduler` после рестарта берёт due job по
+lease, сверяет версию через `CurrentRevisionPort` K/Z и передаёт `EventEnvelope` в общий dispatcher.
+Если версия уже иная или сущность удалена, job получает `skipped_stale`. Consumer также проверяет
+версию под своим lock: между предварительной проверкой scheduler и use case возможна смена состояния.
+Повтор того же `operation_key` безопасен только с теми же параметрами; иначе возвращается конфликт.
+
 В коде портов `get` — минимальная читательская операция с обязательным `house_id`; она не заменяет специальные команды сервисов. Методы мутации проектируются вместе с владельцем и требуют `expected_version`, operation key и общей UoW. `RiserRef` и `ResidencyView` перемещены в общий pure-domain слой; типы Z импортируют тот же объект. Синтетический дом Z02 проверяется через `FakeHouseContext` в `tests/contracts/test_core.py`.
 
 Нормализованный Event хранит внешние MAX ID строками без потери точности. `house_id=None` допустим до выбора дома в личке; tool context создаётся только после разрешения дома. Время в UTC, версии положительные, неизвестные поля строгих DTO отклоняются. `source` + `source_key` — ключ inbox дедупликации; уникальность обеспечит A04 на уровне БД.

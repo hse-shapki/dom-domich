@@ -1,0 +1,99 @@
+"""Запуск due jobs через общий dispatcher с проверкой версии сущности."""
+
+from datetime import timedelta
+from typing import Protocol
+from uuid import UUID
+
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from dom_domych.application.jobs.inbox_worker import EventDispatcher
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventSource
+from dom_domych.domain.ports.core import Clock
+from dom_domych.infrastructure.postgres.jobs import DueJob, PostgresJobQueue
+
+logger = structlog.get_logger()
+
+
+class CurrentRevisionPort(Protocol):
+    """K/Z adapter читает версию под house scope; consumer повторно проверяет её под lock."""
+
+    async def current_version(self, job: DueJob) -> int | None: ...
+
+
+class JobScheduler:
+    def __init__(
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        dispatcher: EventDispatcher,
+        revisions: CurrentRevisionPort,
+        clock: Clock,
+        worker_id: str,
+        max_attempts: int = 5,
+    ) -> None:
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be positive")
+        self.sessions = sessions
+        self.dispatcher = dispatcher
+        self.revisions = revisions
+        self.clock = clock
+        self.worker_id = worker_id
+        self.max_attempts = max_attempts
+
+    async def run_once(self) -> bool:
+        async with self.sessions.begin() as session:
+            job = await PostgresJobQueue(session).claim(
+                self.worker_id, self.clock.now(), timedelta(seconds=60)
+            )
+        if job is None:
+            return False
+        try:
+            current = await self.revisions.current_version(job)
+            if current != job.expected_version:
+                await self._settle(job.id, "skipped_stale")
+                return True
+            await self.dispatcher.handle(
+                EventEnvelope(
+                    event_id=job.id,
+                    source=EventSource.SCHEDULER,
+                    source_key=f"job:{job.id}",
+                    name=job.event_name,
+                    occurred_at=job.due_at,
+                    received_at=self.clock.now(),
+                    correlation_id=job.id,
+                    house_id=job.house_id,
+                    entity=EntityEventPayload(
+                        entity_id=job.entity_id, entity_version=job.expected_version
+                    ),
+                )
+            )
+            await self._settle(job.id, "done")
+        except Exception as exc:
+            logger.error("job_failed", job_id=str(job.id), error=type(exc).__name__)
+            if job.attempts >= self.max_attempts:
+                await self._settle(job.id, "dead", error_code=type(exc).__name__)
+            else:
+                delay = timedelta(seconds=min(60, 5 * (2 ** (job.attempts - 1))))
+                await self._settle(
+                    job.id, "pending", error_code=type(exc).__name__, retry_after=delay
+                )
+        return True
+
+    async def _settle(
+        self,
+        job_id: UUID,
+        status: str,
+        *,
+        error_code: str | None = None,
+        retry_after: timedelta | None = None,
+    ) -> None:
+        async with self.sessions.begin() as session:
+            await PostgresJobQueue(session).settle(
+                job_id,
+                self.worker_id,
+                self.clock.now(),
+                status,
+                error_code=error_code,
+                retry_after=retry_after,
+            )
+        logger.info("job_settled", job_id=str(job_id), status=status, error_code=error_code)
