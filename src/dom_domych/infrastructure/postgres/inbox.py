@@ -30,6 +30,7 @@ async def save_inbox_event(
             raw_update=raw_update,
             normalized_event=event.model_dump(mode="json") if event is not None else None,
             received_at=received_at,
+            available_at=received_at,
             status="pending" if event is not None else "ignored",
         )
         .on_conflict_do_nothing(index_elements=["source", "source_key"])
