@@ -90,7 +90,15 @@ class DeliveryWorker:
             attachments = [{"type": "file", "payload": {"token": token}}]
         try:
             if edit_message_id is not None:
-                await self.max_client.edit_text(edit_message_id, delivery.text)
+                await self.max_client.edit_text(
+                    edit_message_id,
+                    delivery.text,
+                    dialog_key=(
+                        f"chat:{delivery.chat_id}"
+                        if delivery.chat_id is not None
+                        else f"resident:{delivery.recipient_id}"
+                    ),
+                )
                 message_id = edit_message_id
             elif user_id is not None:
                 message_id = await self.max_client.send_text(

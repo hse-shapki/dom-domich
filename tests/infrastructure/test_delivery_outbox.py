@@ -154,3 +154,57 @@ async def test_public_card_is_sent_then_edited_by_saved_message_id() -> None:
             )
     assert [request.method for request in updates] == ["POST", "PUT"]
     assert updates[1].url.params["message_id"] == "mid.card"
+
+
+@pytest.mark.asyncio
+async def test_pending_card_edits_are_coalesced_to_latest_version() -> None:
+    clock = FixedClock()
+    initial_key = f"a11:card:{uuid4()}"
+    async with database_lifespan(database_url_for_test()) as sessions:
+        async with sessions.begin() as session:
+            await seed_demo_house(session)
+            await session.execute(
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id="444")
+            )
+            queue = PostgresDeliveryQueue(session, clock)
+            first_id = await queue.enqueue(
+                DeliveryIntent(HOUSE_ONE, initial_key, "Карточка", chat_id="444")
+            )
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, json={"message": {"body": {"mid": "mid.card"}}})
+            ),
+            base_url="https://platform-api2.max.ru",
+        ) as http:
+            assert await DeliveryWorker(
+                sessions, MaxApiClient(http, "test-token"), clock, "w1"
+            ).run_once()
+        async with sessions.begin() as session:
+            queue = PostgresDeliveryQueue(session, clock)
+            old_id = await queue.enqueue(
+                DeliveryIntent(
+                    HOUSE_ONE,
+                    f"{initial_key}:edit:1",
+                    "Старая",
+                    chat_id="444",
+                    edit_key=initial_key,
+                )
+            )
+            new_id = await queue.enqueue(
+                DeliveryIntent(
+                    HOUSE_ONE, f"{initial_key}:edit:2", "Новая", chat_id="444", edit_key=initial_key
+                )
+            )
+        async with sessions.begin() as session:
+            old = await session.get(OutboxDeliveryRow, old_id)
+            new = await session.get(OutboxDeliveryRow, new_id)
+            assert old is not None and old.status == "superseded"
+            assert new is not None and new.status == "pending"
+            await session.execute(
+                delete(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.id.in_([first_id, old_id, new_id])
+                )
+            )
+            await session.execute(
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id=None)
+            )

@@ -66,3 +66,27 @@ async def test_client_requests_upload_slot_without_leaking_token_to_url() -> Non
     assert seen[0].url.params["type"] == "file"
     assert seen[0].headers["Authorization"] == "secret-token"
     assert len(seen) == 1
+
+
+@pytest.mark.asyncio
+async def test_client_reads_polling_batch_without_losing_large_ids() -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "updates": [{"update_type": "unknown", "timestamp": 1}],
+                "marker": 9_007_199_254_740_993,
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
+    ) as http:
+        batch = await MaxApiClient(http, "secret-token").get_updates(marker=42)
+
+    assert batch.marker == 9_007_199_254_740_993
+    assert len(batch.updates) == 1
+    assert seen[0].url.params["marker"] == "42"

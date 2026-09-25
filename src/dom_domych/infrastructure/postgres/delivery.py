@@ -57,6 +57,35 @@ class PostgresDeliveryQueue:
             )
             if mapped_house != intent.house_id:
                 raise ValueError("chat does not belong to house")
+        if intent.edit_key is not None:
+            target = await self.session.scalar(
+                select(OutboxDeliveryRow)
+                .where(
+                    OutboxDeliveryRow.house_id == intent.house_id,
+                    OutboxDeliveryRow.operation_key == intent.edit_key,
+                )
+                .with_for_update()
+            )
+            if target is None or target.chat_id != intent.chat_id:
+                raise ValueError("edit target does not belong to delivery chat")
+            existing_edit = await self.session.scalar(
+                select(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.house_id == intent.house_id,
+                    OutboxDeliveryRow.operation_key == intent.operation_key,
+                )
+            )
+            if existing_edit is not None:
+                self._validate_existing(existing_edit, intent)
+                return existing_edit.id
+            await self.session.execute(
+                update(OutboxDeliveryRow)
+                .where(
+                    OutboxDeliveryRow.house_id == intent.house_id,
+                    OutboxDeliveryRow.edit_key == intent.edit_key,
+                    OutboxDeliveryRow.status == "pending",
+                )
+                .values(status="superseded", error_code="coalesced_by_newer_edit")
+            )
         delivery_id = uuid4()
         inserted_id = await self.session.scalar(
             insert(OutboxDeliveryRow)
@@ -85,6 +114,11 @@ class PostgresDeliveryQueue:
         )
         if existing is None:
             raise RuntimeError("conflicting delivery disappeared")
+        self._validate_existing(existing, intent)
+        return existing.id
+
+    @staticmethod
+    def _validate_existing(existing: OutboxDeliveryRow, intent: DeliveryIntent) -> None:
         if (
             existing.text,
             existing.recipient_id,
@@ -99,7 +133,6 @@ class PostgresDeliveryQueue:
             intent.file_key,
         ):
             raise DeliveryConflictError("operation_key reused for different delivery")
-        return existing.id
 
     async def claim(
         self, worker_id: str, now: datetime, lease_for: timedelta

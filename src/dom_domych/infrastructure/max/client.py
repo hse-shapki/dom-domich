@@ -1,7 +1,7 @@
 """Документированные методы Bot API; клиент создаётся на lifespan процесса."""
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 import httpx
 
@@ -28,14 +28,30 @@ class UploadSlot:
     token: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class UpdateBatch:
+    updates: tuple[dict[str, object], ...]
+    marker: int | None
+
+
+class RateLimits(Protocol):
+    async def acquire(self, operation: str, dialog_key: str | None = None) -> None: ...
+
+
 class MaxApiClient:
     """HTTPX session с timeout/TLS клиента; токен только в Bot API headers."""
 
-    def __init__(self, client: httpx.AsyncClient, access_token: str) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        access_token: str,
+        rate_limits: RateLimits | None = None,
+    ) -> None:
         if not access_token:
             raise ValueError("MAX access token is required")
         self.client = client
         self._access_token = access_token
+        self._rate_limits = rate_limits
 
     async def _request(
         self,
@@ -44,7 +60,11 @@ class MaxApiClient:
         *,
         params: dict[str, int | str] | None = None,
         body: dict[str, object] | None = None,
+        operation: str = "api",
+        dialog_key: str | None = None,
     ) -> dict[str, object]:
+        if self._rate_limits is not None:
+            await self._rate_limits.acquire(operation, dialog_key)
         response = await self.client.request(
             method,
             path,
@@ -93,7 +113,10 @@ class MaxApiClient:
         body: dict[str, object] = {"text": text}
         if attachments is not None:
             body["attachments"] = attachments
-        payload = await self._request("POST", "/messages", params=params, body=body)
+        target = f"user:{user_id}" if user_id is not None else f"chat:{chat_id}"
+        payload = await self._request(
+            "POST", "/messages", params=params, body=body, operation="message", dialog_key=target
+        )
         message = payload.get("message")
         if not isinstance(message, dict):
             raise MaxApiError("/messages", 200, "missing_message")
@@ -102,16 +125,25 @@ class MaxApiClient:
             raise MaxApiError("/messages", 200, "missing_message_id")
         return content["mid"]
 
-    async def edit_text(self, message_id: str, text: str) -> None:
+    async def edit_text(self, message_id: str, text: str, *, dialog_key: str | None = None) -> None:
         payload = await self._request(
-            "PUT", "/messages", params={"message_id": message_id}, body={"text": text}
+            "PUT",
+            "/messages",
+            params={"message_id": message_id},
+            body={"text": text},
+            operation="message",
+            dialog_key=dialog_key or f"message:{message_id}",
         )
         if payload.get("success") is not True:
             raise MaxApiError("/messages", 200, "missing_success")
 
     async def answer_callback(self, callback_id: str) -> None:
         payload = await self._request(
-            "POST", "/answers", params={"callback_id": callback_id}, body={}
+            "POST",
+            "/answers",
+            params={"callback_id": callback_id},
+            body={},
+            operation="callback",
         )
         if payload.get("success") is not True:
             raise MaxApiError("/answers", 200, "missing_success")
@@ -134,3 +166,22 @@ class MaxApiClient:
         )
         if payload.get("success") is not True:
             raise MaxApiError("/subscriptions", 200, "missing_success")
+
+    async def get_updates(
+        self, *, marker: int | None = None, timeout_seconds: int = 30, limit: int = 100
+    ) -> UpdateBatch:
+        if not 1 <= timeout_seconds <= 90 or not 1 <= limit <= 1000:
+            raise ValueError("invalid polling timeout or limit")
+        params: dict[str, int | str] = {"timeout": timeout_seconds, "limit": limit}
+        if marker is not None:
+            params["marker"] = marker
+        payload = await self._request("GET", "/updates", params=params, operation="polling")
+        raw_updates = payload.get("updates")
+        if not isinstance(raw_updates, list) or not all(
+            isinstance(item, dict) for item in raw_updates
+        ):
+            raise MaxApiError("/updates", 200, "invalid_updates")
+        next_marker = payload.get("marker")
+        if next_marker is not None and type(next_marker) is not int:
+            raise MaxApiError("/updates", 200, "invalid_marker")
+        return UpdateBatch(tuple(raw_updates), next_marker)
