@@ -120,7 +120,7 @@ def zamira_fixture() -> ZamiraFixture:
         _residency(16, "106", entrance=1, risers=frozenset({RISER_E1})),
         _residency(17, "211", floor=6, risers=frozenset({RISER_E2_B, RISER_E2_HEAT})),
         _residency(1, "211", floor=6, risers=frozenset({RISER_E2_B, RISER_E2_HEAT})),
-        _residency(18, "211", floor=6, active=False),
+        _residency(18, "211", floor=6, risers=frozenset({RISER_E2_B, RISER_E2_HEAT}), active=False),
         _residency(
             19,
             "501",

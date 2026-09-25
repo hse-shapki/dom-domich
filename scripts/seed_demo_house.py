@@ -43,6 +43,9 @@ async def seed_demo_house(session: AsyncSession) -> None:
 
     residents = {row.resident_id: row for row in fixture.residencies}
     apartments = {row.apartment_id: row for row in fixture.residencies}
+    for row in fixture.residencies:
+        if row.risers != apartments[row.apartment_id].risers:
+            raise ValueError("one apartment cannot have conflicting riser memberships")
     risers = {
         (row.house_id, riser.riser_id): riser for row in fixture.residencies for riser in row.risers
     }

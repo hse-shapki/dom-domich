@@ -54,6 +54,7 @@
 | Материалы Z16 | Частично, локальный handoff готов | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
 | Python-проект, зависимости и CI A00 | Проверено локально; CI ещё не запускался на GitHub | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 117 тестов, Ruff и mypy проходят |
 | PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18, PG17/pgvector Compose не запущен | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`; миграция и повторный seed без дублей |
+| HouseContextPort A05 | Частично: чтение реестра и стык с Z проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; write/onboarding ещё нет |
 | Deploy | Не реализовано | Нет `deploy/` |
 | MAX-клиент, агент и хранение опросов | Не реализованы в этой ветке | Core-БД A02 создана; MAX/K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z13; нет PostgreSQL integration tests и проверенного стенда |
