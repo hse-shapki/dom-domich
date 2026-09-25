@@ -35,6 +35,7 @@
 | Python-стек, архитектура, MAX, tools, модель данных, процессы | Спроектировано, не реализовано | `docs/engineering/01-*.md` — `06-*.md` |
 | Три трека, персональные пулы задач и критерии приёмки | План подготовлен | `context/implementation-plan.md`, `context/tasks-*.md`, `docs/engineering/07-workstreams.md`, `08-verification-and-release.md` |
 | Единые правила разработки | Описаны | Этот файл |
+| Общие contracts/ports A01 | Частично, проверено локально | `src/dom_domych/contracts/`, `domain/ports/core.py`, `tests/contracts/test_core.py`; K00 из другой ветки ещё не сверена |
 | Постоянный контекст для будущих задач | Описан, поддерживать актуальным | `context/README.md`, `decisions.md`, `current-state.md`, `product.md`, `engineering.md` |
 | Доменные правила опросов Z01 | Проверено на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`; 23 проверки |
 | Синтетический дом и fake directory Z02 | Проверено как test fixture | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`; 4 проверки, с A02 ещё не объединён |

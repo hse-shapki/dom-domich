@@ -3,8 +3,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Protocol
 from uuid import UUID
+
+from dom_domych.domain.ports.core import ResidencyView, RiserRef
 
 
 class ScopeKind(StrEnum):
@@ -12,47 +13,6 @@ class ScopeKind(StrEnum):
     ENTRANCE = "entrance"
     FLOOR = "floor"
     RISER = "riser"
-
-
-class ResidencyView(Protocol):
-    """Минимальные данные реестра A для выбора аудитории без зависимости от ORM."""
-
-    @property
-    def resident_id(self) -> UUID: ...
-
-    @property
-    def house_id(self) -> UUID: ...
-
-    @property
-    def entrance(self) -> int: ...
-
-    @property
-    def floor(self) -> int: ...
-
-    @property
-    def risers(self) -> frozenset["RiserRef"]: ...
-
-    @property
-    def confirmed(self) -> bool: ...
-
-    @property
-    def adult(self) -> bool: ...
-
-    @property
-    def active(self) -> bool: ...
-
-    @property
-    def dm_reachable(self) -> bool: ...
-
-
-@dataclass(frozen=True, slots=True)
-class RiserRef:
-    riser_id: UUID
-    kind: str
-
-    def __post_init__(self) -> None:
-        if not self.kind:
-            raise ValueError("riser kind is required")
 
 
 @dataclass(frozen=True, slots=True)

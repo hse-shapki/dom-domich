@@ -12,7 +12,7 @@
 | Корневые правила для агентов | Есть | `AGENTS.md` |
 | Постоянный контекст | Есть | `context/README.md`, `decisions.md`, `product.md`, `engineering.md`, `current-state.md` |
 | Чистые доменные правила опросов Z01 | Проверены на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`: 23 теста |
-| Предложение контрактов Z00 | Частично: описано, не согласовано на A01 | `docs/engineering/09-z-interfaces.md`; общих DTO и contract tests пока нет |
+| Общие контракты A01 / предложение Z00 | Частично: минимальные DTO/ports и tests готовы, K00 не сверена | `src/dom_domych/contracts/`, `src/dom_domych/domain/ports/core.py`, `tests/contracts/test_core.py`, `docs/engineering/11-shared-contracts.md` |
 | Синтетический дом Z02 | Проверен как fixture, не интегрирован с A02 | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`: 4 теста |
 | AudienceService Z03 | Частично: выбор и история snapshot проверены на fake | `src/dom_domych/domain/audiences/models.py`, `src/dom_domych/application/audiences/service.py`, `tests/domain/test_audience_service.py`; нет PostgreSQL repository/migration |
 | PollService Z04 | Частично: поведение и конкуренция проверены на fake | `src/dom_domych/domain/polls/models.py`, `src/dom_domych/application/polls/service.py`, `tests/domain/test_poll_service.py`; нет PostgreSQL repository/migration и MAX callback |
@@ -28,7 +28,7 @@
 | PDF QA Z15 | Частично: локально просмотрены 4 образца | `docs/release/zamira-pdf-qa.md`; mobile/web MAX и outbox ещё не проверены |
 | Материалы Z16 | Частично: локальный handoff и воспроизведение PDF готовы | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
 | Python-проект и зависимости A00 | Проверено локально | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; `uv sync --locked`, Ruff, mypy, 117 tests прошли; удалённый CI ещё не запускался |
-| БД, миграции, MAX-клиент, агент, хранение опросов | Не обнаружены | Нет кода интеграций и `migrations/` |
+| БД, миграции, MAX-клиент, агент, хранение опросов | Не обнаружены в этой ветке | Нет кода интеграций и `migrations/`; часть K-пула ведётся в другой ветке |
 | Рабочий стенд и внешние проверки | Не подтверждены | Нет `deploy/`; доступ MAX/модели в этом проекте не проверялся |
 
 Эти строки описывают только осмотр репозитория. Они не доказывают отсутствие внешнего аккаунта или бота у команды. И наоборот, схема в Markdown не доказывает готовность реализации.
