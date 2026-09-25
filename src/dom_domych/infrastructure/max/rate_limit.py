@@ -44,21 +44,18 @@ class MaxRateLimits:
         *,
         global_rps: float = 30,
         dialog_rps: float = 2,
-        callback_rps: float = 20,
     ) -> None:
         self._global = AsyncIntervalLimiter(global_rps)
-        self._callback = AsyncIntervalLimiter(callback_rps)
         self._dialog_rps = dialog_rps
         self._dialogs: dict[str, AsyncIntervalLimiter] = {}
         self._dialogs_lock = asyncio.Lock()
 
     async def acquire(self, operation: str, dialog_key: str | None = None) -> None:
         await self._global.acquire()
-        if operation == "callback":
-            await self._callback.acquire()
         if dialog_key is not None:
+            bucket_key = f"{operation}:{dialog_key}"
             async with self._dialogs_lock:
                 limiter = self._dialogs.setdefault(
-                    dialog_key, AsyncIntervalLimiter(self._dialog_rps)
+                    bucket_key, AsyncIntervalLimiter(self._dialog_rps)
                 )
             await limiter.acquire()

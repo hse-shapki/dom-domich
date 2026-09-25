@@ -90,3 +90,27 @@ async def test_client_reads_polling_batch_without_losing_large_ids() -> None:
     assert batch.marker == 9_007_199_254_740_993
     assert len(batch.updates) == 1
     assert seen[0].url.params["marker"] == "42"
+
+
+@pytest.mark.asyncio
+async def test_client_lists_and_deletes_webhook_subscription() -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={"subscriptions": [{"url": "https://bot.example/webhook/max"}]},
+            )
+        return httpx.Response(200, json={"success": True})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
+    ) as http:
+        api = MaxApiClient(http, "secret-token")
+        assert len(await api.list_webhooks()) == 1
+        await api.delete_webhook("https://bot.example/webhook/max")
+
+    assert seen[1].method == "DELETE"
+    assert seen[1].url.params["url"] == "https://bot.example/webhook/max"

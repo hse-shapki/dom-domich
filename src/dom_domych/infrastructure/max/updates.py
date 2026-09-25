@@ -13,6 +13,7 @@ from dom_domych.contracts.events import (
     EventEnvelope,
     EventName,
     EventSource,
+    HouseBotPayload,
     LifecyclePayload,
     MessagePayload,
 )
@@ -77,6 +78,25 @@ class MaxLifecycleUpdate(MaxDto):
     timestamp: int
     user: MaxUser
     chat_id: int | None = None
+
+
+class MaxBotMembershipUpdate(MaxDto):
+    update_type: Literal["bot_added", "bot_removed"]
+    timestamp: int
+    chat_id: int
+    user: MaxUser
+    is_channel: bool
+
+
+class MaxBotPermissionsUpdate(MaxDto):
+    update_type: Literal["bot_admin_permissions_changed"]
+    timestamp: int
+    chat_id: int
+    user_id: int
+    bot_id: int
+    is_channel: bool
+    is_admin: bool
+    permissions: list[str] | None = None
 
 
 class MaxUnknownUpdate(MaxDto):
@@ -198,6 +218,57 @@ def normalize_update(
                 user_id=str(lifecycle_update.user.user_id),
                 chat_id=(
                     str(lifecycle_update.chat_id) if lifecycle_update.chat_id is not None else None
+                ),
+            ),
+        )
+    if update_type in ("bot_added", "bot_removed"):
+        membership_update = MaxBotMembershipUpdate.model_validate(raw)
+        source_key = (
+            f"{membership_update.update_type}:{membership_update.chat_id}:"
+            f"{membership_update.timestamp}"
+        )
+        return source_key, EventEnvelope(
+            event_id=event_id,
+            source=EventSource.MAX,
+            source_key=source_key,
+            name=EventName.HOUSE_BOT_MEMBERSHIP_CHANGED,
+            occurred_at=_timestamp(membership_update.timestamp),
+            received_at=received_at,
+            correlation_id=event_id,
+            actor_user_id=str(membership_update.user.user_id),
+            house_bot=HouseBotPayload(
+                chat_id=str(membership_update.chat_id),
+                changed_by_user_id=str(membership_update.user.user_id),
+                is_channel=membership_update.is_channel,
+                change="added" if update_type == "bot_added" else "removed",
+            ),
+        )
+    if update_type == "bot_admin_permissions_changed":
+        permissions_update = MaxBotPermissionsUpdate.model_validate(raw)
+        source_key = (
+            f"bot_admin_permissions_changed:{permissions_update.chat_id}:"
+            f"{permissions_update.bot_id}:{permissions_update.timestamp}"
+        )
+        return source_key, EventEnvelope(
+            event_id=event_id,
+            source=EventSource.MAX,
+            source_key=source_key,
+            name=EventName.HOUSE_BOT_PERMISSIONS_CHANGED,
+            occurred_at=_timestamp(permissions_update.timestamp),
+            received_at=received_at,
+            correlation_id=event_id,
+            actor_user_id=str(permissions_update.user_id),
+            house_bot=HouseBotPayload(
+                chat_id=str(permissions_update.chat_id),
+                changed_by_user_id=str(permissions_update.user_id),
+                is_channel=permissions_update.is_channel,
+                change="permissions",
+                bot_id=str(permissions_update.bot_id),
+                is_admin=permissions_update.is_admin,
+                permissions=(
+                    tuple(permissions_update.permissions)
+                    if permissions_update.permissions is not None
+                    else None
                 ),
             ),
         )

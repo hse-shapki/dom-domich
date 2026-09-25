@@ -56,7 +56,10 @@ class MaxPollCallbackTransport:
         callback = event.callback
         if callback is None or callback.sender_user_id != event.actor_user_id:
             raise ValueError("inconsistent callback actor")
-        await self._acknowledge(callback.callback_id)
+        await self._acknowledge(
+            callback.callback_id,
+            callback.chat_id or f"user:{callback.sender_user_id}",
+        )
         action = await self.actions.get(callback.action_token)
         if action is None:
             return CallbackOutcome(CallbackStatus.UNKNOWN_ACTION)
@@ -93,8 +96,8 @@ class MaxPollCallbackTransport:
             .limit(1)
         )
 
-    async def _acknowledge(self, callback_id: str) -> None:
+    async def _acknowledge(self, callback_id: str, dialog_key: str) -> None:
         try:
-            await self.max_client.answer_callback(callback_id)
+            await self.max_client.answer_callback(callback_id, dialog_key=dialog_key)
         except (MaxApiError, httpx.TransportError) as exc:
             logger.warning("max_callback_ack_failed", error=type(exc).__name__)

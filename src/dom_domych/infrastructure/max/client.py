@@ -137,13 +137,14 @@ class MaxApiClient:
         if payload.get("success") is not True:
             raise MaxApiError("/messages", 200, "missing_success")
 
-    async def answer_callback(self, callback_id: str) -> None:
+    async def answer_callback(self, callback_id: str, *, dialog_key: str | None = None) -> None:
         payload = await self._request(
             "POST",
             "/answers",
             params={"callback_id": callback_id},
             body={},
             operation="callback",
+            dialog_key=dialog_key,
         )
         if payload.get("success") is not True:
             raise MaxApiError("/answers", 200, "missing_success")
@@ -164,6 +165,22 @@ class MaxApiClient:
             "/subscriptions",
             body={"url": url, "secret": secret, "update_types": list(update_types)},
         )
+        if payload.get("success") is not True:
+            raise MaxApiError("/subscriptions", 200, "missing_success")
+
+    async def list_webhooks(self) -> tuple[dict[str, object], ...]:
+        payload = await self._request("GET", "/subscriptions")
+        subscriptions = payload.get("subscriptions")
+        if not isinstance(subscriptions, list) or not all(
+            isinstance(item, dict) for item in subscriptions
+        ):
+            raise MaxApiError("/subscriptions", 200, "invalid_subscriptions")
+        return tuple(subscriptions)
+
+    async def delete_webhook(self, url: str) -> None:
+        if not url.startswith("https://"):
+            raise ValueError("webhook needs HTTPS")
+        payload = await self._request("DELETE", "/subscriptions", params={"url": url})
         if payload.get("success") is not True:
             raise MaxApiError("/subscriptions", 200, "missing_success")
 

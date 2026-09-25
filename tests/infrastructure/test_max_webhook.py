@@ -49,6 +49,51 @@ def test_normalize_callback_uses_real_max_actor() -> None:
     assert event.callback.action_token == "opaque-action"
 
 
+@pytest.mark.parametrize(
+    ("update_type", "change"), (("bot_added", "added"), ("bot_removed", "removed"))
+)
+def test_normalize_bot_membership_change(update_type: str, change: str) -> None:
+    raw = {
+        "update_type": update_type,
+        "timestamp": 1790326800000,
+        "chat_id": 12345,
+        "user": {"user_id": 9007199254740993},
+        "is_channel": False,
+    }
+
+    key, event = normalize_update(raw, datetime.now(UTC))
+
+    assert key == f"{update_type}:12345:1790326800000"
+    assert event is not None
+    assert event.name is EventName.HOUSE_BOT_MEMBERSHIP_CHANGED
+    assert event.house_bot is not None
+    assert event.house_bot.change == change
+    assert event.house_bot.changed_by_user_id == "9007199254740993"
+
+
+def test_normalize_bot_permission_change_preserves_bot_and_permissions() -> None:
+    raw = {
+        "update_type": "bot_admin_permissions_changed",
+        "timestamp": 1790326800000,
+        "chat_id": 12345,
+        "user_id": 77,
+        "bot_id": 88,
+        "is_channel": False,
+        "is_admin": True,
+        "permissions": ["read_all_messages", "write"],
+    }
+
+    key, event = normalize_update(raw, datetime.now(UTC))
+
+    assert key == "bot_admin_permissions_changed:12345:88:1790326800000"
+    assert event is not None
+    assert event.name is EventName.HOUSE_BOT_PERMISSIONS_CHANGED
+    assert event.house_bot is not None
+    assert event.house_bot.bot_id == "88"
+    assert event.house_bot.is_admin is True
+    assert event.house_bot.permissions == ("read_all_messages", "write")
+
+
 @pytest.mark.asyncio
 async def test_webhook_commits_once_before_ack_and_rejects_bad_secret() -> None:
     database_url = os.environ.get("TEST_DATABASE_URL")
