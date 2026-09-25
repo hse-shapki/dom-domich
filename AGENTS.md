@@ -56,8 +56,9 @@
 | PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18, PG17/pgvector Compose не запущен | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`; миграция и повторный seed без дублей |
 | HouseContextPort A05 | Частично: чтение реестра и стык с Z проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; write/onboarding ещё нет |
 | MAX Bot API A03 | Частично: HTTPX MockTransport проверен, live-доступа нет | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; загрузка bytes и smoke в MAX ещё нужны |
+| Webhook/inbox A04 | Частично: ASGITransport + PostgreSQL 18 проверены, внешнего HTTPS/MAX нет | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`; worker/dispatcher ещё нет |
 | Deploy | Не реализовано | Нет `deploy/` |
-| MAX-клиент, агент и хранение опросов | Не реализованы в этой ветке | Core-БД A02 создана; MAX/K/Z ORM интеграций ещё нет |
+| Агент и хранение опросов | Не реализованы в этой ветке | Core-БД и MAX ingress частично есть; K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z13; нет PostgreSQL integration tests и проверенного стенда |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.

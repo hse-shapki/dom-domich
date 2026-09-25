@@ -31,6 +31,7 @@
 | PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: migration/check и повторный seed; PG17/pgvector Compose не запущен |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; onboarding/write часть A06 остаётся |
 | MAX Bot API A03 | Частично: документированные методы проверены через MockTransport | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; реальный токен/бот и upload bytes не проверены |
+| Webhook/inbox A04 | Частично: нормализация и durable insert проверены на PostgreSQL 18 | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`, `tests/infrastructure/test_max_webhook.py`; HTTPS/MAX smoke и worker отсутствуют |
 | Агент, хранение опросов | Не обнаружены в этой ветке | MAX HTTP-клиент частично есть; часть K-пула ведётся в другой ветке |
 | Рабочий стенд и внешние проверки | Не подтверждены | Нет `deploy/`; доступ MAX/модели в этом проекте не проверялся |
 

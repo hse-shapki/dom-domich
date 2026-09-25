@@ -42,13 +42,13 @@ Dev polling допускается только без активного webhoo
 
 | MAX Update | Внутреннее событие | Обработка |
 |---|---|---|
-| `bot_started` | `resident.onboarding_started` | Привязка жителя, выбор квартиры, проверка лички |
+| `bot_started` | `bot.started` | Транспортное событие; A06 запускает онбординг |
 | `message_created` | `message.received` | Сохранение, контекст, агент |
-| `message_callback` | `interaction.received` | Проверка действия и участника, запись ответа без LLM |
-| `message_edited` | `message.revised` | Новая ревизия, при необходимости пересмотр фактов |
+| `message_callback` | `callback.received` | Проверка действия и участника, запись ответа без LLM |
+| `message_edited` | `message.edited` | Новая ревизия, при необходимости пересмотр фактов |
 | `message_removed` | `message.removed` | Отметка удаления и политика хранения; не считать старый текст новым подтверждением |
 | `bot_added` / `bot_removed` | `house.bot_membership_changed` | Связь с разрешённым тестовым домом, остановка недоступных доставок |
-| `bot_stopped` | `resident.bot_stopped` | Приостановка личных уведомлений |
+| `bot_stopped` | `bot.stopped` | Транспортное событие; A06/A13 приостанавливают ЛС |
 | `bot_admin_permissions_changed` | `house.bot_permissions_changed` | Проверка доступа к групповым событиям |
 
 Источник списка: [Update](https://dev.max.ru/docs-api/objects/Update). Конкретные поля каждого варианта сверяем с официальной схемой и реальными fixtures. На входе — Pydantic discriminated union по `update_type`, неизвестный вариант сохраняем для диагностики и не исполняем как команду; у Update не предполагаем универсальный `update_id`.

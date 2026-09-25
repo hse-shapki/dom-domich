@@ -18,9 +18,12 @@ class EventSource(StrEnum):
 
 class EventName(StrEnum):
     MESSAGE_RECEIVED = "message.received"
+    MESSAGE_EDITED = "message.edited"
     MESSAGE_REMOVED = "message.removed"
     CALLBACK_RECEIVED = "callback.received"
     ATTACHMENT_RECEIVED = "attachment.received"
+    BOT_STARTED = "bot.started"
+    BOT_STOPPED = "bot.stopped"
     POLL_THRESHOLD_REACHED = "poll.threshold_reached"
     POLL_EXPIRED = "poll.expired"
     DOCUMENT_READY = "document.ready"
@@ -45,6 +48,11 @@ class CallbackPayload(StrictContract):
     chat_id: str | None = None
 
 
+class LifecyclePayload(StrictContract):
+    user_id: str
+    chat_id: str | None = None
+
+
 class EntityEventPayload(StrictContract):
     entity_id: UUID
     entity_version: int = Field(ge=1)
@@ -66,18 +74,25 @@ class EventEnvelope(StrictContract):
     actor_user_id: str | None = None
     message: MessagePayload | None = None
     callback: CallbackPayload | None = None
+    lifecycle: LifecyclePayload | None = None
     entity: EntityEventPayload | None = None
 
     @model_validator(mode="after")
     def validate_payload(self) -> "EventEnvelope":
-        selected = sum(value is not None for value in (self.message, self.callback, self.entity))
+        selected = sum(
+            value is not None
+            for value in (self.message, self.callback, self.lifecycle, self.entity)
+        )
         if selected != 1:
             raise ValueError("event requires exactly one payload")
         expected = {
             EventName.MESSAGE_RECEIVED: self.message,
+            EventName.MESSAGE_EDITED: self.message,
             EventName.MESSAGE_REMOVED: self.message,
             EventName.ATTACHMENT_RECEIVED: self.message,
             EventName.CALLBACK_RECEIVED: self.callback,
+            EventName.BOT_STARTED: self.lifecycle,
+            EventName.BOT_STOPPED: self.lifecycle,
         }
         if self.name in expected and expected[self.name] is None:
             raise ValueError("payload does not match event name")

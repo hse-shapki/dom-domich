@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -116,3 +117,21 @@ class ResidencyRow(Base):
     valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class InboxEventRow(Base):
+    __tablename__ = "inbox_events"
+    __table_args__ = (
+        UniqueConstraint("source", "source_key"),
+        Index("ix_inbox_events_status_received", "status", "received_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_key: Mapped[str] = mapped_column(String(250), nullable=False)
+    event_name: Mapped[str | None] = mapped_column(String(80))
+    house_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    raw_update: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    normalized_event: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
