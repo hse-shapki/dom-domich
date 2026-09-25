@@ -12,7 +12,7 @@
 - [Продуктовая концепция](IDEA.md)
 - [Журнал продуктовых решений](docs/open-questions.md)
 
-В репозитории есть устанавливаемый Python-проект и независимые модули аудитории/опросов с тестами. Интеграции MAX/БД ещё не созданы; точное состояние — в [контексте](context/current-state.md).
+В репозитории есть Python-проект, независимые модули Замиры и частично реализованные PostgreSQL/MAX-адаптеры Алины: webhook, реестр, inbox/outbox/jobs, callback, онбординг и файлы. Сквозной агент и живой стенд MAX ещё не подключены; точное состояние — в [контексте](context/current-state.md).
 
 Локальная проверка: `uv sync --locked`, затем `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/dom_domych`, `uv run pytest`.
 

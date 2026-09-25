@@ -27,7 +27,7 @@
 
 ## 3. Что уже сделано
 
-**Состояние проверено 25.09.2026: A00 и независимые модули Замиры реализованы; работающего приложения и интеграций пока нет.**
+**Состояние проверено 25.09.2026: независимые модули Замиры и A00–A11 локально реализованы полностью или частично; сквозного приложения и live MAX пока нет.**
 
 | Часть | Статус | Подтверждение |
 |---|---|---|
@@ -38,34 +38,34 @@
 | Общие contracts/ports A01 | Частично, проверено локально | `src/dom_domych/contracts/`, `domain/ports/core.py`, `tests/contracts/test_core.py`; K00 из другой ветки ещё не сверена |
 | Постоянный контекст для будущих задач | Описан, поддерживать актуальным | `context/README.md`, `decisions.md`, `current-state.md`, `product.md`, `engineering.md` |
 | Доменные правила опросов Z01 | Проверено на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`; 23 проверки |
-| Синтетический дом и fake directory Z02 | Проверено как test fixture | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`; 4 проверки, с A02 ещё не объединён |
+| Синтетический дом и fake directory Z02 | Проверено как test fixture и seed A02 | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`, `scripts/seed_demo_house.py`; 4 fixture-проверки |
 | AudienceService Z03 | Частично, проверено с fake directory | `src/dom_domych/domain/audiences/models.py`, `application/audiences/service.py`, `tests/domain/test_audience_service.py`; PostgreSQL-репозиторий и миграция ещё нужны |
 | PollService Z04 | Частично, проверено с транзакционным fake | `src/dom_domych/domain/polls/models.py`, `application/polls/service.py`, `tests/domain/test_poll_service.py`; нет PostgreSQL concurrency/миграции и доставки MAX |
-| Callback handler Z05 | Частично, проверено на нормализованном fake событии | `src/dom_domych/application/polls/callback.py`, `tests/domain/test_poll_callback.py`; реальный MAX callback/actor mapping A10 не подключён |
+| Callback handler Z05 | Частично, проверено на нормализованном fake событии | `src/dom_domych/application/polls/callback.py`, `tests/domain/test_poll_callback.py`; A10 transport существует, production PollRepository ещё не подключён |
 | InitiativeService Z06 | Частично, проверено с fake CasePort и atomic repository | `src/dom_domych/domain/initiatives/models.py`, `application/initiatives/service.py`, `tests/domain/test_initiative_service.py`; нет K CasePort, PostgreSQL UoW и реального отзыва MAX action tokens |
 | Публичные карточки Z07 | Частично, проверено unit-тестами | `src/dom_domych/application/cards/builders.py`, `tests/domain/test_public_cards.py`; DTO не подключён к A DeliveryPort/edit/coalescing |
 | Напоминания и итог инициативы Z08 | Частично, проверено с fake rights/outbox | `src/dom_domych/application/initiatives/followup.py`, `tests/fakes/initiative_followup.py`, `tests/domain/test_initiative_followup.py`; нет A DeliveryPort/jobs и K перехода в исполнение |
-| FileStore и снимок документа Z09 | Частично, проверено локальными тестами | `src/dom_domych/infrastructure/files/local.py`, `domain/documents/snapshot.py`, `tests/infrastructure/test_local_file_store.py`, `tests/domain/test_document_snapshot.py`; нет БД, PDF job и MAX download |
-| PDF-рендер Z10 | Частично, проверено тестами и просмотром образцов | `src/dom_domych/infrastructure/documents/renderer.py`, `tests/infrastructure/test_pdf_renderer.py`, `output/pdf/`; нет durable job/outbox и MAX download |
+| FileStore и снимок документа Z09 | Частично, проверено локальными тестами | `src/dom_domych/infrastructure/files/local.py`, `domain/documents/snapshot.py`, `tests/infrastructure/test_local_file_store.py`, `tests/domain/test_document_snapshot.py`; A11 transport для MAX существует, PDF job/metadata не подключены |
+| PDF-рендер Z10 | Частично, проверено тестами и просмотром образцов | `src/dom_domych/infrastructure/documents/renderer.py`, `tests/infrastructure/test_pdf_renderer.py`, `output/pdf/`; A08/A11 delivery существует, PDF job и сквозная доставка не подключены |
 | DemoExecutor Z11 | Частично, проверено с атомарным fake store | `src/dom_domych/domain/executor/models.py`, `application/executor/service.py`, `tests/fakes/executor.py`, `tests/domain/test_demo_executor.py`; нет PostgreSQL repository/outbox и связи с RequestService |
 | Проверка результата Z12 | Частично, проверено с fake case/poll/outbox | `src/dom_domych/domain/resolution/models.py`, `application/resolution/service.py`, `tests/fakes/resolution.py`, `tests/domain/test_resolution_service.py`; нет K CasePort, PostgreSQL UoW и MAX-доставки |
 | Итог результата Z13 | Частично, проверено с fake case/poll/outbox | Те же модули resolution: `closed` только после положительного опроса, `reopened` при отрицательном, `resolution_unconfirmed` при нехватке ответов; нет K production transition/jobs |
 | PDF QA Z15 | Частично, локальные 4 образца проверены | `docs/release/zamira-pdf-qa.md`; MAX mobile/web и PDF после outbox не проверены |
 | Материалы Z16 | Частично, локальный handoff готов | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
-| Python-проект, зависимости и CI A00 | Проверено локально; CI ещё не запускался на GitHub | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 117 тестов, Ruff и mypy проходят |
+| Python-проект, зависимости и CI A00 | Проверено локально; CI ещё не запускался на GitHub | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 146 тестов, Ruff и mypy проходят |
 | PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18, PG17/pgvector Compose не запущен | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`; миграция и повторный seed без дублей |
 | HouseContextPort A05 | Частично: чтение реестра и стык с Z проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: приглашение, привязка MAX ID, DM `/start`, stopped и выбор дома проверены локально | `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, `tests/infrastructure/test_demo_enrollment.py`; выдача кодов реальным operator и live MAX ещё не подключены |
-| MAX Bot API A03 | Частично: HTTPX MockTransport проверен, live-доступа нет | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; загрузка bytes и smoke в MAX ещё нужны |
+| MAX Bot API A03 | Частично: HTTPX MockTransport проверен, live-доступа нет | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; загрузка bytes добавлена в A11, smoke в MAX ещё нужен |
 | Webhook/inbox A04 | Частично: ASGITransport + PostgreSQL 18 проверены, внешнего HTTPS/MAX нет | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`; обработка через A07 подключается позже |
 | Inbox worker A07 | Частично: lease, recovery и retry проверены на PostgreSQL 18 | `application/jobs/inbox_worker.py`, `infrastructure/postgres/inbox_worker.py`, `tests/infrastructure/test_inbox_worker.py`; отдельный production-процесс и K/Z handlers ещё не подключены |
-| DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit и недоступный адресат проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`, `tests/infrastructure/test_delivery_outbox.py`; file upload, реальный MAX и production-процесс ещё не подключены |
+| DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit и недоступный адресат проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`, `tests/infrastructure/test_delivery_outbox.py`; PDF upload добавлен в A11, реальный MAX и production-процесс ещё не подключены |
 | JobPort/scheduler A09 | Частично: дедлайны, idempotency и stale no-op проверены на PostgreSQL 18 | `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`, `tests/infrastructure/test_scheduled_jobs.py`; revision adapter K/Z и production-процесс ещё не подключены |
 | MAX poll callbacks A10 | Частично: actor/дом/токен и ACK проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/poll_actions.py`, `application/polls/max_callback.py`, `tests/infrastructure/test_max_poll_callback.py`; Z PollRepository и live MAX ещё не подключены |
 | MAX files A11 | Частично: PDF upload, token reuse/retry и безопасное фото проверены на MockTransport + PostgreSQL 18 | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `tests/infrastructure/test_max_media.py`; live MAX mobile/web, лимитеры и K evidence linkage ещё нужны |
-| Deploy | Не реализовано | Нет `deploy/` |
+| Deploy | Частично | Есть `deploy/compose.dev.yml` для тестового PostgreSQL; production Compose/Caddy A12 ещё нет |
 | Агент и хранение опросов | Не реализованы в этой ветке | Core-БД и MAX ingress частично есть; K/Z ORM интеграций ещё нет |
-| Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z13; нет PostgreSQL integration tests и проверенного стенда |
+| Тесты и проверенный стенд | Частично | 146 unit/fake/integration tests, включая PostgreSQL 18 и MAX MockTransport; PG17/pgvector, реальный MAX и цельный стенд не проверены |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.
 
