@@ -82,7 +82,7 @@ correlation_id / causation_id
 
 Используем `inline_keyboard` с короткими callback-кнопками. В payload — случайный непрозрачный `action_token`; серверная запись связывает его с action, poll, audience member, сроком и версией карточки. Не кладём персональные данные или полномочия в payload.
 
-Чистый [handler Z05](../../src/dom_domych/application/polls/callback.py) уже проверяет серверную запись токена и вызывает PollService на нормализованном fake событии. Адаптер MAX A10 и постоянное хранилище токенов ещё не реализованы; проверка fake не подтверждает работу кнопки в мобильном или веб-MAX.
+Чистый [handler Z05](../../src/dom_domych/application/polls/callback.py) проверяет серверную запись токена и вызывает PollService. A10 добавил `PostgresPollActionStore` (в БД только digest токена) и `MaxPollCallbackTransport`: он подтверждает callback через `POST /answers`, проверяет MAX actor по реестру подтверждённых совершеннолетних жильцов, привязку чата к дому и передаёт handler доверенный контекст. Локальные PostgreSQL/MockTransport tests проходят; wiring к production PollRepository и проверка кнопки в mobile/web MAX ещё нужны. Повтор callback с тем же событием должен отсеиваться inbox и PollRepository, а не по одноразовому использованию token: житель может поменять голос в рамках открытого окна.
 
 Нажатие не доказывает право голоса: handler проверяет MAX actor, принадлежность snapshot аудитории и актуальность опроса. Для общих карточек токен может быть общий, но проверка права участника обязательна. Пересылка карточки не является механизмом распространения интерактивного интерфейса: документация указывает, что кнопки при пересылке не переносятся. [Клавиатура](https://dev.max.ru/docs-api/use-cases/sending-messages/keyboard).
 

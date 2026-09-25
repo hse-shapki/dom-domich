@@ -194,3 +194,22 @@ class ScheduledJobRow(Base):
     lease_owner: Mapped[str | None] = mapped_column(String(100))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_code: Mapped[str | None] = mapped_column(String(100))
+
+
+class PollActionRow(Base):
+    __tablename__ = "poll_actions"
+    __table_args__ = (Index("ix_poll_actions_poll_id", "poll_id"),)
+
+    token_digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    poll_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    house_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("houses.id"), nullable=False
+    )
+    audience_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    subject_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    choice: Mapped[str] = mapped_column(String(40), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    bound_resident_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("residents.id")
+    )
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
