@@ -91,6 +91,9 @@ class ResidentRow(Base):
     max_user_id: Mapped[str | None] = mapped_column(String(40), unique=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     dm_reachable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    active_house_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("houses.id")
+    )
 
 
 class ResidencyRow(Base):
@@ -213,3 +216,18 @@ class PollActionRow(Base):
         PgUUID(as_uuid=True), ForeignKey("residents.id")
     )
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class DemoInvitationRow(Base):
+    __tablename__ = "demo_invitations"
+    __table_args__ = (Index("ix_demo_invitations_residency", "residency_id"),)
+
+    token_digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    residency_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("residencies.id"), nullable=False
+    )
+    house_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("houses.id"), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
