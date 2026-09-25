@@ -30,7 +30,8 @@
 | Python-проект и зависимости A00 | Проверено локально | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; `uv sync --locked`, Ruff, mypy, 117 tests прошли; удалённый CI ещё не запускался |
 | PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: migration/check и повторный seed; PG17/pgvector Compose не запущен |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; onboarding/write часть A06 остаётся |
-| MAX-клиент, агент, хранение опросов | Не обнаружены в этой ветке | A02 касается только core реестра; часть K-пула ведётся в другой ветке |
+| MAX Bot API A03 | Частично: документированные методы проверены через MockTransport | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; реальный токен/бот и upload bytes не проверены |
+| Агент, хранение опросов | Не обнаружены в этой ветке | MAX HTTP-клиент частично есть; часть K-пула ведётся в другой ветке |
 | Рабочий стенд и внешние проверки | Не подтверждены | Нет `deploy/`; доступ MAX/модели в этом проекте не проверялся |
 
 Эти строки описывают только осмотр репозитория. Они не доказывают отсутствие внешнего аккаунта или бота у команды. И наоборот, схема в Markdown не доказывает готовность реализации.
