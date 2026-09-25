@@ -15,6 +15,7 @@ from dom_domych.agent.contracts import (
     TrustedContext,
 )
 from dom_domych.agent.fakes import FakeCasePort
+from dom_domych.contracts.base import ExecutionMode, PrincipalType
 
 
 def _context() -> TrustedContext:
@@ -24,6 +25,9 @@ def _context() -> TrustedContext:
         event_id=uuid4(),
         run_id=uuid4(),
         capabilities=frozenset(),
+        principal_type=PrincipalType.RESIDENT,
+        correlation_id=uuid4(),
+        mode=ExecutionMode.DEMO,
     )
 
 

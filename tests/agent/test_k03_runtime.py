@@ -12,6 +12,7 @@ from dom_domych.agent.runtime import (
     ToolDefinition,
     ToolExecution,
 )
+from dom_domych.contracts.base import ExecutionMode, PrincipalType
 
 
 def _context(capabilities: frozenset[str] = frozenset()) -> TrustedContext:
@@ -21,6 +22,9 @@ def _context(capabilities: frozenset[str] = frozenset()) -> TrustedContext:
         event_id=uuid4(),
         run_id=uuid4(),
         capabilities=capabilities,
+        principal_type=PrincipalType.RESIDENT,
+        correlation_id=uuid4(),
+        mode=ExecutionMode.DEMO,
     )
 
 

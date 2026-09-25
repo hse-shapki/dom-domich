@@ -90,13 +90,18 @@ class FakeCasePort:
 
 
 class FakeKnowledgePort:
-    def __init__(self, hits: tuple[KnowledgeHit, ...] = ()) -> None:
+    def __init__(self, hits: tuple[tuple[UUID | None, KnowledgeHit], ...] = ()) -> None:
         self.hits = hits
 
     async def search(
         self, command: KnowledgeSearch, context: TrustedContext
     ) -> tuple[KnowledgeHit, ...]:
-        return tuple(hit for hit in self.hits if command.query.casefold() in hit.excerpt.casefold())
+        return tuple(
+            hit
+            for owner_house, hit in self.hits
+            if owner_house in (None, context.house_id)
+            and command.query.casefold() in hit.excerpt.casefold()
+        )
 
 
 class FakeRequestPort:

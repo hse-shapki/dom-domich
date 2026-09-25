@@ -4,10 +4,10 @@
 
 ## Факты на дату проверки
 
-После слияния `main` в `kae` K00 частично реализована как предложение
-контрактов, fake ports и проверки в `src/dom_domych/agent/`,
+После слияния `main` в `kae` K00 реализована на уровне contract/fake handlers
+с общим A01 `TrustedContext`/`ToolResult` в `src/dom_domych/agent/`,
 `tests/agent/test_k00_contracts.py`, `docs/engineering/10-track-k-contracts.md`.
-Общий A01 теперь в ветке, но стык K00/A01 ещё не согласован.
+Production ports и PostgreSQL ещё не подключены.
 K01: подготовлен русский набор из 24 синтетических кейсов и нулевой baseline
 в `evals/`; прогон реальной модели пока не выполнен.
 K02: есть `LlmPort`/fake и ограничение timeout/retry; локальная модель и
@@ -27,7 +27,7 @@ question; проверено на fake store. PostgreSQL persistence и восс
 | Корневые правила для агентов | Есть | `AGENTS.md` |
 | Постоянный контекст | Есть | `context/README.md`, `decisions.md`, `product.md`, `engineering.md`, `current-state.md` |
 | Чистые доменные правила опросов Z01 | Проверены на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`: 23 теста |
-| Общие контракты A01 / предложения K00/Z00 | Частично: минимальные DTO/ports и tests готовы, K00 не сверена с A01 | `src/dom_domych/contracts/`, `src/dom_domych/domain/ports/core.py`, `tests/contracts/test_core.py`, `docs/engineering/11-shared-contracts.md` |
+| Общие контракты A01 / предложения K00/Z00 | Частично: DTO/ports, K fake handlers и tests совместимы; production ports не связаны | `src/dom_domych/contracts/`, `src/dom_domych/domain/ports/core.py`, `tests/contracts/test_core.py`, `tests/agent/test_k00_contracts.py` |
 | Синтетический дом Z02 | Проверен как fixture и seed A02 | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`, `scripts/seed_demo_house.py`: 4 fixture-теста |
 | AudienceService Z03 | Частично: выбор и история snapshot проверены на fake | `src/dom_domych/domain/audiences/models.py`, `src/dom_domych/application/audiences/service.py`, `tests/domain/test_audience_service.py`; нет PostgreSQL repository/migration |
 | PollService Z04 | Частично: поведение и конкуренция проверены на fake | `src/dom_domych/domain/polls/models.py`, `src/dom_domych/application/polls/service.py`, `tests/domain/test_poll_service.py`; нет PostgreSQL repository/migration и MAX callback |

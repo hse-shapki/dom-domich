@@ -35,7 +35,7 @@
 | Python-стек, архитектура, MAX, tools, модель данных, процессы | Спроектировано, не реализовано | `docs/engineering/01-*.md` — `06-*.md` |
 | Три трека, персональные пулы задач и критерии приёмки | План подготовлен | `context/implementation-plan.md`, `context/tasks-*.md`, `docs/engineering/07-workstreams.md`, `08-verification-and-release.md` |
 | Единые правила разработки | Описаны | Этот файл |
-| Общие contracts/ports A01 | Частично, проверено локально | `src/dom_domych/contracts/`, `domain/ports/core.py`, `tests/contracts/test_core.py`; K00 ещё не сверена с A01 |
+| Общие contracts/ports A01 | Частично, проверено локально | `src/dom_domych/contracts/`, `domain/ports/core.py`, `tests/contracts/test_core.py`; K00 fake handlers сверены с общим контекстом/результатом |
 | Постоянный контекст для будущих задач | Описан, поддерживать актуальным | `context/README.md`, `decisions.md`, `current-state.md`, `product.md`, `engineering.md` |
 | Доменные правила опросов Z01 | Проверено на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`; 23 проверки |
 | Синтетический дом и fake directory Z02 | Проверено как test fixture и seed A02 | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`, `scripts/seed_demo_house.py`; 4 fixture-проверки |
@@ -69,7 +69,7 @@
 | Backup/restore A15 | Проверено локально на PostgreSQL 18 и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, `tests/infrastructure/test_retention_maintenance.py`; восстановлены Alembic head, 2 дома/20 проживаний и PDF hash; container restart ещё не проверен |
 | MAX matrix A16 | Не проверено; подготовлен протокол без фиктивных отметок | `docs/release/max-mobile-web-matrix.md`; нужен live бот, mobile/web и общий runtime |
 | Release A17 | Частично: runbook, env placeholders, secret/history audit, transitive license inventory и evidence/archive tool подготовлены | `scripts/release_audit.py`, `docs/release/platform-operations.md`; история чиста, но лицензия собственного проекта не выбрана; tag/digests допустимы только после G3 |
-| K00: стыки агента, дел и знаний | Частично: предложение и fake ports, A01 ещё не сверена | `src/dom_domych/agent/contracts.py`, `fakes.py`, `tests/agent/test_k00_contracts.py` |
+| K00: стыки агента, дел и знаний | Проверено на contract/fake уровне; production порты ещё не связаны | `src/dom_domych/agent/contracts.py`, `fakes.py`, `tool_handlers.py`, `tests/agent/test_k00_contracts.py` |
 | K01: eval dataset | Проверен формат и покрытие; модель не запускалась | `evals/k01_cases.jsonl`, `evals/README.md`, `tests/agent/test_k01_dataset.py` |
 | K02: inference | Частично: port/fake/timeout/retry; live probe не выполнен | `src/dom_domych/agent/llm.py`, `docs/engineering/11-track-k-inference-probe.md` |
 | K03: agent runtime | Частично: локальный allowlist/schema/capability/budget с fake tests, без persistence/real handlers | `src/dom_domych/agent/runtime.py`, `tests/agent/test_k03_runtime.py` |

@@ -95,7 +95,7 @@ class ContextBuilder:
             raise ValueError("CASE_NOT_FOUND")
         pending = (
             await self.runs.get_pending(context.house_id, case.case_id, context.actor_id, now)
-            if case is not None
+            if case is not None and context.actor_id is not None
             else None
         )
         run = RunSnapshot(

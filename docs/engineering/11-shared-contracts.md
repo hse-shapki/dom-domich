@@ -46,4 +46,4 @@ event и запрещает двух владельцев одного типа.
 Разработчик нового события добавляет schema, producer/consumer и contract test. Успех `ToolResult`
 означает подтверждённый результат handler; отсутствие ошибки в LLM-ответе недостаточно.
 
-Проверено локально: Pydantic round-trip/negative validation, совместимость fake реестра с выборкой Z, mypy и unit tests. Реальные K00-контракты из другой ветки, PostgreSQL, MAX и живой inference этой проверкой не подтверждены.
+Проверено локально: Pydantic round-trip/negative validation, совместимость fake реестра с выборкой Z, K00 tool handlers с общим `TrustedContext`/`ToolResult`, mypy и unit tests. Production K CasePort/RequestPort, MAX и живой inference этим не подтверждены.

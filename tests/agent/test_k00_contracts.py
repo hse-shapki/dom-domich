@@ -17,6 +17,9 @@ from dom_domych.agent.contracts import (
     TrustedContext,
 )
 from dom_domych.agent.fakes import FakeCasePort, FakeKnowledgePort, FakeRequestPort
+from dom_domych.agent.tool_handlers import KToolHandlers
+from dom_domych.contracts.base import ExecutionMode, PrincipalType
+from dom_domych.contracts.errors import ErrorCode
 
 
 def _context(house_id: UUID | None = None) -> TrustedContext:
@@ -26,6 +29,9 @@ def _context(house_id: UUID | None = None) -> TrustedContext:
         event_id=uuid4(),
         run_id=uuid4(),
         capabilities=frozenset(),
+        principal_type=PrincipalType.RESIDENT,
+        correlation_id=uuid4(),
+        mode=ExecutionMode.DEMO,
     )
 
 
@@ -103,3 +109,52 @@ async def test_fake_case_and_request_keep_tenant_version_and_registration_separa
 @pytest.mark.asyncio
 async def test_fake_knowledge_returns_no_unverified_rule_by_default() -> None:
     assert await FakeKnowledgePort().search(KnowledgeSearch(query="срок ремонта"), _context()) == ()
+
+
+@pytest.mark.asyncio
+async def test_k00_handler_uses_a01_context_and_rejects_forged_house() -> None:
+    context = _context()
+    cases = FakeCasePort()
+    handlers = KToolHandlers(cases, FakeKnowledgePort(), FakeRequestPort(cases))
+    allowed = context.model_copy(update={"capabilities": frozenset({"case.write", "case.read"})})
+    command = CaseCreate(
+        kind=CaseKind.PROBLEM,
+        title="Лампа на лестнице",
+        description="Темно у лифта",
+        source_message_id=uuid4(),
+        operation_id=uuid4(),
+    )
+    forged = command.model_dump(mode="json") | {"house_id": str(uuid4())}
+    from json import dumps
+
+    rejected = await handlers.execute("case.create", dumps(forged), allowed)
+    assert rejected.ok is False
+    assert rejected.error is not None and rejected.error.code == ErrorCode.VALIDATION_ERROR
+    created = await handlers.execute("case.create", command.model_dump_json(), allowed)
+    assert created.ok is True
+    assert created.data is not None
+    case_id = UUID(str(created.data["case_id"]))
+    assert await cases.get(case_id, context) is not None
+    foreign = await handlers.execute(
+        "case.get",
+        f'{{"case_id":"{case_id}"}}',
+        _context().model_copy(update={"capabilities": frozenset({"case.read"})}),
+    )
+    assert foreign.ok is False
+
+
+@pytest.mark.asyncio
+async def test_k00_handler_rejects_missing_capability_before_write() -> None:
+    cases = FakeCasePort()
+    handlers = KToolHandlers(cases, FakeKnowledgePort(), FakeRequestPort(cases))
+    command = CaseCreate(
+        kind=CaseKind.PROBLEM,
+        title="Лампа на лестнице",
+        description="Темно у лифта",
+        source_message_id=uuid4(),
+        operation_id=uuid4(),
+    )
+    result = await handlers.execute("case.create", command.model_dump_json(), _context())
+    assert result.ok is False
+    assert result.error is not None and result.error.code == ErrorCode.FORBIDDEN
+    assert cases.cases == {}

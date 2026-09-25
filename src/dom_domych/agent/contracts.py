@@ -7,21 +7,10 @@ from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 
-
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class TrustedContext(StrictModel):
-    """Контекст проверенного события; модель не задаёт эти поля."""
-
-    house_id: UUID
-    actor_id: UUID
-    event_id: UUID
-    run_id: UUID
-    capabilities: frozenset[str]
+from dom_domych.contracts.base import StrictContract as StrictModel
+from dom_domych.contracts.base import TrustedContext
 
 
 class CaseKind(StrEnum):
@@ -35,6 +24,10 @@ class CaseSearch(StrictModel):
     entrance: int | None = Field(default=None, ge=1)
     floor: int | None = None
     object_name: str | None = Field(default=None, max_length=100)
+
+
+class CaseGet(StrictModel):
+    case_id: UUID
 
 
 class CaseCandidate(StrictModel):
@@ -104,6 +97,10 @@ class RequestSubmit(StrictModel):
     operation_id: UUID
 
 
+class RequestGetStatus(StrictModel):
+    request_id: UUID
+
+
 class RequestView(StrictModel):
     request_id: UUID
     case_id: UUID
@@ -166,9 +163,11 @@ class RequestPort(Protocol):
 
 TOOL_INPUTS: dict[str, type[StrictModel]] = {
     "case.search": CaseSearch,
+    "case.get": CaseGet,
     "case.create": CaseCreate,
     "case.attach_message": CaseAttachMessage,
     "knowledge.search": KnowledgeSearch,
     "request.prepare": RequestPrepare,
     "request.submit": RequestSubmit,
+    "request.get_status": RequestGetStatus,
 }
