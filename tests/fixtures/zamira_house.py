@@ -23,6 +23,7 @@ RISER_E1 = synthetic_id("house-one:cold-water:e1")
 class FixtureResidency:
     resident_id: UUID
     apartment_id: UUID
+    apartment_number: str
     house_id: UUID
     entrance: int
     floor: int
@@ -85,6 +86,7 @@ def _residency(
     return FixtureResidency(
         resident_id=synthetic_id(f"resident-{resident_number}"),
         apartment_id=synthetic_id(f"{house_id}:apartment-{apartment}"),
+        apartment_number=apartment,
         house_id=house_id,
         entrance=entrance,
         floor=floor,

@@ -60,7 +60,7 @@ erDiagram
 | `agent_runs/tool_calls` | event/case, versions, model/prompt revision, tool args/result, latency, status |
 | `inbox_events/outbox_messages/scheduled_jobs` | dedupe key, payload, status, attempts, lease owner/until, available time, error |
 
-Это спецификация схемы: часть доменных моделей Z уже существует, но ORM-модели и миграции PostgreSQL ещё предстоит написать. Точный статус по модулям — в [проверенном состоянии](../../context/current-state.md).
+Это спецификация всей схемы. Core-таблицы реестра A02 уже имеют ORM-модели и первую миграцию; модели и миграции дел, опросов, документов и очередей ещё предстоит написать. Точный статус по модулям — в [проверенном состоянии](../../context/current-state.md).
 
 ### Уникальность и индексы
 

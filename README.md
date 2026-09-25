@@ -15,3 +15,5 @@
 В репозитории есть устанавливаемый Python-проект и независимые модули аудитории/опросов с тестами. Интеграции MAX/БД ещё не созданы; точное состояние — в [контексте](context/current-state.md).
 
 Локальная проверка: `uv sync --locked`, затем `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/dom_domych`, `uv run pytest`.
+
+Для dev-БД: `POSTGRES_PASSWORD=... docker compose -f deploy/compose.dev.yml up -d`, задать `DATABASE_URL` из `.env.example`, выполнить `uv run alembic upgrade head`. Синтетический seed запускается только с тестовым именем БД (`dom_domych_test`): `uv run python -m scripts.seed_demo_house`. Локальная проверка миграции выполнена на PostgreSQL 18; запуск образа PostgreSQL 17/pgvector ещё не подтверждён.
