@@ -59,10 +59,7 @@ class FakeFollowupRepository:
             answered = {answer.resident_id for answer in poll.answers}
             planned: list[UUID] = []
             for resident_id in candidate_ids:
-                if (
-                    resident_id not in poll.definition.eligible_residents
-                    or resident_id in answered
-                ):
+                if resident_id not in poll.definition.eligible_residents or resident_id in answered:
                     continue
                 history_key = (poll_id, resident_id)
                 history = self.reminder_history.get(history_key, ())
@@ -92,10 +89,7 @@ class FakeFollowupRepository:
             key = (decision.house_id, operation_key)
             existing = self.decision_operations.get(key)
             if existing is not None:
-                if (
-                    existing.poll_id != decision.poll_id
-                    or existing.outcome != decision.outcome
-                ):
+                if existing.poll_id != decision.poll_id or existing.outcome != decision.outcome:
                     raise InitiativeConflict("decision operation key conflict")
                 return existing
             prior = self.decisions.get(decision.poll_id)

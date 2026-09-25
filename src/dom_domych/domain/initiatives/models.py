@@ -30,9 +30,7 @@ class InitiativeRevision:
             raise ValueError("initiative revision needs number and wording")
         if len(self.wording) > 4_000:
             raise ValueError("initiative wording exceeds safe limit")
-        if self.created_at.tzinfo is None or self.created_at.utcoffset() != timedelta(
-            0
-        ):
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() != timedelta(0):
             raise ValueError("created_at must use UTC")
 
 
@@ -56,9 +54,7 @@ class InitiativeState:
     def current(self) -> InitiativeRevision:
         return self.revisions[-1]
 
-    def revise(
-        self, revision: InitiativeRevision, expected_revision: int
-    ) -> "InitiativeState":
+    def revise(self, revision: InitiativeRevision, expected_revision: int) -> "InitiativeState":
         if self.current.revision != expected_revision:
             raise InitiativeConflict("initiative revision changed")
         if revision.revision != expected_revision + 1:

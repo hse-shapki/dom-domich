@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -16,7 +16,7 @@ from tests.fixtures.zamira_house import synthetic_id
 
 class FakeClock:
     def __init__(self) -> None:
-        self.current = datetime(2026, 9, 25, 13, tzinfo=timezone.utc)
+        self.current = datetime(2026, 9, 25, 13, tzinfo=UTC)
 
     def now(self) -> datetime:
         return self.current
@@ -84,9 +84,7 @@ async def test_reminder_frequency_limit_and_operation_key() -> None:
 
 
 @pytest.mark.asyncio
-async def test_supported_position_emits_only_supported_event_after_finalization() -> (
-    None
-):
+async def test_supported_position_emits_only_supported_event_after_finalization() -> None:
     initiative, initiatives = setup()
     state = await create(initiative)
     poll = initiatives.polls[state.current.poll_id]

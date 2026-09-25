@@ -54,9 +54,7 @@ def test_fake_directory_is_house_scoped_and_keeps_overlapping_residencies() -> N
     assert house_one and all(item.house_id == HOUSE_ONE for item in house_one)
     assert len(house_two) == 1
     assert house_two[0].resident_id == synthetic_id("resident-19")
-    assert (
-        sum(item.resident_id == synthetic_id("resident-1") for item in house_one) == 2
-    )
+    assert sum(item.resident_id == synthetic_id("resident-1") for item in house_one) == 2
 
 
 def test_fixture_contains_late_vote_revision_and_negative_result() -> None:

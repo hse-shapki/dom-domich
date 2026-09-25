@@ -1,6 +1,6 @@
 # План реализации: три независимых пула
 
-Статус на 25.09.2026: это **план**, приложение ещё не написано. Канонические задачи находятся в трёх файлах: [Алина](tasks-alina.md), [Катерина](tasks-katerina.md), [Замира](tasks-zamira.md). Техническое обоснование — [архитектура](../docs/engineering/02-architecture.md), [данные](../docs/engineering/05-data-and-state.md), [процессы](../docs/engineering/06-runtime-flows.md), [приёмка](../docs/engineering/08-verification-and-release.md). Порядок A/B/C из [07](../docs/engineering/07-workstreams.md) сохраняется; этот план делает его исполнимым по отдельным задачам.
+Статус на 25.09.2026: это **план**; A00 и часть независимого Z-пула реализованы, сквозное приложение ещё не готово. Канонические задачи находятся в трёх файлах: [Алина](tasks-alina.md), [Катерина](tasks-katerina.md), [Замира](tasks-zamira.md). Техническое обоснование — [архитектура](../docs/engineering/02-architecture.md), [данные](../docs/engineering/05-data-and-state.md), [процессы](../docs/engineering/06-runtime-flows.md), [приёмка](../docs/engineering/08-verification-and-release.md). Порядок A/B/C из [07](../docs/engineering/07-workstreams.md) сохраняется; этот план делает его исполнимым по отдельным задачам.
 
 ## Владение и параллельность
 

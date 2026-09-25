@@ -31,9 +31,7 @@ class ResolutionOutcome(StrEnum):
 def _check_ratio(value: Decimal, name: str, *, allow_zero: bool = False) -> None:
     lower_ok = value >= 0 if allow_zero else value > 0
     if not value.is_finite() or not lower_ok or value > 1:
-        raise ValueError(
-            f"{name} must be {'between 0 and 1' if allow_zero else 'in (0, 1]'}"
-        )
+        raise ValueError(f"{name} must be {'between 0 and 1' if allow_zero else 'in (0, 1]'}")
 
 
 def _required(eligible: int, ratio: Decimal) -> int:
@@ -49,10 +47,7 @@ class VoteTally:
     no: int
 
     def __post_init__(self) -> None:
-        if (
-            min(self.eligible, self.yes, self.no) < 0
-            or self.yes + self.no > self.eligible
-        ):
+        if min(self.eligible, self.yes, self.no) < 0 or self.yes + self.no > self.eligible:
             raise ValueError("invalid vote tally")
 
     @property
@@ -153,9 +148,7 @@ def demo_resolution_policy() -> ResolutionPolicy:
     )
 
 
-def evaluate_problem(
-    tally: VoteTally, policy: ProblemPolicy, *, expired: bool
-) -> ProblemOutcome:
+def evaluate_problem(tally: VoteTally, policy: ProblemPolicy, *, expired: bool) -> ProblemOutcome:
     """Порог считается от всей зафиксированной категории, а не от доставленных ЛС."""
 
     if tally.eligible == 0:
@@ -218,9 +211,7 @@ def evaluate_resolution(
     return ResolutionOutcome.UNCONFIRMED
 
 
-def received_during_poll(
-    received_at: datetime, opens_at: datetime, closes_at: datetime
-) -> bool:
+def received_during_poll(received_at: datetime, opens_at: datetime, closes_at: datetime) -> bool:
     """Сравнивает время надёжного приёма ingress, а не время обработки worker."""
 
     if any(

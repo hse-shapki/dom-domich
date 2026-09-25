@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -22,7 +22,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"demo-image-content"
 
 class FakeClock:
     def now(self) -> datetime:
-        return datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        return datetime(2026, 9, 25, 12, tzinfo=UTC)
 
 
 @pytest.mark.asyncio
@@ -38,9 +38,7 @@ async def test_put_and_get_pdf_uses_private_key_hash_and_default_retention(
     assert loaded_meta == meta
     assert meta.sha256 == hashlib.sha256(PDF).hexdigest()
     assert meta.retain_until == FakeClock().now() + timedelta(days=30)
-    assert (
-        tmp_path / str(HOUSE_ONE) / meta.file_key.hex[:2] / f"{meta.file_key}.bin"
-    ).exists()
+    assert (tmp_path / str(HOUSE_ONE) / meta.file_key.hex[:2] / f"{meta.file_key}.bin").exists()
 
 
 @pytest.mark.asyncio
@@ -74,18 +72,14 @@ async def test_rejects_oversize_unsupported_and_false_mime(tmp_path: Path) -> No
 async def test_tampered_content_and_symlink_are_not_served(tmp_path: Path) -> None:
     store = LocalFileStore(tmp_path, FakeClock())
     first = await store.put(HOUSE_ONE, FileKind.DOCUMENT, "application/pdf", PDF)
-    first_path = (
-        tmp_path / str(HOUSE_ONE) / first.file_key.hex[:2] / f"{first.file_key}.bin"
-    )
+    first_path = tmp_path / str(HOUSE_ONE) / first.file_key.hex[:2] / f"{first.file_key}.bin"
     first_path.write_bytes(PDF + b"tampered")
 
     with pytest.raises(FileIntegrityError, match="checksum"):
         await store.get(HOUSE_ONE, first.file_key)
 
     second = await store.put(HOUSE_ONE, FileKind.DOCUMENT, "application/pdf", PDF)
-    second_path = (
-        tmp_path / str(HOUSE_ONE) / second.file_key.hex[:2] / f"{second.file_key}.bin"
-    )
+    second_path = tmp_path / str(HOUSE_ONE) / second.file_key.hex[:2] / f"{second.file_key}.bin"
     second_path.unlink()
     second_path.symlink_to(first_path)
     with pytest.raises(FileIntegrityError, match="symbolic links"):
@@ -96,9 +90,7 @@ async def test_tampered_content_and_symlink_are_not_served(tmp_path: Path) -> No
 async def test_tampered_ownership_metadata_is_not_served(tmp_path: Path) -> None:
     store = LocalFileStore(tmp_path, FakeClock())
     stored = await store.put(HOUSE_ONE, FileKind.DOCUMENT, "application/pdf", PDF)
-    meta_path = (
-        tmp_path / str(HOUSE_ONE) / stored.file_key.hex[:2] / f"{stored.file_key}.json"
-    )
+    meta_path = tmp_path / str(HOUSE_ONE) / stored.file_key.hex[:2] / f"{stored.file_key}.json"
     metadata = json.loads(meta_path.read_text(encoding="utf-8"))
     metadata["house_id"] = str(HOUSE_TWO)
     meta_path.write_text(json.dumps(metadata), encoding="utf-8")
@@ -156,9 +148,7 @@ async def test_custom_retention_requires_future_utc(tmp_path: Path) -> None:
             FileKind.DOCUMENT,
             "application/pdf",
             PDF,
-            retain_until=datetime(2026, 9, 26, tzinfo=timezone.utc).replace(
-                tzinfo=None
-            ),
+            retain_until=datetime(2026, 9, 26, tzinfo=UTC).replace(tzinfo=None),
         )
     with pytest.raises(ValueError, match="future"):
         await store.put(
@@ -175,10 +165,7 @@ async def test_concurrent_writes_have_distinct_keys(tmp_path: Path) -> None:
     store = LocalFileStore(tmp_path, FakeClock())
 
     stored = await asyncio.gather(
-        *(
-            store.put(HOUSE_ONE, FileKind.DOCUMENT, "application/pdf", PDF)
-            for _ in range(5)
-        )
+        *(store.put(HOUSE_ONE, FileKind.DOCUMENT, "application/pdf", PDF) for _ in range(5))
     )
 
     assert len({item.file_key for item in stored}) == 5

@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -29,7 +29,7 @@ class Context:
 
 class FakeClock:
     def now(self) -> datetime:
-        return datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        return datetime(2026, 9, 25, 12, tzinfo=UTC)
 
 
 def setup() -> tuple[InitiativeService, FakeInitiativeRepository]:
@@ -38,9 +38,7 @@ def setup() -> tuple[InitiativeService, FakeInitiativeRepository]:
     return InitiativeService(cases, repository, FakeClock()), repository
 
 
-async def create(
-    service: InitiativeService, operation_key: str = "create-v1"
-) -> InitiativeState:
+async def create(service: InitiativeService, operation_key: str = "create-v1") -> InitiativeState:
     return await service.create(
         CASE_ID,
         "  Поставить велопарковку у второго подъезда  ",
@@ -225,12 +223,7 @@ async def test_concurrent_edits_of_same_revision_leave_one_active_poll() -> None
         return_exceptions=True,
     )
 
-    assert (
-        len([result for result in results if isinstance(result, InitiativeConflict)])
-        == 1
-    )
+    assert len([result for result in results if isinstance(result, InitiativeConflict)]) == 1
     assert len(repository.polls) == 2
     assert repository.polls[original.current.poll_id].status is PollStatus.CANCELLED
-    assert (
-        sum(poll.status is PollStatus.OPEN for poll in repository.polls.values()) == 1
-    )
+    assert sum(poll.status is PollStatus.OPEN for poll in repository.polls.values()) == 1

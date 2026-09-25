@@ -44,9 +44,7 @@ class ResolutionCase(Protocol):
 
 
 class ResolutionCasePort(Protocol):
-    async def get_for_resolution(
-        self, case_id: UUID, house_id: UUID
-    ) -> ResolutionCase: ...
+    async def get_for_resolution(self, case_id: UUID, house_id: UUID) -> ResolutionCase: ...
 
 
 class ResolutionStore(Protocol):
@@ -79,9 +77,7 @@ class Clock(Protocol):
 class ResolutionService:
     """Внешнее done открывает опрос, но не закрывает дело."""
 
-    def __init__(
-        self, cases: ResolutionCasePort, store: ResolutionStore, clock: Clock
-    ) -> None:
+    def __init__(self, cases: ResolutionCasePort, store: ResolutionStore, clock: Clock) -> None:
         self.cases = cases
         self.store = store
         self.clock = clock

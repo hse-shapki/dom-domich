@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -44,7 +44,7 @@ class FakeContext:
 
 class FakeClock:
     def __init__(self) -> None:
-        self.current = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.current = datetime(2026, 9, 25, 12, tzinfo=UTC)
 
     def now(self) -> datetime:
         return self.current
@@ -67,9 +67,7 @@ def floor_audience() -> AudienceSnapshot:
         house_id=HOUSE_ONE,
         scope=AudienceScope(kind=ScopeKind.FLOOR, entrance=2, floor=5),
         criteria_revision=1,
-        members=tuple(
-            AudienceMember(item.resident_id, item.dm_reachable) for item in residencies
-        ),
+        members=tuple(AudienceMember(item.resident_id, item.dm_reachable) for item in residencies),
         created_at=fixture.opened_at,
     )
 
@@ -108,9 +106,7 @@ async def test_open_freezes_all_eligible_members_and_creates_one_job() -> None:
         operation_key="open-case-one",
     )
 
-    assert poll.definition.eligible_residents == {
-        item.resident_id for item in audience.members
-    }
+    assert poll.definition.eligible_residents == {item.resident_id for item in audience.members}
     assert poll.definition.closes_at == clock.now() + timedelta(hours=5)
     assert len(repository.notification_targets[poll.definition.poll_id]) == 12
     assert audience.reachable_count == 11
@@ -196,9 +192,7 @@ async def test_repeated_clicks_do_not_create_more_votes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_answer_change_has_history_and_old_event_replay_does_not_revert_it() -> (
-    None
-):
+async def test_answer_change_has_history_and_old_event_replay_does_not_revert_it() -> None:
     service, repository, clock = setup()
     poll = await service.open(
         synthetic_id("initiative-one"),
@@ -212,9 +206,7 @@ async def test_answer_change_has_history_and_old_event_replay_does_not_revert_it
     )
     poll_id = poll.definition.poll_id
     first_event = synthetic_id("first-vote")
-    await service.record_answer(
-        poll_id, VoteChoice.YES, first_event, clock.now(), context(1)
-    )
+    await service.record_answer(poll_id, VoteChoice.YES, first_event, clock.now(), context(1))
     changed = await service.record_answer(
         poll_id, VoteChoice.NO, synthetic_id("changed-vote"), clock.now(), context(1)
     )
@@ -384,12 +376,8 @@ async def test_initiative_and_resolution_finalize_from_frozen_policy() -> None:
         )
     clock.current += timedelta(hours=1)
 
-    initiative_result = await service.finalize(
-        initiative.definition.poll_id, context(1)
-    )
-    resolution_result = await service.finalize(
-        resolution.definition.poll_id, context(1)
-    )
+    initiative_result = await service.finalize(initiative.definition.poll_id, context(1))
+    resolution_result = await service.finalize(resolution.definition.poll_id, context(1))
 
     assert initiative_result.state.outcome == InitiativeOutcome.SUPPORTED
     assert resolution_result.state.outcome == ResolutionOutcome.REOPENED

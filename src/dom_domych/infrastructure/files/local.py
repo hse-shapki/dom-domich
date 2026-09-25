@@ -81,9 +81,7 @@ def _matches_signature(mime_type: str, content: bytes) -> bool:
 class LocalFileStore:
     """File key всегда UUID; имя файла пользователя не участвует в построении пути."""
 
-    def __init__(
-        self, root: Path, clock: Clock, *, max_size_bytes: int = 20_000_000
-    ) -> None:
+    def __init__(self, root: Path, clock: Clock, *, max_size_bytes: int = 20_000_000) -> None:
         if max_size_bytes <= 0:
             raise ValueError("max_size_bytes must be positive")
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -154,15 +152,11 @@ class LocalFileStore:
             "size_bytes": stored.size_bytes,
             "sha256": stored.sha256,
             "created_at": stored.created_at.isoformat(),
-            "retain_until": stored.retain_until.isoformat()
-            if stored.retain_until
-            else None,
+            "retain_until": stored.retain_until.isoformat() if stored.retain_until else None,
         }
         self._atomic_write(blob_path, content)
         try:
-            self._atomic_write(
-                meta_path, json.dumps(metadata, sort_keys=True).encode("utf-8")
-            )
+            self._atomic_write(meta_path, json.dumps(metadata, sort_keys=True).encode("utf-8"))
         except OSError:
             blob_path.unlink(missing_ok=True)
             raise
@@ -171,9 +165,7 @@ class LocalFileStore:
     def _atomic_write(path: Path, content: bytes) -> None:
         temp_path: Path | None = None
         try:
-            with tempfile.NamedTemporaryFile(
-                dir=path.parent, delete=False
-            ) as temporary:
+            with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as temporary:
                 temp_path = Path(temporary.name)
                 temporary.write(content)
                 temporary.flush()

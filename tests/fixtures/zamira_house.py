@@ -1,7 +1,7 @@
 """Синтетические данные пула Z; идентификаторы не относятся к настоящим людям."""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from dom_domych.domain.audiences.models import RiserRef
@@ -65,12 +65,8 @@ class FakeResidentDirectory:
     def __init__(self, fixture: ZamiraFixture) -> None:
         self.fixture = fixture
 
-    async def list_house_residencies(
-        self, house_id: UUID
-    ) -> tuple[FixtureResidency, ...]:
-        return tuple(
-            item for item in self.fixture.residencies if item.house_id == house_id
-        )
+    async def list_house_residencies(self, house_id: UUID) -> tuple[FixtureResidency, ...]:
+        return tuple(item for item in self.fixture.residencies if item.house_id == house_id)
 
 
 def _residency(
@@ -93,9 +89,7 @@ def _residency(
         entrance=entrance,
         floor=floor,
         risers=frozenset(
-            RiserRef(
-                riser_id=item, kind="heating" if item == RISER_E2_HEAT else "cold_water"
-            )
+            RiserRef(riser_id=item, kind="heating" if item == RISER_E2_HEAT else "cold_water")
             for item in risers
         ),
         confirmed=confirmed,
@@ -112,9 +106,7 @@ def zamira_fixture() -> ZamiraFixture:
         _residency(
             number,
             apartment=f"{205 + (number - 1) // 2}",
-            risers=frozenset(
-                {RISER_E2_A if number <= 6 else RISER_E2_B, RISER_E2_HEAT}
-            ),
+            risers=frozenset({RISER_E2_A if number <= 6 else RISER_E2_B, RISER_E2_HEAT}),
             dm_reachable=number != 10,
         )
         for number in range(1, 13)
@@ -135,7 +127,7 @@ def zamira_fixture() -> ZamiraFixture:
             risers=frozenset({synthetic_id("house-two:cold-water:e1")}),
         ),
     )
-    opened_at = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+    opened_at = datetime(2026, 9, 25, 12, tzinfo=UTC)
     messages = tuple(
         FixtureMessage(
             message_id=synthetic_id(f"same-problem-{number}"),

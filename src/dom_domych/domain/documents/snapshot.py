@@ -49,8 +49,7 @@ class NoticeEntry:
 
     def __post_init__(self) -> None:
         if self.attempted_at is not None and (
-            self.attempted_at.tzinfo is None
-            or self.attempted_at.utcoffset() != timedelta(0)
+            self.attempted_at.tzinfo is None or self.attempted_at.utcoffset() != timedelta(0)
         ):
             raise ValueError("attempted_at must use UTC")
 
@@ -90,9 +89,7 @@ class DocumentSnapshot:
             raise ValueError("request revision must be positive")
         if not self.template_revision or not self.title or not self.house_address:
             raise ValueError("template revision, title and address are required")
-        if self.created_at.tzinfo is None or self.created_at.utcoffset() != timedelta(
-            0
-        ):
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() != timedelta(0):
             raise ValueError("created_at must use UTC")
         if self.tally is not None and self.poll_id is None:
             raise ValueError("vote tally needs a poll reference")

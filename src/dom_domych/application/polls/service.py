@@ -52,9 +52,7 @@ class PollRepository(Protocol):
         """Под lock вызывает PollState.record_answer и сохраняет event единожды."""
         ...
 
-    async def finalize_atomic(
-        self, poll_id: UUID, house_id: UUID, now: datetime
-    ) -> PollMutation:
+    async def finalize_atomic(self, poll_id: UUID, house_id: UUID, now: datetime) -> PollMutation:
         """После дренажа predeadline inbox вызывает PollState.finalize под lock."""
         ...
 
@@ -103,16 +101,12 @@ class PollService:
             kind=kind,
             policy=policy,
             subject_revision=subject_revision,
-            eligible_residents=frozenset(
-                member.resident_id for member in audience.members
-            ),
+            eligible_residents=frozenset(member.resident_id for member in audience.members),
             opens_at=opens_at,
             closes_at=opens_at + duration,
         )
         targets = tuple(member.resident_id for member in audience.members)
-        return await self.repository.open_once(
-            PollState(definition), targets, operation_key
-        )
+        return await self.repository.open_once(PollState(definition), targets, operation_key)
 
     async def record_answer(
         self,
@@ -133,9 +127,5 @@ class PollService:
             received_at,
         )
 
-    async def finalize(
-        self, poll_id: UUID, context: TrustedHouseContext
-    ) -> PollMutation:
-        return await self.repository.finalize_atomic(
-            poll_id, context.house_id, self.clock.now()
-        )
+    async def finalize(self, poll_id: UUID, context: TrustedHouseContext) -> PollMutation:
+        return await self.repository.finalize_atomic(poll_id, context.house_id, self.clock.now())

@@ -165,9 +165,7 @@ def render_document(snapshot: DocumentSnapshot) -> RenderedDocument:
         Spacer(1, 12),
         _paragraph(f"Тема: {snapshot.title}", subheading),
         _paragraph(f"Адрес: {snapshot.house_address}", regular),
-        _paragraph(
-            f"Дело: {snapshot.case_id} · редакция {snapshot.case_revision}", small
-        ),
+        _paragraph(f"Дело: {snapshot.case_id} · редакция {snapshot.case_revision}", small),
         _paragraph(
             f"Аудитория: {snapshot.audience_id} · редакция {snapshot.audience_revision}",
             small,
@@ -188,9 +186,7 @@ def render_document(snapshot: DocumentSnapshot) -> RenderedDocument:
         )
 
     if snapshot.kind is DocumentKind.RESIDENT_POSITION:
-        story.append(
-            _paragraph("Это позиция жителей по опросу, не протокол ОСС.", regular)
-        )
+        story.append(_paragraph("Это позиция жителей по опросу, не протокол ОСС.", regular))
     elif snapshot.kind is DocumentKind.APPEAL:
         story.append(
             _paragraph(
@@ -241,9 +237,7 @@ def render_document(snapshot: DocumentSnapshot) -> RenderedDocument:
             )
         )
         story.append(
-            _paragraph(
-                f"Опрос: {snapshot.poll_id} · редакция {snapshot.poll_revision}", small
-            )
+            _paragraph(f"Опрос: {snapshot.poll_id} · редакция {snapshot.poll_revision}", small)
         )
 
     if snapshot.kind is DocumentKind.NOTIFICATION_REGISTER:
@@ -289,7 +283,8 @@ def render_document(snapshot: DocumentSnapshot) -> RenderedDocument:
     story.append(Spacer(1, 14))
     story.append(
         _paragraph(
-            "Подготовлено автоматически по зафиксированному снимку. Фактическая отправка и официальный статус подтверждаются отдельно.",
+            "Подготовлено автоматически по зафиксированному снимку. "
+            "Фактическая отправка и официальный статус подтверждаются отдельно.",
             small,
         )
     )
@@ -323,7 +318,5 @@ class PdfRenderer:
     async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(
-        self, _type: object, _value: object, _traceback: object
-    ) -> None:
+    async def __aexit__(self, _type: object, _value: object, _traceback: object) -> None:
         await asyncio.to_thread(self.close)

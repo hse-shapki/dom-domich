@@ -123,9 +123,7 @@ class AudienceSnapshot:
     def __post_init__(self) -> None:
         if self.criteria_revision <= 0:
             raise ValueError("criteria_revision must be positive")
-        if self.created_at.tzinfo is None or self.created_at.utcoffset() != timedelta(
-            0
-        ):
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() != timedelta(0):
             raise ValueError("created_at must use UTC")
         ids = [member.resident_id for member in self.members]
         if len(ids) != len(set(ids)):

@@ -113,9 +113,7 @@ def initiative_card(state: InitiativeState, poll: PollState) -> PublicCard:
         revision.wording,
         ProgressScale.build("Участие", progress.answered, progress.eligible).line(),
         ProgressScale.build("За от всех", progress.yes, progress.eligible).line(),
-        ProgressScale.build(
-            "За среди ответивших", progress.yes, progress.answered
-        ).line(),
+        ProgressScale.build("За среди ответивших", progress.yes, progress.answered).line(),
         (
             f"Порог участия: {policy.min_participation * 100}% · "
             f"поддержки среди ответивших: {policy.min_support_answered * 100}%"
@@ -129,9 +127,12 @@ def initiative_card(state: InitiativeState, poll: PollState) -> PublicCard:
         lines.append("Опрос этой редакции отменён.")
     else:
         outcome = poll.outcome
-        lines.append(
-            f"Итог позиции: {_INITIATIVE_OUTCOMES[outcome] if isinstance(outcome, InitiativeOutcome) else 'не определён'}."
+        label = (
+            _INITIATIVE_OUTCOMES[outcome]
+            if isinstance(outcome, InitiativeOutcome)
+            else "не определён"
         )
+        lines.append(f"Итог позиции: {label}.")
     if policy.demo:
         lines.append("Демо-правило; не протокол ОСС и не юридический кворум.")
     return PublicCard(
@@ -164,9 +165,10 @@ def problem_card(title: str, poll: PollState) -> PublicCard:
         lines.append("Опрос отменён после изменения предмета обращения.")
     else:
         outcome = poll.outcome
-        lines.append(
-            f"Итог: {_PROBLEM_OUTCOMES[outcome] if isinstance(outcome, ProblemOutcome) else 'не определён'}."
+        label = (
+            _PROBLEM_OUTCOMES[outcome] if isinstance(outcome, ProblemOutcome) else "не определён"
         )
+        lines.append(f"Итог: {label}.")
     if policy.demo:
         lines.append("Порог — демонстрационная настройка, не нормативное требование.")
     return PublicCard(
@@ -192,9 +194,7 @@ def status_card(
         f"Статус дела: {_WORKFLOW_LABELS.get(workflow_status, 'уточняется')}.",
     ]
     if operation.status is ExternalStatus.DONE:
-        lines.append(
-            "Исполнитель сообщил о выполнении. Результат должны проверить жители."
-        )
+        lines.append("Исполнитель сообщил о выполнении. Результат должны проверить жители.")
     lines.append("ДЕМО: внешняя система и номер регистрации смоделированы.")
     return PublicCard(
         house_id=operation.draft.house_id,

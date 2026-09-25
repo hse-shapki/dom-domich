@@ -80,9 +80,7 @@ class Clock(Protocol):
 class InitiativeService:
     """LLM задаёт текст/область; права, версию и опрос проверяет backend."""
 
-    def __init__(
-        self, cases: CasePort, repository: InitiativeRepository, clock: Clock
-    ) -> None:
+    def __init__(self, cases: CasePort, repository: InitiativeRepository, clock: Clock) -> None:
         self.cases = cases
         self.repository = repository
         self.clock = clock
@@ -109,9 +107,7 @@ class InitiativeService:
                 or previous_result.revisions[0].wording != wording.strip()
                 or previous_result.revisions[0].audience_id != audience.audience_id
             ):
-                raise InitiativeConflict(
-                    "operation key was used for another initiative"
-                )
+                raise InitiativeConflict("operation key was used for another initiative")
             return previous_result
         revision = InitiativeRevision(
             1, wording.strip(), audience.audience_id, uuid4(), self.clock.now()
@@ -154,10 +150,7 @@ class InitiativeService:
                 raise InitiativeConflict("operation key was used for another revision")
             return previous_result
         previous = await self.repository.get(case_id, context.house_id)
-        if (
-            previous.author_id != context.actor_id
-            or previous.case_version != case.version
-        ):
+        if previous.author_id != context.actor_id or previous.case_version != case.version:
             raise InitiativeConflict("case or author changed")
         revision = InitiativeRevision(
             expected_revision + 1,
@@ -222,9 +215,7 @@ class InitiativeService:
                 kind=PollKind.INITIATIVE_POSITION,
                 policy=policy,
                 subject_revision=revision.revision,
-                eligible_residents=frozenset(
-                    item.resident_id for item in audience.members
-                ),
+                eligible_residents=frozenset(item.resident_id for item in audience.members),
                 opens_at=revision.created_at,
                 closes_at=revision.created_at + window,
             )

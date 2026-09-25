@@ -36,11 +36,9 @@ class FakePollRepository:
                     or previous.definition.case_id != state.definition.case_id
                     or previous.definition.audience_id != state.definition.audience_id
                     or previous.definition.kind != state.definition.kind
-                    or previous.definition.subject_revision
-                    != state.definition.subject_revision
+                    or previous.definition.subject_revision != state.definition.subject_revision
                     or previous.definition.policy != state.definition.policy
-                    or previous.definition.eligible_residents
-                    != state.definition.eligible_residents
+                    or previous.definition.eligible_residents != state.definition.eligible_residents
                     or self.notification_targets[previous_id] != notification_targets
                 ):
                     raise ValueError("operation key conflicts with another poll")
@@ -49,8 +47,7 @@ class FakePollRepository:
                 item.definition.case_id == state.definition.case_id
                 and item.definition.audience_id == state.definition.audience_id
                 and item.definition.kind == state.definition.kind
-                and item.definition.subject_revision
-                == state.definition.subject_revision
+                and item.definition.subject_revision == state.definition.subject_revision
                 for item in self.by_id.values()
             ):
                 raise ValueError("poll already opened for this subject revision")
@@ -72,17 +69,13 @@ class FakePollRepository:
     ) -> PollMutation:
         async with self.lock:
             current = self._get_scoped(poll_id, house_id)
-            mutation = current.record_answer(
-                actor_id, choice, source_event_id, received_at
-            )
+            mutation = current.record_answer(actor_id, choice, source_event_id, received_at)
             if mutation.state != current:
                 self.by_id[poll_id] = mutation.state
                 self.events.extend(mutation.events)
             return mutation
 
-    async def finalize_atomic(
-        self, poll_id: UUID, house_id: UUID, now: datetime
-    ) -> PollMutation:
+    async def finalize_atomic(self, poll_id: UUID, house_id: UUID, now: datetime) -> PollMutation:
         async with self.lock:
             current = self._get_scoped(poll_id, house_id)
             mutation = current.finalize(now)
@@ -91,9 +84,7 @@ class FakePollRepository:
                 self.events.extend(mutation.events)
             return mutation
 
-    async def get_definition(
-        self, poll_id: UUID, house_id: UUID
-    ) -> PollDefinition | None:
+    async def get_definition(self, poll_id: UUID, house_id: UUID) -> PollDefinition | None:
         current = self.by_id.get(poll_id)
         if current is None or current.definition.house_id != house_id:
             return None

@@ -27,9 +27,7 @@ class FakeResolutionCasePort:
     def __init__(self, case: FakeResolutionCase) -> None:
         self.case = case
 
-    async def get_for_resolution(
-        self, case_id: UUID, house_id: UUID
-    ) -> FakeResolutionCase:
+    async def get_for_resolution(self, case_id: UUID, house_id: UUID) -> FakeResolutionCase:
         if case_id != self.case.case_id or house_id != self.case.house_id:
             raise ValueError("case not found in this house")
         return self.case
@@ -59,19 +57,14 @@ class FakeResolutionStore:
         async with self._lock:
             key = (state.house_id, operation_key)
             done_key = (state.house_id, state.done_event_id)
-            existing_id = self.starts_by_key.get(key) or self.starts_by_done_event.get(
-                done_key
-            )
+            existing_id = self.starts_by_key.get(key) or self.starts_by_done_event.get(done_key)
             if existing_id is not None:
                 existing = self.states[existing_id]
                 if (
                     existing.case_id != state.case_id
                     or existing.request_id != state.request_id
                     or existing.original_audience_id != state.original_audience_id
-                    or (
-                        key in self.starts_by_key
-                        and existing.done_event_id != state.done_event_id
-                    )
+                    or (key in self.starts_by_key and existing.done_event_id != state.done_event_id)
                 ):
                     raise ResolutionConflict("start operation key was reused")
                 return existing
@@ -137,9 +130,7 @@ class FakeResolutionStore:
                 ResolutionStatus.UNCONFIRMED: "resolution_unconfirmed",
             }[updated.status]
             self.states[check_id] = updated
-            self.cases.case = replace(
-                case, workflow_status=workflow, version=case.version + 1
-            )
+            self.cases.case = replace(case, workflow_status=workflow, version=case.version + 1)
             self.finalize_by_key[key] = check_id
             self.deadline_jobs.discard(poll.definition.poll_id)
             if updated.status is ResolutionStatus.CLOSED:

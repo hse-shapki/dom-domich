@@ -124,10 +124,7 @@ class PollState:
         if self.version <= 0:
             raise ValueError("poll version must be positive")
         ids = [answer.resident_id for answer in self.answers]
-        if (
-            len(ids) != len(set(ids))
-            or not set(ids) <= self.definition.eligible_residents
-        ):
+        if len(ids) != len(set(ids)) or not set(ids) <= self.definition.eligible_residents:
             raise ValueError("poll answers must belong to unique eligible residents")
         if self.status == PollStatus.OPEN and self.outcome is not None:
             raise ValueError("open poll cannot have final outcome")
@@ -154,32 +151,20 @@ class PollState:
         """Повтор события и повтор того же ответа не дают нового голоса."""
 
         if source_event_id in self.processed_event_ids:
-            current = next(
-                (a.choice for a in self.answers if a.resident_id == actor_id), None
-            )
-            return PollMutation(
-                self, AnswerResult(AnswerStatus.DUPLICATE, self.version, current)
-            )
+            current = next((a.choice for a in self.answers if a.resident_id == actor_id), None)
+            return PollMutation(self, AnswerResult(AnswerStatus.DUPLICATE, self.version, current))
         if actor_id not in self.definition.eligible_residents:
-            return PollMutation(
-                self, AnswerResult(AnswerStatus.NOT_ELIGIBLE, self.version, None)
-            )
+            return PollMutation(self, AnswerResult(AnswerStatus.NOT_ELIGIBLE, self.version, None))
         if not received_during_poll(
             received_at, self.definition.opens_at, self.definition.closes_at
         ):
-            return PollMutation(
-                self, AnswerResult(AnswerStatus.LATE, self.version, None)
-            )
+            return PollMutation(self, AnswerResult(AnswerStatus.LATE, self.version, None))
         if self.status != PollStatus.OPEN:
-            return PollMutation(
-                self, AnswerResult(AnswerStatus.CLOSED, self.version, None)
-            )
+            return PollMutation(self, AnswerResult(AnswerStatus.CLOSED, self.version, None))
 
         previous = next((a for a in self.answers if a.resident_id == actor_id), None)
         if previous is not None and previous.choice == choice:
-            return PollMutation(
-                self, AnswerResult(AnswerStatus.DUPLICATE, self.version, choice)
-            )
+            return PollMutation(self, AnswerResult(AnswerStatus.DUPLICATE, self.version, choice))
         answer = PollAnswer(
             resident_id=actor_id,
             choice=choice,
@@ -217,12 +202,8 @@ class PollState:
                     threshold_emitted=True,
                 )
                 events = ("poll.threshold_reached",)
-        result_status = (
-            AnswerStatus.RECORDED if previous is None else AnswerStatus.CHANGED
-        )
-        return PollMutation(
-            updated, AnswerResult(result_status, updated.version, choice), events
-        )
+        result_status = AnswerStatus.RECORDED if previous is None else AnswerStatus.CHANGED
+        return PollMutation(updated, AnswerResult(result_status, updated.version, choice), events)
 
     def finalize(self, now: datetime) -> PollMutation:
         """Финализировать после дренажа всех inbox-событий, полученных до closes_at."""
@@ -240,9 +221,7 @@ class PollState:
             outcome = evaluate_initiative(self.tally, policy, finalized=True)
         else:
             outcome = evaluate_resolution(self.tally, policy, finalized=True)
-        updated = replace(
-            self, status=PollStatus.CLOSED, version=self.version + 1, outcome=outcome
-        )
+        updated = replace(self, status=PollStatus.CLOSED, version=self.version + 1, outcome=outcome)
         return PollMutation(updated, events=("poll.finalized",))
 
     def cancel(self) -> PollMutation:

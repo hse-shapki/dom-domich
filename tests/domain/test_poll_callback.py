@@ -1,5 +1,5 @@
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -31,7 +31,7 @@ class FakeContext:
 
 class FakeClock:
     def now(self) -> datetime:
-        return datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        return datetime(2026, 9, 25, 12, tzinfo=UTC)
 
 
 class FakeActionStore:
@@ -54,8 +54,7 @@ async def setup_callback() -> tuple[
         scope=AudienceScope(kind=ScopeKind.HOUSE),
         criteria_revision=1,
         members=tuple(
-            AudienceMember(synthetic_id(f"resident-{number}"), True)
-            for number in (1, 2, 3)
+            AudienceMember(synthetic_id(f"resident-{number}"), True) for number in (1, 2, 3)
         ),
         created_at=clock.now(),
     )
@@ -96,9 +95,7 @@ def callback(event_name: str, received_at: datetime) -> CallbackInput:
 
 
 @pytest.mark.asyncio
-async def test_callback_records_one_answer_from_real_actor_and_acknowledges_repeat() -> (
-    None
-):
+async def test_callback_records_one_answer_from_real_actor_and_acknowledges_repeat() -> None:
     handler, _, repository, poll_id, now = await setup_callback()
     actor = FakeContext(HOUSE_ONE, synthetic_id("resident-1"))
     update = callback("callback-one", now)
@@ -140,9 +137,7 @@ async def test_personal_action_checks_bound_resident_and_membership() -> None:
     wrong_recipient = await handler.handle(
         callback("bound-wrong", now), FakeContext(HOUSE_ONE, synthetic_id("resident-2"))
     )
-    store.actions["opaque-token"] = replace(
-        store.actions["opaque-token"], bound_resident_id=None
-    )
+    store.actions["opaque-token"] = replace(store.actions["opaque-token"], bound_resident_id=None)
     outsider = await handler.handle(
         callback("outsider", now), FakeContext(HOUSE_ONE, synthetic_id("resident-19"))
     )

@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -25,7 +25,7 @@ class Context:
 
 class FakeClock:
     def now(self) -> datetime:
-        return datetime(2026, 9, 25, 14, tzinfo=timezone.utc)
+        return datetime(2026, 9, 25, 14, tzinfo=UTC)
 
 
 def draft() -> ApprovedDraft:
@@ -165,9 +165,7 @@ async def test_concurrent_different_keys_cannot_register_same_request_twice() ->
 
     assert len([item for item in outcomes if isinstance(item, ExecutorConflict)]) == 1
     assert len([item for item in outcomes if not isinstance(item, BaseException)]) == 1
-    assert (
-        len([event for event in store.events if event[0] == "request.submitted"]) == 1
-    )
+    assert len([event for event in store.events if event[0] == "request.submitted"]) == 1
 
 
 def test_approved_draft_requires_hex_sha256() -> None:

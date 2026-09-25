@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -75,10 +75,7 @@ def test_initiative_tracks_three_distinct_ratios() -> None:
 def test_initiative_final_result(
     tally: VoteTally, finalized: bool, expected: InitiativeOutcome
 ) -> None:
-    assert (
-        evaluate_initiative(tally, demo_initiative_policy(), finalized=finalized)
-        == expected
-    )
+    assert evaluate_initiative(tally, demo_initiative_policy(), finalized=finalized) == expected
 
 
 def test_initiative_empty_ratios_are_not_fake_zero_votes() -> None:
@@ -103,10 +100,7 @@ def test_initiative_empty_ratios_are_not_fake_zero_votes() -> None:
 def test_resolution_requires_resident_result(
     tally: VoteTally, finalized: bool, expected: ResolutionOutcome
 ) -> None:
-    assert (
-        evaluate_resolution(tally, demo_resolution_policy(), finalized=finalized)
-        == expected
-    )
+    assert evaluate_resolution(tally, demo_resolution_policy(), finalized=finalized) == expected
 
 
 def test_vote_tally_rejects_impossible_counts() -> None:
@@ -115,7 +109,7 @@ def test_vote_tally_rejects_impossible_counts() -> None:
 
 
 def test_poll_accepts_ingress_before_deadline_only() -> None:
-    start = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+    start = datetime(2026, 9, 25, 12, tzinfo=UTC)
     end = start + timedelta(hours=5)
 
     assert received_during_poll(start, start, end)
@@ -125,11 +119,9 @@ def test_poll_accepts_ingress_before_deadline_only() -> None:
 
 
 def test_poll_rejects_naive_or_reversed_timestamps() -> None:
-    start = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+    start = datetime(2026, 9, 25, 12, tzinfo=UTC)
 
     with pytest.raises(ValueError, match="timezone-aware"):
-        received_during_poll(
-            start.replace(tzinfo=None), start, start + timedelta(hours=1)
-        )
+        received_during_poll(start.replace(tzinfo=None), start, start + timedelta(hours=1))
     with pytest.raises(ValueError, match="later"):
         received_during_poll(start, start, start)

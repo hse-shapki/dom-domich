@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -29,7 +29,7 @@ class FakeContext:
 
 class FakeClock:
     def now(self) -> datetime:
-        return datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        return datetime(2026, 9, 25, 12, tzinfo=UTC)
 
 
 class FakeAudienceRepository:
@@ -40,9 +40,7 @@ class FakeAudienceRepository:
     async def get(self, audience_id: UUID) -> AudienceSnapshot | None:
         return self.by_id.get(audience_id)
 
-    async def save_once(
-        self, snapshot: AudienceSnapshot, operation_key: str
-    ) -> AudienceSnapshot:
+    async def save_once(self, snapshot: AudienceSnapshot, operation_key: str) -> AudienceSnapshot:
         previous_id = self.by_operation.get(operation_key)
         if previous_id is not None:
             previous = self.by_id[previous_id]
@@ -78,16 +76,12 @@ def service() -> tuple[AudienceService, FakeAudienceRepository]:
         (AudienceScope(kind=ScopeKind.ENTRANCE, entrance=2), 13, 12),
         (AudienceScope(kind=ScopeKind.FLOOR, entrance=2, floor=5), 12, 11),
         (
-            AudienceScope(
-                kind=ScopeKind.RISER, riser_id=RISER_E2_A, riser_kind="cold_water"
-            ),
+            AudienceScope(kind=ScopeKind.RISER, riser_id=RISER_E2_A, riser_kind="cold_water"),
             6,
             6,
         ),
         (
-            AudienceScope(
-                kind=ScopeKind.RISER, riser_id=RISER_E2_HEAT, riser_kind="heating"
-            ),
+            AudienceScope(kind=ScopeKind.RISER, riser_id=RISER_E2_HEAT, riser_kind="heating"),
             13,
             12,
         ),
@@ -127,9 +121,7 @@ async def test_resolve_filters_leaked_other_house_record_again() -> None:
     fixture = zamira_fixture()
 
     class LeakyDirectory(FakeResidentDirectory):
-        async def list_house_residencies(
-            self, house_id: UUID
-        ) -> tuple[FixtureResidency, ...]:
+        async def list_house_residencies(self, house_id: UUID) -> tuple[FixtureResidency, ...]:
             return fixture.residencies
 
     audience_service = AudienceService(
@@ -153,9 +145,7 @@ async def test_resolve_is_idempotent_by_operation_key() -> None:
     scope = AudienceScope(kind=ScopeKind.FLOOR, entrance=2, floor=5)
 
     first = await audience_service.resolve(scope, context, operation_key="same-command")
-    repeated = await audience_service.resolve(
-        scope, context, operation_key="same-command"
-    )
+    repeated = await audience_service.resolve(scope, context, operation_key="same-command")
 
     assert first == repeated
     assert len(repository.by_id) == 1
@@ -191,9 +181,7 @@ async def test_changed_scope_creates_new_revision_without_mutating_previous() ->
     )
 
     changed = await audience_service.resolve(
-        AudienceScope(
-            kind=ScopeKind.RISER, riser_id=RISER_E2_A, riser_kind="cold_water"
-        ),
+        AudienceScope(kind=ScopeKind.RISER, riser_id=RISER_E2_A, riser_kind="cold_water"),
         context,
         operation_key="changed",
         supersedes_id=first.audience_id,

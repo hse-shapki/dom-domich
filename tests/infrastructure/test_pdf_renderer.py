@@ -92,9 +92,7 @@ def test_long_address_and_fact_are_not_lost() -> None:
     )
 
     rendered = render_document(source)
-    text = "\n".join(
-        page.extract_text() for page in PdfReader(BytesIO(rendered.content)).pages
-    )
+    text = "\n".join(page.extract_text() for page in PdfReader(BytesIO(rendered.content)).pages)
 
     assert "Очень Длинная" in text
     assert " ".join(text.split()).count("Не горит свет в коридоре") == 80

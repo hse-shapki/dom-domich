@@ -35,9 +35,7 @@ class StoredPollAction:
     def __post_init__(self) -> None:
         if self.subject_revision <= 0:
             raise ValueError("subject_revision must be positive")
-        if self.expires_at.tzinfo is None or self.expires_at.utcoffset() != timedelta(
-            0
-        ):
+        if self.expires_at.tzinfo is None or self.expires_at.utcoffset() != timedelta(0):
             raise ValueError("expires_at must use UTC")
 
 
@@ -63,9 +61,7 @@ class PollActionStore(Protocol):
 
 
 class PollReader(Protocol):
-    async def get_definition(
-        self, poll_id: UUID, house_id: UUID
-    ) -> PollDefinition | None: ...
+    async def get_definition(self, poll_id: UUID, house_id: UUID) -> PollDefinition | None: ...
 
 
 class PollCallbackHandler:
@@ -83,20 +79,14 @@ class PollCallbackHandler:
     ) -> CallbackOutcome:
         """A transport преобразует статус в acknowledgement MAX без персональных деталей."""
 
-        if (
-            callback.received_at.tzinfo is None
-            or callback.received_at.utcoffset() != timedelta(0)
-        ):
+        if callback.received_at.tzinfo is None or callback.received_at.utcoffset() != timedelta(0):
             raise ValueError("received_at must use UTC")
         action = await self.actions.get(callback.action_token)
         if action is None:
             return CallbackOutcome(CallbackStatus.UNKNOWN_ACTION)
         if action.house_id != context.house_id:
             return CallbackOutcome(CallbackStatus.NOT_ALLOWED)
-        if (
-            action.bound_resident_id is not None
-            and action.bound_resident_id != context.actor_id
-        ):
+        if action.bound_resident_id is not None and action.bound_resident_id != context.actor_id:
             return CallbackOutcome(CallbackStatus.NOT_ALLOWED)
         if action.revoked or callback.received_at >= action.expires_at:
             return CallbackOutcome(CallbackStatus.STALE, poll_id=action.poll_id)
@@ -130,6 +120,4 @@ class PollCallbackHandler:
             AnswerStatus.LATE: CallbackStatus.LATE,
             AnswerStatus.CLOSED: CallbackStatus.STALE,
         }[result.status]
-        return CallbackOutcome(
-            status, poll_id=action.poll_id, poll_version=result.poll_version
-        )
+        return CallbackOutcome(status, poll_id=action.poll_id, poll_version=result.poll_version)

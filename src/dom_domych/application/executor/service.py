@@ -81,9 +81,7 @@ class DemoExecutorService:
         self, operation_id: UUID, context: TrustedExecutorContext
     ) -> tuple[DemoOperation, bool]:
         self._require(context, "demo_executor.register")
-        return await self.store.register_atomic(
-            context.house_id, operation_id, self.clock.now()
-        )
+        return await self.store.register_atomic(context.house_id, operation_id, self.clock.now())
 
     async def set_status(
         self,
@@ -97,9 +95,7 @@ class DemoExecutorService:
             context.house_id, operation_id, status, self.clock.now(), source_event_id
         )
 
-    async def get_status(
-        self, request_id: UUID, context: TrustedExecutorContext
-    ) -> DemoOperation:
+    async def get_status(self, request_id: UUID, context: TrustedExecutorContext) -> DemoOperation:
         return await self.store.get(context.house_id, request_id)
 
     @staticmethod

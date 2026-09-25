@@ -48,9 +48,7 @@ class ResolutionState:
         if self.case_version_at_start <= 0 or self.version <= 0:
             raise ValueError("resolution needs positive version")
         for value in (self.started_at, self.decided_at):
-            if value is not None and (
-                value.tzinfo is None or value.utcoffset() != timedelta(0)
-            ):
+            if value is not None and (value.tzinfo is None or value.utcoffset() != timedelta(0)):
                 raise ValueError("resolution times must use UTC")
         if self.status is ResolutionStatus.CHECKING and self.decided_at is not None:
             raise ValueError("checking resolution cannot have decision time")

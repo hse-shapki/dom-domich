@@ -1,5 +1,5 @@
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -42,14 +42,14 @@ RESIDENT = Context(HOUSE_ONE, frozenset())
 
 class FakeClock:
     def __init__(self) -> None:
-        self.current = datetime(2026, 9, 25, 14, tzinfo=timezone.utc)
+        self.current = datetime(2026, 9, 25, 14, tzinfo=UTC)
 
     def now(self) -> datetime:
         return self.current
 
 
 def done_operation() -> DemoOperation:
-    at = datetime(2026, 9, 25, 13, tzinfo=timezone.utc)
+    at = datetime(2026, 9, 25, 13, tzinfo=UTC)
     return DemoOperation(
         operation_id=synthetic_id("done-operation"),
         operation_key="demo-submit",
@@ -62,9 +62,7 @@ def done_operation() -> DemoOperation:
     )
 
 
-def setup() -> tuple[
-    ResolutionService, FakeResolutionCasePort, FakeResolutionStore, FakeClock
-]:
+def setup() -> tuple[ResolutionService, FakeResolutionCasePort, FakeResolutionStore, FakeClock]:
     case_port = FakeResolutionCasePort(
         FakeResolutionCase(
             case_id=CASE_ID,
@@ -197,12 +195,8 @@ async def test_positive_resident_result_closes_case_and_cancels_future_jobs() ->
     store.polls[state.poll_id] = poll
     clock.current = poll.definition.closes_at
 
-    result = await service.finalize(
-        state.check_id, poll, WORKER, operation_key="finish"
-    )
-    repeated = await service.finalize(
-        state.check_id, poll, WORKER, operation_key="finish"
-    )
+    result = await service.finalize(state.check_id, poll, WORKER, operation_key="finish")
+    repeated = await service.finalize(state.check_id, poll, WORKER, operation_key="finish")
 
     assert result == repeated
     assert result.status is ResolutionStatus.CLOSED
@@ -220,9 +214,7 @@ async def test_negative_answers_take_priority_and_reopen_case() -> None:
     store.polls[state.poll_id] = poll
     clock.current = poll.definition.closes_at
 
-    result = await service.finalize(
-        state.check_id, poll, WORKER, operation_key="finish"
-    )
+    result = await service.finalize(state.check_id, poll, WORKER, operation_key="finish")
 
     assert result.status is ResolutionStatus.REOPENED
     assert cases.case.workflow_status == "reopened"
@@ -238,9 +230,7 @@ async def test_low_response_does_not_count_as_success() -> None:
     store.polls[state.poll_id] = poll
     clock.current = poll.definition.closes_at
 
-    result = await service.finalize(
-        state.check_id, poll, WORKER, operation_key="finish"
-    )
+    result = await service.finalize(state.check_id, poll, WORKER, operation_key="finish")
 
     assert result.status is ResolutionStatus.UNCONFIRMED
     assert cases.case.workflow_status == "resolution_unconfirmed"
@@ -279,19 +269,13 @@ async def test_empty_audience_is_unconfirmed_and_old_finalize_job_is_noop() -> N
         operation_key="empty-check",
     )
     poll = (
-        store.polls[state.poll_id]
-        .finalize(store.polls[state.poll_id].definition.closes_at)
-        .state
+        store.polls[state.poll_id].finalize(store.polls[state.poll_id].definition.closes_at).state
     )
     store.polls[state.poll_id] = poll
     clock.current = poll.definition.closes_at
 
-    first = await service.finalize(
-        state.check_id, poll, WORKER, operation_key="finalize-once"
-    )
-    old_job = await service.finalize(
-        state.check_id, poll, WORKER, operation_key="stale-job"
-    )
+    first = await service.finalize(state.check_id, poll, WORKER, operation_key="finalize-once")
+    old_job = await service.finalize(state.check_id, poll, WORKER, operation_key="stale-job")
 
     assert first == old_job
     assert first.status is ResolutionStatus.UNCONFIRMED

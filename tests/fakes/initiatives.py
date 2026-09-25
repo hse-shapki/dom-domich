@@ -64,9 +64,7 @@ class FakeInitiativeRepository:
                     or existing.current.wording != state.current.wording
                     or existing.current.audience_id != state.current.audience_id
                 ):
-                    raise InitiativeConflict(
-                        "operation key was used for another initiative"
-                    )
+                    raise InitiativeConflict("operation key was used for another initiative")
                 return existing
             if state.case_id in self.states:
                 raise InitiativeConflict("initiative already exists")
@@ -95,9 +93,7 @@ class FakeInitiativeRepository:
                     or existing.current.audience_id != updated.current.audience_id
                     or existing.current.revision != updated.current.revision
                 ):
-                    raise InitiativeConflict(
-                        "operation key was used for another revision"
-                    )
+                    raise InitiativeConflict("operation key was used for another revision")
                 return existing
             if self.states.get(updated.case_id) != previous:
                 raise InitiativeConflict("initiative revision changed concurrently")

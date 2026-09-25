@@ -31,9 +31,7 @@ class ReminderPolicy:
 def demo_reminder_policy() -> ReminderPolicy:
     """Временные параметры показа; не политика уведомлений реального дома."""
 
-    return ReminderPolicy(
-        "demo-reminder-v1", timedelta(minutes=30), 2, timedelta(minutes=5), True
-    )
+    return ReminderPolicy("demo-reminder-v1", timedelta(minutes=30), 2, timedelta(minutes=5), True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,9 +116,7 @@ class InitiativeFollowupService:
             )
         )
         reachable = await self.rights.filter_reachable(state.house_id, unanswered)
-        safe_targets = tuple(
-            sorted(set(reachable) & set(unanswered), key=lambda item: item.bytes)
-        )
+        safe_targets = tuple(sorted(set(reachable) & set(unanswered), key=lambda item: item.bytes))
         return await self.repository.enqueue_reminders_atomic(
             poll.definition.poll_id,
             state.house_id,
@@ -145,9 +141,7 @@ class InitiativeFollowupService:
             raise InitiativeConflict("initiative poll is not finalized")
         outcome = poll.outcome
         policy = poll.definition.policy
-        if not isinstance(outcome, InitiativeOutcome) or not isinstance(
-            policy, InitiativePolicy
-        ):
+        if not isinstance(outcome, InitiativeOutcome) or not isinstance(policy, InitiativePolicy):
             raise InitiativeConflict("initiative poll has invalid outcome or policy")
         return await self.repository.save_decision_once(
             InitiativeDecision(

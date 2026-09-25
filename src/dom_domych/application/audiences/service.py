@@ -19,17 +19,13 @@ class TrustedHouseContext(Protocol):
 
 
 class ResidentDirectory(Protocol):
-    async def list_house_residencies(
-        self, house_id: UUID
-    ) -> Sequence[ResidencyView]: ...
+    async def list_house_residencies(self, house_id: UUID) -> Sequence[ResidencyView]: ...
 
 
 class AudienceRepository(Protocol):
     async def get(self, audience_id: UUID) -> AudienceSnapshot | None: ...
 
-    async def save_once(
-        self, snapshot: AudienceSnapshot, operation_key: str
-    ) -> AudienceSnapshot:
+    async def save_once(self, snapshot: AudienceSnapshot, operation_key: str) -> AudienceSnapshot:
         """Сохраняет key и единственного successor атомарно; иной payload даёт конфликт."""
         ...
 
@@ -67,9 +63,7 @@ class AudienceService:
         if supersedes_id is not None:
             previous = await self.repository.get(supersedes_id)
             if previous is None or previous.house_id != context.house_id:
-                raise ValueError(
-                    "superseded audience is missing or belongs to another house"
-                )
+                raise ValueError("superseded audience is missing or belongs to another house")
             revision = previous.criteria_revision + 1
 
         residencies = await self.directory.list_house_residencies(context.house_id)
@@ -82,8 +76,7 @@ class AudienceService:
             if not scope.matches(residency):
                 continue
             reachable_by_resident[residency.resident_id] = (
-                reachable_by_resident.get(residency.resident_id, False)
-                or residency.dm_reachable
+                reachable_by_resident.get(residency.resident_id, False) or residency.dm_reachable
             )
 
         members = tuple(

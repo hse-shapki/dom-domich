@@ -1,5 +1,5 @@
 from dataclasses import FrozenInstanceError, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -44,11 +44,11 @@ def snapshot() -> DocumentSnapshot:
             NoticeEntry(
                 resident_id=synthetic_id("resident-1"),
                 status=NoticeStatus.SENT,
-                attempted_at=datetime(2026, 9, 25, 12, tzinfo=timezone.utc),
+                attempted_at=datetime(2026, 9, 25, 12, tzinfo=UTC),
                 delivery_operation_id=synthetic_id("delivery-1"),
             ),
         ),
-        created_at=datetime(2026, 9, 25, 13, tzinfo=timezone.utc),
+        created_at=datetime(2026, 9, 25, 13, tzinfo=UTC),
     )
 
 
@@ -57,13 +57,9 @@ def test_snapshot_hash_is_stable_and_changes_with_facts_or_revisions() -> None:
 
     assert first.canonical_bytes() == snapshot().canonical_bytes()
     assert first.sha256 == snapshot().sha256
-    assert (
-        replace(first, tally=VoteTally(eligible=12, yes=6, no=2)).sha256 != first.sha256
-    )
+    assert replace(first, tally=VoteTally(eligible=12, yes=6, no=2)).sha256 != first.sha256
     assert replace(first, case_revision=4).sha256 != first.sha256
-    assert (
-        replace(first, template_revision="resident-position-v2").sha256 != first.sha256
-    )
+    assert replace(first, template_revision="resident-position-v2").sha256 != first.sha256
     assert replace(first, policy_revision="demo-initiative-v2").sha256 != first.sha256
 
 
@@ -97,9 +93,7 @@ def test_snapshot_requires_utc_and_matching_revision_pairs() -> None:
     with pytest.raises(ValueError, match="UTC"):
         replace(
             first,
-            created_at=datetime(2026, 9, 25, 13, tzinfo=timezone.utc).replace(
-                tzinfo=None
-            ),
+            created_at=datetime(2026, 9, 25, 13, tzinfo=UTC).replace(tzinfo=None),
         )
     with pytest.raises(ValueError, match="set together"):
         replace(first, poll_revision=None)

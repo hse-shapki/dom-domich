@@ -2,7 +2,7 @@
 
 import argparse
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -25,7 +25,7 @@ def synthetic_id(name: str) -> UUID:
 def sample_snapshots() -> tuple[DocumentSnapshot, ...]:
     """Фиксированные факты позволяют сверить текст и snapshot hash после генерации."""
 
-    created_at = datetime(2026, 9, 25, 13, tzinfo=timezone.utc)
+    created_at = datetime(2026, 9, 25, 13, tzinfo=UTC)
     first = DocumentSnapshot(
         kind=DocumentKind.RESIDENT_POSITION,
         mode=DocumentMode.DEMO,
@@ -42,8 +42,7 @@ def sample_snapshots() -> tuple[DocumentSnapshot, ...]:
         request_revision=None,
         title="Позиция жителей по велопарковке",
         house_address=(
-            "Москва, улица Очень Длинная, дом 25, корпус 2, подъезд 2, "
-            "этаж 5, стояк холодной воды"
+            "Москва, улица Очень Длинная, дом 25, корпус 2, подъезд 2, этаж 5, стояк холодной воды"
         ),
         facts=(DocumentFact("proposal", "Установить велопарковку", "case:revision:3"),),
         tally=VoteTally(eligible=12, yes=5, no=2),
@@ -51,7 +50,7 @@ def sample_snapshots() -> tuple[DocumentSnapshot, ...]:
             NoticeEntry(
                 resident_id=synthetic_id("resident-1"),
                 status=NoticeStatus.SENT,
-                attempted_at=datetime(2026, 9, 25, 12, tzinfo=timezone.utc),
+                attempted_at=datetime(2026, 9, 25, 12, tzinfo=UTC),
                 delivery_operation_id=synthetic_id("delivery-1"),
             ),
         ),
@@ -102,9 +101,7 @@ def sample_snapshots() -> tuple[DocumentSnapshot, ...]:
                 notices=tuple(
                     NoticeEntry(
                         UUID(int=index + 1),
-                        NoticeStatus.SENT
-                        if index % 3
-                        else NoticeStatus.DELIVERY_UNKNOWN,
+                        NoticeStatus.SENT if index % 3 else NoticeStatus.DELIVERY_UNKNOWN,
                         created_at,
                         UUID(int=index + 1000),
                     )

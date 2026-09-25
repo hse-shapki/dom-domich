@@ -27,7 +27,7 @@
 | Итоги проверки результата Z13 | Частично: closed/reopened/unconfirmed проверены на fake | Те же файлы resolution; отдельный K production transition и отмена jobs ещё нужны |
 | PDF QA Z15 | Частично: локально просмотрены 4 образца | `docs/release/zamira-pdf-qa.md`; mobile/web MAX и outbox ещё не проверены |
 | Материалы Z16 | Частично: локальный handoff и воспроизведение PDF готовы | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
-| Python-проект и зависимости | Не реализованы | Есть независимый Z-модуль в `src/`, но нет `pyproject.toml`, `uv.lock` и общего пакета A00 |
+| Python-проект и зависимости A00 | Проверено локально | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; `uv sync --locked`, Ruff, mypy, 117 tests прошли; удалённый CI ещё не запускался |
 | БД, миграции, MAX-клиент, агент, хранение опросов | Не обнаружены | Нет кода интеграций и `migrations/` |
 | Рабочий стенд и внешние проверки | Не подтверждены | Нет `deploy/`; доступ MAX/модели в этом проекте не проверялся |
 
@@ -35,7 +35,7 @@
 
 ## Следующий шаг по утверждённому плану
 
-Продолжить G0 из [плана трёх пулов](implementation-plan.md): Алина делает A00 (Python-каркас), Катерина и Замира — K00/Z00 (предложения стыков), затем A01 закрепляет contracts. Предложение Z00 и fixture Z02 готовы для согласования; Z01 и Z07 проверены на unit-уровне, Z03–Z06, Z08 и Z11–Z13 — на fakes, Z09–Z10 — локально. Дальше необходима интеграция Z с A/K: общий контракт A01/K00, PostgreSQL migrations/UoW, MAX callbacks/delivery и сквозные проверки Z14–Z16. Доступ MAX/LLM и готовность стенда проверяются отдельно.
+Продолжить G0 из [плана трёх пулов](implementation-plan.md): после A00 Алина закрепляет A01 contracts с учётом K00/Z00. Предложение Z00 и fixture Z02 готовы для согласования; Z01 и Z07 проверены на unit-уровне, Z03–Z06, Z08 и Z11–Z13 — на fakes, Z09–Z10 — локально. Дальше необходима интеграция Z с A/K: общий контракт A01/K00, PostgreSQL migrations/UoW, MAX callbacks/delivery и сквозные проверки Z14–Z16. Доступ MAX/LLM и готовность стенда проверяются отдельно.
 
 ## Как обновлять после задачи
 

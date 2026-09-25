@@ -43,9 +43,7 @@ class ApprovedDraft:
         if (
             self.draft_revision <= 0
             or len(self.content_sha256) != 64
-            or any(
-                character not in "0123456789abcdef" for character in self.content_sha256
-            )
+            or any(character not in "0123456789abcdef" for character in self.content_sha256)
         ):
             raise ValueError("approved draft needs revision and SHA-256")
 
@@ -71,9 +69,7 @@ class DemoOperation:
             ("registered_at", self.registered_at),
             ("status_updated_at", self.status_updated_at),
         ):
-            if value is not None and (
-                value.tzinfo is None or value.utcoffset() != timedelta(0)
-            ):
+            if value is not None and (value.tzinfo is None or value.utcoffset() != timedelta(0)):
                 raise ValueError(f"{name} must use UTC")
         if self.status is not ExternalStatus.SUBMITTED and (
             self.registration_number is None or self.registered_at is None
@@ -115,10 +111,7 @@ class DemoOperation:
             raise ExecutorConflict("operation is not open for status update")
         if status not in {ExternalStatus.IN_PROGRESS, ExternalStatus.DONE}:
             raise ExecutorConflict("status transition is not allowed")
-        if (
-            self.status is ExternalStatus.IN_PROGRESS
-            and status is ExternalStatus.IN_PROGRESS
-        ):
+        if self.status is ExternalStatus.IN_PROGRESS and status is ExternalStatus.IN_PROGRESS:
             return self, False
         return (
             replace(
