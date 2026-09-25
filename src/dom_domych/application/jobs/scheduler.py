@@ -1,5 +1,6 @@
 """Запуск due jobs через общий dispatcher с проверкой версии сущности."""
 
+import asyncio
 from datetime import timedelta
 from typing import Protocol
 from uuid import UUID
@@ -8,9 +9,13 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.jobs.inbox_worker import EventDispatcher
-from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventSource
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.ports.core import Clock
-from dom_domych.infrastructure.postgres.jobs import DueJob, PostgresJobQueue
+from dom_domych.infrastructure.postgres.jobs import (
+    DueJob,
+    JobLeaseLostError,
+    PostgresJobQueue,
+)
 
 logger = structlog.get_logger()
 
@@ -19,6 +24,24 @@ class CurrentRevisionPort(Protocol):
     """K/Z adapter читает версию под house scope; consumer повторно проверяет её под lock."""
 
     async def current_version(self, job: DueJob) -> int | None: ...
+
+
+class RevisionRouter:
+    """A14 composition seam: K/Z регистрируют reader для принадлежащих им событий."""
+
+    def __init__(self) -> None:
+        self._readers: dict[EventName, CurrentRevisionPort] = {}
+
+    def register(self, event_name: EventName, reader: CurrentRevisionPort) -> None:
+        if event_name in self._readers:
+            raise ValueError(f"revision reader already registered for {event_name}")
+        self._readers[event_name] = reader
+
+    async def current_version(self, job: DueJob) -> int | None:
+        reader = self._readers.get(job.event_name)
+        if reader is None:
+            raise LookupError(f"no revision reader registered for {job.event_name}")
+        return await reader.current_version(job)
 
 
 class JobScheduler:
@@ -30,8 +53,9 @@ class JobScheduler:
         clock: Clock,
         worker_id: str,
         max_attempts: int = 5,
+        lease_for: timedelta = timedelta(seconds=60),
     ) -> None:
-        if max_attempts < 1:
+        if max_attempts < 1 or lease_for <= timedelta(0):
             raise ValueError("max_attempts must be positive")
         self.sessions = sessions
         self.dispatcher = dispatcher
@@ -39,14 +63,16 @@ class JobScheduler:
         self.clock = clock
         self.worker_id = worker_id
         self.max_attempts = max_attempts
+        self.lease_for = lease_for
 
     async def run_once(self) -> bool:
         async with self.sessions.begin() as session:
             job = await PostgresJobQueue(session).claim(
-                self.worker_id, self.clock.now(), timedelta(seconds=60)
+                self.worker_id, self.clock.now(), self.lease_for
             )
         if job is None:
             return False
+        heartbeat = asyncio.create_task(self._heartbeat(job.id))
         try:
             current = await self.revisions.current_version(job)
             if current != job.expected_version:
@@ -77,7 +103,28 @@ class JobScheduler:
                 await self._settle(
                     job.id, "pending", error_code=type(exc).__name__, retry_after=delay
                 )
+        finally:
+            heartbeat.cancel()
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass
         return True
+
+    async def _heartbeat(self, job_id: UUID) -> None:
+        interval = self.lease_for.total_seconds() / 3
+        while True:
+            await asyncio.sleep(interval)
+            async with self.sessions.begin() as session:
+                try:
+                    await PostgresJobQueue(session).heartbeat(
+                        job_id,
+                        self.worker_id,
+                        self.clock.now(),
+                        self.lease_for,
+                    )
+                except JobLeaseLostError:
+                    return
 
     async def _settle(
         self,

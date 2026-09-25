@@ -159,3 +159,35 @@ async def test_expired_scheduler_lease_is_reclaimed() -> None:
                 await queue.settle(job_id, "crashed", clock.now(), "done")
             await queue.settle(job_id, "restarted", clock.now(), "done")
             await session.execute(delete(ScheduledJobRow).where(ScheduledJobRow.id == job_id))
+
+
+@pytest.mark.asyncio
+async def test_scheduler_heartbeat_prevents_reclaim_during_long_handler() -> None:
+    clock = FixedClock()
+    async with database_lifespan(database_url_for_test()) as sessions:
+        async with sessions.begin() as session:
+            await seed_demo_house(session)
+            job_id = await PostgresJobQueue(session).enqueue(
+                JobIntent(
+                    HOUSE_ONE,
+                    f"a13:heartbeat:{uuid4()}",
+                    EventName.JOB_DUE.value,
+                    clock.now(),
+                    uuid4(),
+                    1,
+                )
+            )
+        async with sessions.begin() as session:
+            queue = PostgresJobQueue(session)
+            assert await queue.claim("worker", clock.now(), timedelta(seconds=30)) is not None
+        clock.current += timedelta(seconds=20)
+        async with sessions.begin() as session:
+            await PostgresJobQueue(session).heartbeat(
+                job_id, "worker", clock.now(), timedelta(seconds=30)
+            )
+        clock.current += timedelta(seconds=15)
+        async with sessions.begin() as session:
+            queue = PostgresJobQueue(session)
+            assert await queue.claim("other", clock.now(), timedelta(seconds=30)) is None
+            await queue.settle(job_id, "worker", clock.now(), "done")
+            await session.execute(delete(ScheduledJobRow).where(ScheduledJobRow.id == job_id))

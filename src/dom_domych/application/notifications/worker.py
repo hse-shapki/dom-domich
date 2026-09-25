@@ -1,6 +1,8 @@
 """Отправка намерений outbox после commit бизнес-транзакции."""
 
+import asyncio
 from datetime import timedelta
+from uuid import UUID
 
 import httpx
 import structlog
@@ -10,7 +12,11 @@ from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.files.local import FileKind, FileStoreError, LocalFileStore
 from dom_domych.infrastructure.max.client import MaxApiClient, MaxApiError
 from dom_domych.infrastructure.max.media import MaxMediaError, MaxMediaHttpError, MaxMediaTransport
-from dom_domych.infrastructure.postgres.delivery import PendingDelivery, PostgresDeliveryQueue
+from dom_domych.infrastructure.postgres.delivery import (
+    DeliveryLeaseLostError,
+    PendingDelivery,
+    PostgresDeliveryQueue,
+)
 
 logger = structlog.get_logger()
 
@@ -25,8 +31,9 @@ class DeliveryWorker:
         max_attempts: int = 5,
         media: MaxMediaTransport | None = None,
         files: LocalFileStore | None = None,
+        lease_for: timedelta = timedelta(seconds=60),
     ) -> None:
-        if max_attempts < 1:
+        if max_attempts < 1 or lease_for <= timedelta(0):
             raise ValueError("max_attempts must be positive")
         self.sessions = sessions
         self.max_client = max_client
@@ -35,16 +42,40 @@ class DeliveryWorker:
         self.max_attempts = max_attempts
         self.media = media
         self.files = files
+        self.lease_for = lease_for
 
     async def run_once(self) -> bool:
         async with self.sessions.begin() as session:
             delivery = await PostgresDeliveryQueue(session, self.clock).claim(
-                self.worker_id, self.clock.now(), timedelta(seconds=60)
+                self.worker_id, self.clock.now(), self.lease_for
             )
         if delivery is None:
             return False
-        await self._deliver(delivery)
+        heartbeat = asyncio.create_task(self._heartbeat(delivery.id))
+        try:
+            await self._deliver(delivery)
+        finally:
+            heartbeat.cancel()
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass
         return True
+
+    async def _heartbeat(self, delivery_id: UUID) -> None:
+        interval = self.lease_for.total_seconds() / 3
+        while True:
+            await asyncio.sleep(interval)
+            async with self.sessions.begin() as session:
+                try:
+                    await PostgresDeliveryQueue(session, self.clock).heartbeat(
+                        delivery_id,
+                        self.worker_id,
+                        self.clock.now(),
+                        self.lease_for,
+                    )
+                except DeliveryLeaseLostError:
+                    return
 
     async def _deliver(self, delivery: PendingDelivery) -> None:
         async with self.sessions() as session:

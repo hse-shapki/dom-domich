@@ -192,6 +192,23 @@ class PostgresDeliveryQueue:
         if result is None:
             raise DeliveryLeaseLostError("outbox lease has expired or changed owner")
 
+    async def heartbeat(
+        self, delivery_id: UUID, worker_id: str, now: datetime, lease_for: timedelta
+    ) -> None:
+        renewed = await self.session.scalar(
+            update(OutboxDeliveryRow)
+            .where(
+                OutboxDeliveryRow.id == delivery_id,
+                OutboxDeliveryRow.status == "processing",
+                OutboxDeliveryRow.lease_owner == worker_id,
+                OutboxDeliveryRow.lease_until > now,
+            )
+            .values(lease_until=now + lease_for)
+            .returning(OutboxDeliveryRow.id)
+        )
+        if renewed is None:
+            raise DeliveryLeaseLostError("outbox lease has expired or changed owner")
+
     async def resolve_target(self, delivery: PendingDelivery, now: datetime) -> int | None:
         if delivery.recipient_id is None:
             return None

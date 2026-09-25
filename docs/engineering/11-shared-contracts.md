@@ -29,10 +29,21 @@ lease, сверяет версию через `CurrentRevisionPort` K/Z и пе�
 версию под своим lock: между предварительной проверкой scheduler и use case возможна смена состояния.
 Повтор того же `operation_key` безопасен только с теми же параметрами; иначе возвращается конфликт.
 
+Для A14 `EventDispatcher` поддерживает цепочку handlers одного `EventName`: transport/onboarding
+может вернуть `False`, после чего событие предлагается handler K/Z; `None` или `True` означает, что
+событие принято. Если никто не принял событие, worker делает retry/dead-letter, а не помечает его
+успешным. `RevisionRouter` аналогично регистрирует K/Z `CurrentRevisionPort` по имени scheduled
+event и запрещает двух владельцев одного типа. Это готовые composition seams; production handlers
+и readers добавляются владельцами модулей без импорта их ORM в A.
+
 В коде портов `get` — минимальная читательская операция с обязательным `house_id`; она не заменяет специальные команды сервисов. Методы мутации проектируются вместе с владельцем и требуют `expected_version`, operation key и общей UoW. `RiserRef` и `ResidencyView` перемещены в общий pure-domain слой; типы Z импортируют тот же объект. Синтетический дом Z02 проверяется через `FakeHouseContext` в `tests/contracts/test_core.py`.
 
 Нормализованный Event хранит внешние MAX ID строками без потери точности. `house_id=None` допустим до выбора дома в личке; tool context создаётся только после разрешения дома. Время в UTC, версии положительные, неизвестные поля строгих DTO отклоняются. `source` + `source_key` — ключ inbox дедупликации; уникальность обеспечит A04 на уровне БД.
 
-Имена событий зафиксированы в `EventName`: вход сообщения/callback/вложения/удаления, `poll.threshold_reached`, `poll.expired`, `document.ready`, `request.registered`, `request.status_changed`, `resolution.rejected`, `job.due`. Разработчик нового события добавляет schema, producer/consumer и contract test. Успех `ToolResult` означает подтверждённый результат handler; отсутствие ошибки в LLM-ответе недостаточно.
+Имена событий зафиксированы в `EventName`: вход сообщения/callback/вложения/удаления, lifecycle
+личного диалога, присутствие и права бота в домовом чате, `poll.threshold_reached`, `poll.expired`,
+`document.ready`, `request.registered`, `request.status_changed`, `resolution.rejected`, `job.due`.
+Разработчик нового события добавляет schema, producer/consumer и contract test. Успех `ToolResult`
+означает подтверждённый результат handler; отсутствие ошибки в LLM-ответе недостаточно.
 
 Проверено локально: Pydantic round-trip/negative validation, совместимость fake реестра с выборкой Z, mypy и unit tests. Реальные K00-контракты из другой ветки, PostgreSQL, MAX и живой inference этой проверкой не подтверждены.

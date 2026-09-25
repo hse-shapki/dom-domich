@@ -21,6 +21,7 @@ class AppSettings:
     max_ingress_mode: Literal["webhook", "polling"]
     file_store_dir: Path
     worker_id: str
+    payload_retention_days: int
 
     @classmethod
     def from_env(cls, *, require_max_token: bool = False) -> "AppSettings":
@@ -33,6 +34,9 @@ class AppSettings:
         webhook_secret = os.environ.get("MAX_WEBHOOK_SECRET", "").strip()
         if mode == "webhook" and not webhook_secret:
             raise ValueError("MAX_WEBHOOK_SECRET is required in webhook mode")
+        retention_days = int(os.environ.get("PAYLOAD_RETENTION_DAYS", "30"))
+        if not 1 <= retention_days <= 365:
+            raise ValueError("PAYLOAD_RETENTION_DAYS must be between 1 and 365")
         return cls(
             database_url=_required("DATABASE_URL"),
             max_webhook_secret=webhook_secret,
@@ -40,6 +44,7 @@ class AppSettings:
             max_ingress_mode=cast(Literal["webhook", "polling"], mode),
             file_store_dir=Path(os.environ.get("FILE_STORE_DIR", "./var/files")).resolve(),
             worker_id=os.environ.get("WORKER_ID", "dom-domych-worker"),
+            payload_retention_days=retention_days,
         )
 
     def __repr__(self) -> str:
@@ -47,5 +52,6 @@ class AppSettings:
             "AppSettings(database_url='<redacted>', max_webhook_secret='<redacted>', "
             f"max_bot_token={'<redacted>' if self.max_bot_token else None!r}, "
             f"max_ingress_mode={self.max_ingress_mode!r}, "
-            f"file_store_dir={str(self.file_store_dir)!r}, worker_id={self.worker_id!r})"
+            f"file_store_dir={str(self.file_store_dir)!r}, worker_id={self.worker_id!r}, "
+            f"payload_retention_days={self.payload_retention_days})"
         )

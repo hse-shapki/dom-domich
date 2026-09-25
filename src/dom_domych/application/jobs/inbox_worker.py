@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.contracts.events import EventEnvelope, EventName
 from dom_domych.domain.ports.core import Clock
-from dom_domych.infrastructure.postgres.inbox_worker import InboxStore
+from dom_domych.infrastructure.postgres.inbox_worker import InboxStore, LeaseLostError
 
-EventHandler = Callable[[EventEnvelope], Awaitable[None]]
+EventHandler = Callable[[EventEnvelope], Awaitable[bool | None]]
 logger = structlog.get_logger()
 
 
@@ -22,14 +22,22 @@ class SystemClock:
 
 
 class EventDispatcher:
-    def __init__(self, handlers: dict[EventName, EventHandler]) -> None:
-        self.handlers = handlers
+    """Позволяет A/K/Z последовательно предложить несколько handlers одному событию."""
+
+    def __init__(self, handlers: dict[EventName, EventHandler | list[EventHandler]]) -> None:
+        self.handlers: dict[EventName, list[EventHandler]] = {}
+        for event_name, configured in handlers.items():
+            self.handlers[event_name] = configured if isinstance(configured, list) else [configured]
+
+    def register(self, event_name: EventName, handler: EventHandler) -> None:
+        self.handlers.setdefault(event_name, []).append(handler)
 
     async def handle(self, event: EventEnvelope) -> None:
-        handler = self.handlers.get(event.name)
-        if handler is None:
-            raise LookupError(f"no handler registered for {event.name}")
-        await handler(event)
+        for handler in self.handlers.get(event.name, ()):
+            handled = await handler(event)
+            if handled is not False:
+                return
+        raise LookupError(f"no handler accepted {event.name}")
 
 
 class InboxWorker:
@@ -89,6 +97,14 @@ class InboxWorker:
         while True:
             await asyncio.sleep(interval)
             async with self.sessions.begin() as session:
-                await InboxStore(session).heartbeat(
-                    event_id, self.worker_id, self.clock.now(), self.lease_for
-                )
+                try:
+                    await InboxStore(session).heartbeat(
+                        event_id, self.worker_id, self.clock.now(), self.lease_for
+                    )
+                except LeaseLostError as exc:
+                    logger.warning(
+                        "inbox_heartbeat_stopped",
+                        event_id=str(event_id),
+                        error=type(exc).__name__,
+                    )
+                    return

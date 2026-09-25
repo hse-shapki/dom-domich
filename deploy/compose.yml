@@ -11,6 +11,7 @@ x-app: &app
     MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?Set MAX_BOT_TOKEN outside Git}
     MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:?Set MAX_WEBHOOK_SECRET outside Git}
     MAX_INGRESS_MODE: webhook
+    PAYLOAD_RETENTION_DAYS: ${PAYLOAD_RETENTION_DAYS:-30}
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -65,6 +66,13 @@ services:
   outbox:
     <<: *app
     command: ["dom-domych-process", "outbox"]
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  maintenance:
+    <<: *app
+    command: ["dom-domych-process", "maintenance"]
     read_only: true
     tmpfs:
       - /tmp

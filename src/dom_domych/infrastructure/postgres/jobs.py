@@ -52,6 +52,8 @@ class PostgresJobQueue:
             EventName.CALLBACK_RECEIVED,
             EventName.BOT_STARTED,
             EventName.BOT_STOPPED,
+            EventName.HOUSE_BOT_MEMBERSHIP_CHANGED,
+            EventName.HOUSE_BOT_PERMISSIONS_CHANGED,
         }:
             raise ValueError("ingress event cannot be scheduled")
         job_id = uuid4()
@@ -152,4 +154,21 @@ class PostgresJobQueue:
             .returning(ScheduledJobRow.id)
         )
         if result is None:
+            raise JobLeaseLostError("job lease has expired or changed owner")
+
+    async def heartbeat(
+        self, job_id: UUID, worker_id: str, now: datetime, lease_for: timedelta
+    ) -> None:
+        renewed = await self.session.scalar(
+            update(ScheduledJobRow)
+            .where(
+                ScheduledJobRow.id == job_id,
+                ScheduledJobRow.status == "processing",
+                ScheduledJobRow.lease_owner == worker_id,
+                ScheduledJobRow.lease_until > now,
+            )
+            .values(lease_until=now + lease_for)
+            .returning(ScheduledJobRow.id)
+        )
+        if renewed is None:
             raise JobLeaseLostError("job lease has expired or changed owner")

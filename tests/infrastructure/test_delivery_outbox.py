@@ -1,7 +1,7 @@
 """A08: атомарное намерение доставки, MAX send и недоступная личка."""
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
@@ -204,6 +204,75 @@ async def test_pending_card_edits_are_coalesced_to_latest_version() -> None:
                 delete(OutboxDeliveryRow).where(
                     OutboxDeliveryRow.id.in_([first_id, old_id, new_id])
                 )
+            )
+            await session.execute(
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id=None)
+            )
+
+
+@pytest.mark.asyncio
+async def test_send_timeout_is_delivery_unknown_and_is_not_retried() -> None:
+    clock = FixedClock()
+    recipient_id = synthetic_id("resident-2")
+    async with database_lifespan(database_url_for_test()) as sessions:
+        async with sessions.begin() as session:
+            await seed_demo_house(session)
+            await session.execute(
+                update(ResidentRow).where(ResidentRow.id == recipient_id).values(max_user_id="222")
+            )
+            delivery_id = await PostgresDeliveryQueue(session, clock).enqueue(
+                DeliveryIntent(
+                    HOUSE_ONE, f"a13:timeout:{uuid4()}", "Проверка", recipient_id=recipient_id
+                )
+            )
+
+        def timeout(request: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout("uncertain send", request=request)
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(timeout), base_url="https://platform-api2.max.ru"
+        ) as http:
+            worker = DeliveryWorker(sessions, MaxApiClient(http, "test-token"), clock, "w1")
+            assert await worker.run_once()
+            assert not await worker.run_once()
+        async with sessions.begin() as session:
+            row = await session.get(OutboxDeliveryRow, delivery_id)
+            assert row is not None and row.status == "delivery_unknown" and row.attempts == 1
+            await session.execute(
+                delete(OutboxDeliveryRow).where(OutboxDeliveryRow.id == delivery_id)
+            )
+            await session.execute(
+                update(ResidentRow).where(ResidentRow.id == recipient_id).values(max_user_id=None)
+            )
+
+
+@pytest.mark.asyncio
+async def test_outbox_heartbeat_prevents_reclaim_during_slow_upload() -> None:
+    clock = FixedClock()
+    async with database_lifespan(database_url_for_test()) as sessions:
+        async with sessions.begin() as session:
+            await seed_demo_house(session)
+            await session.execute(
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id="555")
+            )
+            delivery_id = await PostgresDeliveryQueue(session, clock).enqueue(
+                DeliveryIntent(HOUSE_ONE, f"a13:heartbeat:{uuid4()}", "Карточка", chat_id="555")
+            )
+        async with sessions.begin() as session:
+            queue = PostgresDeliveryQueue(session, clock)
+            assert await queue.claim("worker", clock.now(), timedelta(seconds=30)) is not None
+        heartbeat_at = clock.now() + timedelta(seconds=20)
+        async with sessions.begin() as session:
+            await PostgresDeliveryQueue(session, clock).heartbeat(
+                delivery_id, "worker", heartbeat_at, timedelta(seconds=30)
+            )
+        reclaim_at = clock.now() + timedelta(seconds=35)
+        async with sessions.begin() as session:
+            queue = PostgresDeliveryQueue(session, clock)
+            assert await queue.claim("other", reclaim_at, timedelta(seconds=30)) is None
+            await queue.settle(delivery_id, "worker", reclaim_at, "sent", max_message_id="mid")
+            await session.execute(
+                delete(OutboxDeliveryRow).where(OutboxDeliveryRow.id == delivery_id)
             )
             await session.execute(
                 update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id=None)

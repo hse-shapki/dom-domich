@@ -3,11 +3,13 @@
 import argparse
 import asyncio
 import signal
+from datetime import timedelta
 
 import httpx
 import structlog
 
 from dom_domych.application.jobs.inbox_worker import SystemClock
+from dom_domych.application.jobs.maintenance import RetentionMaintenance
 from dom_domych.application.notifications.worker import DeliveryWorker
 from dom_domych.config import AppSettings
 from dom_domych.infrastructure.files.local import LocalFileStore
@@ -82,9 +84,10 @@ async def run_polling() -> None:
         database_lifespan(settings.database_url) as sessions,
         httpx.AsyncClient(base_url=MAX_API_BASE_URL, timeout=timeout) as api_http,
     ):
-        consumer = MaxPollingConsumer(
-            sessions, MaxApiClient(api_http, settings.max_bot_token, MaxRateLimits())
-        )
+        max_api = MaxApiClient(api_http, settings.max_bot_token, MaxRateLimits())
+        if await max_api.list_webhooks():
+            raise RuntimeError("polling refused while MAX webhook subscription is active")
+        consumer = MaxPollingConsumer(sessions, max_api)
         failures = 0
         while not stop.is_set():
             try:
@@ -98,11 +101,43 @@ async def run_polling() -> None:
                 await _wait_or_stop(stop, min(30.0, float(2 ** min(failures, 5))))
 
 
+async def run_maintenance() -> None:
+    settings = AppSettings.from_env()
+    stop = asyncio.Event()
+    _install_stop_handlers(stop)
+    clock = SystemClock()
+    async with database_lifespan(settings.database_url) as sessions:
+        maintenance = RetentionMaintenance(
+            sessions,
+            LocalFileStore(settings.file_store_dir, clock),
+            clock,
+            timedelta(days=settings.payload_retention_days),
+        )
+        while not stop.is_set():
+            try:
+                redacted, deleted_files = await maintenance.run_once()
+                logger.info(
+                    "retention_completed",
+                    inbox_events=redacted.inbox_events,
+                    outbox_deliveries=redacted.outbox_deliveries,
+                    deleted_files=deleted_files,
+                )
+            except Exception as exc:
+                logger.error("retention_failed", error=type(exc).__name__)
+            await _wait_or_stop(stop, 3600)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("process", choices=("outbox", "polling"))
+    parser.add_argument("process", choices=("outbox", "polling", "maintenance"))
     process = parser.parse_args().process
-    asyncio.run(run_outbox() if process == "outbox" else run_polling())
+    if process == "outbox":
+        coroutine = run_outbox()
+    elif process == "polling":
+        coroutine = run_polling()
+    else:
+        coroutine = run_maintenance()
+    asyncio.run(coroutine)
 
 
 if __name__ == "__main__":
