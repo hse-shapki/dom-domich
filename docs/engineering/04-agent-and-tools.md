@@ -1,5 +1,10 @@
 # 04. Агент, tools и проверки
 
+> Реализация K03 в ветке `kae`: `src/dom_domych/agent/runtime.py` проверяет
+> allowlist, Pydantic JSON, режим, capability и число вызовов. Аудит пока
+> возвращается из run в памяти; durable run/tool-call persistence — K04.
+> Подключение реальных handlers и проверка модели остаются открытыми.
+
 [Навигация](README.md) · [Данные](05-data-and-state.md)
 
 ## 1. Граница ответственности

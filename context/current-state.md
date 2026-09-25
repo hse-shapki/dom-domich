@@ -13,6 +13,9 @@ K01: подготовлен русский набор из 24 синтетиче
 в `evals/`; прогон реальной модели пока не выполнен.
 K02: есть `LlmPort`/fake и ограничение timeout/retry; локальная модель и
 работающий `llama-server` не подтверждены. Подробнее: `docs/engineering/11-track-k-inference-probe.md`.
+K03: локальный runtime проверяет allowlist, JSON schema, режим, capability и
+бюджет; fake tool-chain проверен в `tests/agent/test_k03_runtime.py`.
+Постоянный audit, реальные handlers и вход из inbox относятся к следующим задачам.
 
 | Область | Состояние | Проверяемое основание |
 |---|---|---|

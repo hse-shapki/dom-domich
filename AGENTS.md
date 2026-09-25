@@ -42,6 +42,7 @@
 | K00: стыки агента, дел и знаний | Частично: предложение и fake ports, без A01/live | `src/dom_domych/agent/contracts.py`, `fakes.py`, `tests/agent/test_k00_contracts.py` |
 | K01: eval dataset | Проверен формат и покрытие; модель не запускалась | `evals/k01_cases.jsonl`, `evals/README.md`, `tests/agent/test_k01_dataset.py` |
 | K02: inference | Частично: port/fake/timeout/retry; live probe не выполнен | `src/dom_domych/agent/llm.py`, `docs/engineering/11-track-k-inference-probe.md` |
+| K03: agent runtime | Частично: локальный allowlist/schema/capability/budget с fake tests, без persistence/real handlers | `src/dom_domych/agent/runtime.py`, `tests/agent/test_k03_runtime.py` |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.
 
