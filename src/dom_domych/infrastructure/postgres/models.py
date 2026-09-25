@@ -139,3 +139,34 @@ class InboxEventRow(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     lease_owner: Mapped[str | None] = mapped_column(String(100))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OutboxDeliveryRow(Base):
+    __tablename__ = "outbox_deliveries"
+    __table_args__ = (
+        UniqueConstraint("house_id", "operation_key"),
+        Index("ix_outbox_deliveries_due", "status", "available_at"),
+        CheckConstraint(
+            "(recipient_id IS NULL) <> (chat_id IS NULL)", name="outbox_exactly_one_target"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    house_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("houses.id"), nullable=False
+    )
+    operation_key: Mapped[str] = mapped_column(String(250), nullable=False)
+    text: Mapped[str] = mapped_column(String(4000), nullable=False)
+    recipient_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("residents.id")
+    )
+    chat_id: Mapped[str | None] = mapped_column(String(40))
+    edit_key: Mapped[str | None] = mapped_column(String(250))
+    file_key: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(100))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    max_message_id: Mapped[str | None] = mapped_column(String(100))
+    error_code: Mapped[str | None] = mapped_column(String(100))

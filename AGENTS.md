@@ -58,6 +58,7 @@
 | MAX Bot API A03 | Частично: HTTPX MockTransport проверен, live-доступа нет | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; загрузка bytes и smoke в MAX ещё нужны |
 | Webhook/inbox A04 | Частично: ASGITransport + PostgreSQL 18 проверены, внешнего HTTPS/MAX нет | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`; обработка через A07 подключается позже |
 | Inbox worker A07 | Частично: lease, recovery и retry проверены на PostgreSQL 18 | `application/jobs/inbox_worker.py`, `infrastructure/postgres/inbox_worker.py`, `tests/infrastructure/test_inbox_worker.py`; отдельный production-процесс и K/Z handlers ещё не подключены |
+| DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit и недоступный адресат проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`, `tests/infrastructure/test_delivery_outbox.py`; file upload, реальный MAX и production-процесс ещё не подключены |
 | Deploy | Не реализовано | Нет `deploy/` |
 | Агент и хранение опросов | Не реализованы в этой ветке | Core-БД и MAX ingress частично есть; K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z13; нет PostgreSQL integration tests и проверенного стенда |
