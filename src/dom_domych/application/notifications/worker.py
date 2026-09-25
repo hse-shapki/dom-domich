@@ -7,7 +7,9 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.domain.ports.core import Clock
+from dom_domych.infrastructure.files.local import FileKind, FileStoreError, LocalFileStore
 from dom_domych.infrastructure.max.client import MaxApiClient, MaxApiError
+from dom_domych.infrastructure.max.media import MaxMediaError, MaxMediaHttpError, MaxMediaTransport
 from dom_domych.infrastructure.postgres.delivery import PendingDelivery, PostgresDeliveryQueue
 
 logger = structlog.get_logger()
@@ -21,6 +23,8 @@ class DeliveryWorker:
         clock: Clock,
         worker_id: str,
         max_attempts: int = 5,
+        media: MaxMediaTransport | None = None,
+        files: LocalFileStore | None = None,
     ) -> None:
         if max_attempts < 1:
             raise ValueError("max_attempts must be positive")
@@ -29,6 +33,8 @@ class DeliveryWorker:
         self.clock = clock
         self.worker_id = worker_id
         self.max_attempts = max_attempts
+        self.media = media
+        self.files = files
 
     async def run_once(self) -> bool:
         async with self.sessions.begin() as session:
@@ -41,11 +47,6 @@ class DeliveryWorker:
         return True
 
     async def _deliver(self, delivery: PendingDelivery) -> None:
-        if delivery.file_key is not None:
-            await self._settle(
-                delivery, "waiting_attachment", error_code="attachment_transport_missing"
-            )
-            return
         async with self.sessions() as session:
             queue = PostgresDeliveryQueue(session, self.clock)
             user_id = await queue.resolve_target(delivery, self.clock.now())
@@ -56,26 +57,61 @@ class DeliveryWorker:
         if delivery.edit_key is not None and edit_message_id is None:
             await self._retry(delivery, "edit_target_pending")
             return
+        if delivery.file_key is not None and delivery.edit_key is not None:
+            await self._settle(delivery, "failed", error_code="file_edit_unsupported")
+            return
+        attachments: list[dict[str, object]] | None = None
+        if delivery.file_key is not None:
+            if self.media is None or self.files is None:
+                await self._settle(
+                    delivery, "waiting_attachment", error_code="attachment_transport_missing"
+                )
+                return
+            try:
+                token = await self._attachment_token(delivery)
+            except (httpx.TimeoutException, httpx.TransportError):
+                await self._retry(delivery, "upload_transport_error")
+                return
+            except MaxMediaHttpError as exc:
+                if exc.status_code == 429 or exc.status_code >= 500:
+                    await self._retry(delivery, f"upload_http_{exc.status_code}")
+                else:
+                    await self._settle(delivery, "failed", error_code="upload_rejected")
+                return
+            except MaxApiError as exc:
+                if exc.status_code == 429 or exc.status_code >= 500:
+                    await self._retry(delivery, exc.code or "upload_slot_retry")
+                else:
+                    await self._settle(delivery, "failed", error_code=exc.code or "upload_slot")
+                return
+            except (MaxMediaError, FileStoreError) as exc:
+                await self._settle(delivery, "failed", error_code=type(exc).__name__)
+                return
+            attachments = [{"type": "file", "payload": {"token": token}}]
         try:
             if edit_message_id is not None:
                 await self.max_client.edit_text(edit_message_id, delivery.text)
                 message_id = edit_message_id
             elif user_id is not None:
-                message_id = await self.max_client.send_text(delivery.text, user_id=user_id)
+                message_id = await self.max_client.send_text(
+                    delivery.text, user_id=user_id, attachments=attachments
+                )
             else:
                 assert delivery.chat_id is not None
                 if not delivery.chat_id.isdecimal():
                     await self._settle(delivery, "failed", error_code="invalid_chat_id")
                     return
                 message_id = await self.max_client.send_text(
-                    delivery.text, chat_id=int(delivery.chat_id)
+                    delivery.text, chat_id=int(delivery.chat_id), attachments=attachments
                 )
         except (httpx.TimeoutException, httpx.TransportError):
             # MAX мог принять сообщение до разрыва соединения; повтор может создать дубль.
             await self._settle(delivery, "delivery_unknown", error_code="transport_uncertain")
             return
         except MaxApiError as exc:
-            if exc.status_code == 403:
+            if exc.code == "attachment.not.ready":
+                await self._retry(delivery, exc.code)
+            elif exc.status_code == 403:
                 await self._settle(delivery, "unreachable", error_code=exc.code or "forbidden")
             elif exc.status_code == 429 or exc.status_code >= 500:
                 await self._retry(delivery, exc.code or f"http_{exc.status_code}")
@@ -85,6 +121,20 @@ class DeliveryWorker:
                 await self._settle(delivery, "failed", error_code=exc.code or "max_rejected")
             return
         await self._settle(delivery, "sent", max_message_id=message_id)
+
+    async def _attachment_token(self, delivery: PendingDelivery) -> str:
+        if delivery.attachment_token is not None:
+            return delivery.attachment_token
+        assert self.files is not None and self.media is not None and delivery.file_key is not None
+        stored, content = await self.files.get(delivery.house_id, delivery.file_key)
+        if stored.kind is not FileKind.DOCUMENT or stored.mime_type != "application/pdf":
+            raise MaxMediaError("outbox file is not a PDF document")
+        token = await self.media.upload_pdf(content, f"dom-domych-{delivery.file_key}.pdf")
+        async with self.sessions.begin() as session:
+            await PostgresDeliveryQueue(session, self.clock).save_attachment_token(
+                delivery.id, self.worker_id, self.clock.now(), token
+            )
+        return token
 
     async def _retry(self, delivery: PendingDelivery, error_code: str) -> None:
         if delivery.attempts >= self.max_attempts:

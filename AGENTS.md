@@ -62,6 +62,7 @@
 | DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit и недоступный адресат проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`, `tests/infrastructure/test_delivery_outbox.py`; file upload, реальный MAX и production-процесс ещё не подключены |
 | JobPort/scheduler A09 | Частично: дедлайны, idempotency и stale no-op проверены на PostgreSQL 18 | `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`, `tests/infrastructure/test_scheduled_jobs.py`; revision adapter K/Z и production-процесс ещё не подключены |
 | MAX poll callbacks A10 | Частично: actor/дом/токен и ACK проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/poll_actions.py`, `application/polls/max_callback.py`, `tests/infrastructure/test_max_poll_callback.py`; Z PollRepository и live MAX ещё не подключены |
+| MAX files A11 | Частично: PDF upload, token reuse/retry и безопасное фото проверены на MockTransport + PostgreSQL 18 | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `tests/infrastructure/test_max_media.py`; live MAX mobile/web, лимитеры и K evidence linkage ещё нужны |
 | Deploy | Не реализовано | Нет `deploy/` |
 | Агент и хранение опросов | Не реализованы в этой ветке | Core-БД и MAX ingress частично есть; K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | Есть unit/fake tests Z01–Z13; нет PostgreSQL integration tests и проверенного стенда |

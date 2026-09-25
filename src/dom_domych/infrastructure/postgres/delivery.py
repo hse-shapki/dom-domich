@@ -35,6 +35,7 @@ class PendingDelivery:
     chat_id: str | None
     edit_key: str | None
     file_key: UUID | None
+    attachment_token: str | None
     attempts: int
 
 
@@ -135,8 +136,28 @@ class PostgresDeliveryQueue:
             row.chat_id,
             row.edit_key,
             row.file_key,
+            row.attachment_token,
             row.attempts,
         )
+
+    async def save_attachment_token(
+        self, delivery_id: UUID, worker_id: str, now: datetime, token: str
+    ) -> None:
+        if not token:
+            raise ValueError("MAX attachment token required")
+        result = await self.session.scalar(
+            update(OutboxDeliveryRow)
+            .where(
+                OutboxDeliveryRow.id == delivery_id,
+                OutboxDeliveryRow.status == "processing",
+                OutboxDeliveryRow.lease_owner == worker_id,
+                OutboxDeliveryRow.lease_until > now,
+            )
+            .values(attachment_token=token)
+            .returning(OutboxDeliveryRow.id)
+        )
+        if result is None:
+            raise DeliveryLeaseLostError("outbox lease has expired or changed owner")
 
     async def resolve_target(self, delivery: PendingDelivery, now: datetime) -> int | None:
         if delivery.recipient_id is None:

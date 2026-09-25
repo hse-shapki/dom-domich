@@ -172,6 +172,7 @@ class OutboxDeliveryRow(Base):
     lease_owner: Mapped[str | None] = mapped_column(String(100))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     max_message_id: Mapped[str | None] = mapped_column(String(100))
+    attachment_token: Mapped[str | None] = mapped_column(String(500))
     error_code: Mapped[str | None] = mapped_column(String(100))
 
 
