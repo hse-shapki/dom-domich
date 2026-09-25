@@ -1,0 +1,101 @@
+name: dom-domych
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment:
+    DATABASE_URL: ${DATABASE_URL:?Set container DATABASE_URL with postgres host}
+    FILE_STORE_DIR: /var/lib/dom-domych/files
+    MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?Set MAX_BOT_TOKEN outside Git}
+    MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:?Set MAX_WEBHOOK_SECRET outside Git}
+    MAX_INGRESS_MODE: webhook
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  volumes:
+    - files_data:/var/lib/dom-domych/files
+  networks:
+    - backend
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dom_domych
+      POSTGRES_USER: dom_domych
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD outside Git}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dom_domych -d dom_domych"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  outbox:
+    <<: *app
+    command: ["dom-domych-process", "outbox"]
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set public webhook hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+      - backend
+
+networks:
+  edge:
+  backend:
+    internal: true
+
+volumes:
+  postgres_data:
+  files_data:
+  caddy_data:
+  caddy_config:

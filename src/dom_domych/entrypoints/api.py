@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.config import AppSettings
 from dom_domych.infrastructure.max.updates import normalize_update
 from dom_domych.infrastructure.postgres.inbox import save_inbox_event
 from dom_domych.infrastructure.postgres.session import database_lifespan
@@ -27,10 +28,12 @@ def create_app(database_url: str, webhook_secret: str) -> FastAPI:
 
     app = FastAPI(lifespan=lifespan)
 
+    @app.get("/health/live")
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/health/ready")
     @app.get("/ready")
     async def ready() -> dict[str, str]:
         sessions: async_sessionmaker[AsyncSession] = app.state.sessions
@@ -66,3 +69,12 @@ def create_app(database_url: str, webhook_secret: str) -> FastAPI:
         return {"accepted": True, "new": inserted}
 
     return app
+
+
+def create_app_from_env() -> FastAPI:
+    """Uvicorn factory; polling mode не может случайно поднять webhook consumer."""
+
+    settings = AppSettings.from_env()
+    if settings.max_ingress_mode != "webhook":
+        raise RuntimeError("API ingress requires MAX_INGRESS_MODE=webhook")
+    return create_app(settings.database_url, settings.max_webhook_secret)

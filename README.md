@@ -12,8 +12,16 @@
 - [Продуктовая концепция](IDEA.md)
 - [Журнал продуктовых решений](docs/open-questions.md)
 
-В репозитории есть Python-проект, независимые модули Замиры и частично реализованные PostgreSQL/MAX-адаптеры Алины: webhook, реестр, inbox/outbox/jobs, callback, онбординг и файлы. Сквозной агент и живой стенд MAX ещё не подключены; точное состояние — в [контексте](context/current-state.md).
+В репозитории есть Python-проект, независимые модули Замиры и локально проверенные части платформы
+Алины: webhook, реестр, inbox/outbox/jobs, callback, онбординг, файлы, rate limits, dev polling и
+production Compose/Caddy-конфигурация. Сквозной агент, production repositories K/Z и живой стенд
+MAX ещё не подключены; точное состояние — в [контексте](context/current-state.md).
 
 Локальная проверка: `uv sync --locked`, затем `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/dom_domych`, `uv run pytest`.
 
-Для dev-БД: `POSTGRES_PASSWORD=... docker compose -f deploy/compose.dev.yml up -d`, задать `DATABASE_URL` из `.env.example`, выполнить `uv run alembic upgrade head`. Синтетический seed запускается только с тестовым именем БД (`dom_domych_test`): `uv run python -m scripts.seed_demo_house`. Локальная проверка миграции выполнена на PostgreSQL 18; запуск образа PostgreSQL 17/pgvector ещё не подтверждён.
+Для dev-БД: `POSTGRES_PASSWORD=... docker compose -f deploy/compose.dev.yml up -d`, задать
+`DATABASE_URL` из `.env.example`, выполнить `uv run alembic upgrade head`. Синтетический seed
+запускается только с тестовым именем БД (`dom_domych_test`):
+`uv run python -m scripts.seed_demo_house`. Production-конфигурация и безопасный порядок
+backup/restore описаны в [runbook Алины](docs/release/alina-operations.md). Docker Compose schema
+проверена, но daemon и реальный PostgreSQL 17/pgvector в текущей среде не запустились.

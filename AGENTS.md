@@ -52,7 +52,7 @@
 | Итог результата Z13 | Частично, проверено с fake case/poll/outbox | Те же модули resolution: `closed` только после положительного опроса, `reopened` при отрицательном, `resolution_unconfirmed` при нехватке ответов; нет K production transition/jobs |
 | PDF QA Z15 | Частично, локальные 4 образца проверены | `docs/release/zamira-pdf-qa.md`; MAX mobile/web и PDF после outbox не проверены |
 | Материалы Z16 | Частично, локальный handoff готов | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
-| Python-проект, зависимости и CI A00 | Проверено локально; CI ещё не запускался на GitHub | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 146 тестов, Ruff и mypy проходят |
+| Python-проект, зависимости и CI A00 | Проверено локально; CI ещё не запускался на GitHub | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 152 теста, Ruff и mypy проходят |
 | PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18, PG17/pgvector Compose не запущен | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`; миграция и повторный seed без дублей |
 | HouseContextPort A05 | Частично: чтение реестра и стык с Z проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: приглашение, привязка MAX ID, DM `/start`, stopped и выбор дома проверены локально | `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, `tests/infrastructure/test_demo_enrollment.py`; выдача кодов реальным operator и live MAX ещё не подключены |
@@ -62,10 +62,15 @@
 | DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit и недоступный адресат проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`, `tests/infrastructure/test_delivery_outbox.py`; PDF upload добавлен в A11, реальный MAX и production-процесс ещё не подключены |
 | JobPort/scheduler A09 | Частично: дедлайны, idempotency и stale no-op проверены на PostgreSQL 18 | `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`, `tests/infrastructure/test_scheduled_jobs.py`; revision adapter K/Z и production-процесс ещё не подключены |
 | MAX poll callbacks A10 | Частично: actor/дом/токен и ACK проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/poll_actions.py`, `application/polls/max_callback.py`, `tests/infrastructure/test_max_poll_callback.py`; Z PollRepository и live MAX ещё не подключены |
-| MAX files A11 | Частично: PDF upload, token reuse/retry и безопасное фото проверены на MockTransport + PostgreSQL 18 | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `tests/infrastructure/test_max_media.py`; live MAX mobile/web, лимитеры и K evidence linkage ещё нужны |
-| Deploy | Частично | Есть `deploy/compose.dev.yml` для тестового PostgreSQL; production Compose/Caddy A12 ещё нет |
+| MAX files A11 | Частично: PDF upload, token reuse/retry, безопасное фото, локальные rate limits и coalescing edit проверены unit/MockTransport; PostgreSQL-сценарии требуют test DB | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `infrastructure/max/rate_limit.py`, tests; live MAX mobile/web и K evidence linkage ещё нужны |
+| Deploy/runtime A12 | Частично: Dockerfile, production Compose/Caddy, API/outbox lifecycle и health routes реализованы; Compose schema проверена | `Dockerfile`, `deploy/compose.yml`, `entrypoints/processes.py`; daemon/HTTPS/restart volumes не проверены, inbox/scheduler ждут K/Z |
+| Надёжность A13 | Частично: bounded retry, dead-letter, `delivery_unknown`, rate limits и coalescing реализованы локально | `application/notifications/worker.py`, `infrastructure/max/rate_limit.py`, `infrastructure/postgres/delivery.py`; live потеря прав/rate limits не проверены |
+| Composition/polling A14 | Частично: polling commit-before-marker и взаимоисключение ingress modes реализованы | `infrastructure/max/polling.py`, `config.py`; K/Z handlers/repositories/migrations и общий G3 runtime отсутствуют |
+| Backup/restore A15 | Реализовано, не проверено сквозным restore | `scripts/runtime_backup.py`, `docs/release/alina-operations.md`; нужен пустой PostgreSQL `*_restore_test` и FileStore smoke |
+| MAX matrix A16 | Не проверено; подготовлен протокол без фиктивных отметок | `docs/release/max-mobile-web-matrix.md`; нужен live бот, mobile/web и общий runtime |
+| Release A17 | Частично: runbook, pinned tags и безопасные env placeholders подготовлены | `docs/release/alina-operations.md`, `.env.example`; tag/archive/digests допустимы только после G3 и фактических проверок |
 | Агент и хранение опросов | Не реализованы в этой ветке | Core-БД и MAX ingress частично есть; K/Z ORM интеграций ещё нет |
-| Тесты и проверенный стенд | Частично | 146 unit/fake/integration tests, включая PostgreSQL 18 и MAX MockTransport; PG17/pgvector, реальный MAX и цельный стенд не проверены |
+| Тесты и проверенный стенд | Частично | 152 unit/fake/integration tests прошли, включая PostgreSQL 18 и MAX MockTransport; PG17/pgvector, реальный MAX и цельный стенд не проверены |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.
 

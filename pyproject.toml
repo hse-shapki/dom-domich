@@ -21,6 +21,9 @@ dependencies = [
     "uvicorn>=0.35,<1",
 ]
 
+[project.scripts]
+dom-domych-process = "dom_domych.entrypoints.processes:main"
+
 [dependency-groups]
 dev = [
     "mypy>=1.15,<2",
