@@ -4,6 +4,9 @@
 > allowlist, Pydantic JSON, режим, capability и число вызовов. Аудит пока
 > возвращается из run в памяти; durable run/tool-call persistence — K04.
 > Подключение реальных handlers и проверка модели остаются открытыми.
+> K04 добавил `ContextBuilder` и `RunStore` port с fake: при новом событии
+> перечитывается версия дела и выбирается вопрос текущего actor/дома. Durable
+> PostgreSQL реализация и аудит вызовов после рестарта ещё требуются.
 
 [Навигация](README.md) · [Данные](05-data-and-state.md)
 

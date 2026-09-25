@@ -43,6 +43,7 @@
 | K01: eval dataset | Проверен формат и покрытие; модель не запускалась | `evals/k01_cases.jsonl`, `evals/README.md`, `tests/agent/test_k01_dataset.py` |
 | K02: inference | Частично: port/fake/timeout/retry; live probe не выполнен | `src/dom_domych/agent/llm.py`, `docs/engineering/11-track-k-inference-probe.md` |
 | K03: agent runtime | Частично: локальный allowlist/schema/capability/budget с fake tests, без persistence/real handlers | `src/dom_domych/agent/runtime.py`, `tests/agent/test_k03_runtime.py` |
+| K04: continuation | Частично: fresh context и pending questions на fake store; durable persistence отсутствует | `src/dom_domych/agent/continuation.py`, `tests/agent/test_k04_continuation.py` |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.
 

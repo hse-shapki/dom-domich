@@ -16,6 +16,9 @@ K02: есть `LlmPort`/fake и ограничение timeout/retry; локал
 K03: локальный runtime проверяет allowlist, JSON schema, режим, capability и
 бюджет; fake tool-chain проверен в `tests/agent/test_k03_runtime.py`.
 Постоянный audit, реальные handlers и вход из inbox относятся к следующим задачам.
+K04: `ContextBuilder` перечитывает текущую версию дела и actor-scoped pending
+question; проверено на fake store. PostgreSQL persistence и восстановление после
+перезапуска процесса пока не реализованы.
 
 | Область | Состояние | Проверяемое основание |
 |---|---|---|
