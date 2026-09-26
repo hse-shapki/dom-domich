@@ -43,6 +43,11 @@ case messages, versioned events и recurrence. Тест на PostgreSQL 16 пр�
 12 конкурентных сообщений к одному делу, повтор операции, stale version,
 два дела в одном сообщении и чужой дом. Evidence-таблица есть, но её
 application use case и сквозная связка с A/Z ещё не подключены.
+K09: ProblemWorkflow проверяет scope дела, создаёт frozen audience/poll на
+fake atomic store, не открывает опрос при N=0 и передаёт адресный evidence
+запрос только ответившим «да» по доверенному итогу Z. EvidenceService пишет
+private ref и versioned event на PostgreSQL 16. Production объединение Z poll,
+case/outbox/jobs в одной UoW отсутствует, поэтому сквозной маршрут не готов.
 
 | Область | Состояние | Проверяемое основание |
 |---|---|---|
