@@ -13,12 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from dom_domych.agent.contracts import CaseKind, CaseView
 from dom_domych.application.cases.evidence import EvidenceInput
 from dom_domych.contracts.base import TrustedContext
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.infrastructure.postgres.case_models import (
     CaseEventRow,
     CaseEvidenceRow,
     CaseOperationRow,
     CaseRow,
 )
+from dom_domych.infrastructure.postgres.inbox import save_domain_event
 
 
 class PostgresEvidenceWriter:
@@ -83,9 +85,10 @@ class PostgresEvidenceWriter:
                 status=row.status,
                 source_refs=(source_ref,),
             )
+            evidence_event_id = uuid4()
             session.add(
                 CaseEventRow(
-                    id=uuid4(),
+                    id=evidence_event_id,
                     case_id=row.id,
                     house_id=context.house_id,
                     event_type="evidence.added",
@@ -97,6 +100,25 @@ class PostgresEvidenceWriter:
                     occurred_at=now,
                     facts={"file_attached": command.file_key is not None},
                 )
+            )
+            await save_domain_event(
+                session,
+                EventEnvelope(
+                    event_id=evidence_event_id,
+                    source=EventSource.DOMAIN,
+                    source_key=f"evidence-added:{command.operation_id}",
+                    name=EventName.EVIDENCE_ADDED,
+                    occurred_at=now,
+                    received_at=now,
+                    correlation_id=context.correlation_id,
+                    house_id=context.house_id,
+                    entity=EntityEventPayload(
+                        entity_id=row.id,
+                        entity_version=row.version,
+                        case_id=row.id,
+                        causation_id=context.event_id,
+                    ),
+                ),
             )
             session.add(
                 CaseOperationRow(

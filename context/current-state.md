@@ -68,7 +68,8 @@ K13: bridge принимает poll/evidence/request/resolution/document соб�
 актуальной версией дела. Повтор завершённого события не вызывает inference,
 неуспешный run может повториться. `request.registered` теперь атомарно пишет
 domain inbox event; A InboxWorker запускает K continuation на PostgreSQL 16 с
-fake LLM. Остальные producers и общий production worker ещё не связаны,
+fake LLM. `evidence.added` также атомарно пишется в domain inbox; consumer
+для него проверен только на fake. Остальные producers и общий production worker ещё не связаны,
 live inference не проверен.
 K14: сквозная локальная проверка проходит от due job A через K followup draft
 до сохранённого нового agent run на PostgreSQL 16 с fake LLM. Повтор,

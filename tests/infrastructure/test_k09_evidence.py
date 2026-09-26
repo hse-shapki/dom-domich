@@ -19,7 +19,12 @@ from dom_domych.infrastructure.postgres.case_models import (
     CaseRow,
 )
 from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
-from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, ResidentRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    InboxEventRow,
+    OutboxDeliveryRow,
+    ResidentRow,
+)
 from dom_domych.infrastructure.postgres.session import database_lifespan
 
 
@@ -77,6 +82,15 @@ async def test_evidence_is_versioned_idempotent_and_private() -> None:
                 assert evidence is not None
                 assert evidence.source_ref == f"event:{evidence_context.event_id}"
                 assert evidence.assessment == "pending"
+                domain_event = await session.scalar(
+                    select(InboxEventRow).where(
+                        InboxEventRow.source == "domain",
+                        InboxEventRow.source_key == f"evidence-added:{command.operation_id}",
+                    )
+                )
+                assert domain_event is not None and domain_event.status == "pending"
+                assert domain_event.normalized_event is not None
+                assert domain_event.normalized_event["entity"]["case_id"] == str(case.case_id)
                 assert (
                     await session.scalar(
                         select(func.count())
@@ -87,6 +101,12 @@ async def test_evidence_is_versioned_idempotent_and_private() -> None:
                 )
         finally:
             async with sessions.begin() as session:
+                await session.execute(
+                    delete(InboxEventRow).where(
+                        InboxEventRow.source == "domain",
+                        InboxEventRow.source_key == f"evidence-added:{command.operation_id}",
+                    )
+                )
                 await session.execute(
                     delete(CaseOperationRow).where(CaseOperationRow.house_id == house_id)
                 )
