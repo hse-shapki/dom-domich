@@ -15,9 +15,10 @@ K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. М�
 успешного ответа: полный Metal offload упёрся в память, CPU превысил 120 с,
 частичный offload вызвал swap. Live inference и p50/p95 не подтверждены;
 подробности: `docs/engineering/11-track-k-inference-probe.md`.
-K03: локальный runtime проверяет allowlist, JSON schema, режим, capability и
-бюджет; fake tool-chain проверен в `tests/agent/test_k03_runtime.py`.
-Постоянный audit, реальные handlers и вход из inbox относятся к следующим задачам.
+K03: runtime проверяет allowlist, JSON schema, режим, capability и бюджет;
+использует общий A01 `ToolResult`, связывает ответ с tool call ID и не выдаёт
+ошибку handler за успех. Fake tool-chain проверен в `tests/agent/test_k03_runtime.py`.
+Постоянный audit, реальные handlers и вход из inbox ещё не подключены.
 K04: `ContextBuilder` перечитывает текущую версию дела и actor-scoped pending
 question; проверено на fake store. PostgreSQL persistence и восстановление после
 перезапуска процесса пока не реализованы.

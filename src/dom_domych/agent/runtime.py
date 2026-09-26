@@ -8,10 +8,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
+import structlog
 from pydantic import ValidationError
 
 from dom_domych.agent.contracts import StrictModel, TrustedContext
 from dom_domych.agent.llm import LlmPort
+from dom_domych.contracts.errors import ContractError, ErrorCode
+from dom_domych.contracts.tools import ToolResult
+
+logger = structlog.get_logger()
 
 
 class AgentMode(StrEnum):
@@ -21,15 +26,7 @@ class AgentMode(StrEnum):
     FOLLOWUP = "followup"
 
 
-class ToolExecution(StrictModel):
-    ok: bool
-    data: dict[str, str | int | bool | None] | None = None
-    error_code: str | None = None
-    entity_version: int | None = None
-    source_refs: tuple[str, ...] = ()
-
-
-ToolHandler = Callable[[StrictModel, TrustedContext], Awaitable[ToolExecution]]
+ToolHandler = Callable[[StrictModel, TrustedContext], Awaitable[ToolResult]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,12 +66,21 @@ class AgentRuntime:
         names = [definition.name for definition in definitions]
         if len(names) != len(set(names)):
             raise ValueError("Tool name должен быть уникальным")
+        for definition in definitions:
+            if {
+                "house_id",
+                "actor_id",
+                "capabilities",
+            } & definition.input_model.model_fields.keys():
+                raise ValueError("Tool schema содержит доверенные поля")
+            if definition.effect != "read" and definition.capability is None:
+                raise ValueError("Запись требует capability")
         self.llm = llm
         self.definitions = {definition.name: definition for definition in definitions}
         self.max_calls = max_calls
 
     async def run(
-        self, messages: Sequence[dict[str, str]], context: TrustedContext, mode: AgentMode
+        self, messages: Sequence[dict[str, object]], context: TrustedContext, mode: AgentMode
     ) -> RunOutcome:
         conversation = list(messages)
         audit: list[ToolAudit] = []
@@ -105,25 +111,58 @@ class AgentRuntime:
                     "" if had_tool_error else response.text,
                     tuple(audit),
                 )
-            for call in response.tool_calls:
+            assistant_calls = [
+                {
+                    "id": call.call_id or f"call_{used_calls + index + 1}",
+                    "type": "function",
+                    "function": {"name": call.name, "arguments": call.arguments_json},
+                }
+                for index, call in enumerate(response.tool_calls)
+            ]
+            conversation.append(
+                {
+                    "role": "assistant",
+                    "content": response.text,
+                    "tool_calls": assistant_calls,
+                }
+            )
+            for call, assistant_call in zip(response.tool_calls, assistant_calls, strict=True):
                 if used_calls >= self.max_calls:
                     return RunOutcome("budget_exhausted", "", tuple(audit))
                 used_calls += 1
                 definition = self.definitions.get(call.name)
                 if definition is None or definition not in available:
-                    result = ToolExecution(ok=False, error_code="FORBIDDEN_TOOL")
+                    result = ToolResult(ok=False, error=ContractError(code=ErrorCode.FORBIDDEN))
                 else:
                     try:
                         args = definition.input_model.model_validate_json(call.arguments_json)
                     except ValidationError:
-                        result = ToolExecution(ok=False, error_code="VALIDATION_ERROR")
+                        result = ToolResult(
+                            ok=False, error=ContractError(code=ErrorCode.VALIDATION_ERROR)
+                        )
                     else:
-                        result = await definition.handler(args, context)
+                        try:
+                            result = ToolResult.model_validate(
+                                await definition.handler(args, context)
+                            )
+                        except Exception as exc:
+                            logger.error(
+                                "agent_tool_failed",
+                                name=call.name,
+                                run_id=str(context.run_id),
+                                error=type(exc).__name__,
+                            )
+                            audit.append(ToolAudit(call.name, "HANDLER_ERROR", None, ()))
+                            return RunOutcome("failed", "", tuple(audit))
                 had_tool_error = had_tool_error or not result.ok
+                outcome_code = "ok"
+                if not result.ok:
+                    assert result.error is not None
+                    outcome_code = result.error.code.value
                 audit.append(
                     ToolAudit(
                         name=call.name,
-                        outcome="ok" if result.ok else (result.error_code or "TOOL_ERROR"),
+                        outcome=outcome_code,
                         entity_version=result.entity_version,
                         source_refs=result.source_refs,
                     )
@@ -131,8 +170,7 @@ class AgentRuntime:
                 conversation.append(
                     {
                         "role": "tool",
-                        "content": json.dumps(
-                            {"name": call.name, **result.model_dump()}, default=str
-                        ),
+                        "tool_call_id": assistant_call["id"],
+                        "content": json.dumps(result.model_dump(mode="json"), ensure_ascii=False),
                     }
                 )
