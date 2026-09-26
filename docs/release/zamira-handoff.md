@@ -1,10 +1,15 @@
 # Передача пула Замиры: опросы, инициативы, PDF и результат
 
-Дата фиксации: 25.09.2026. Это **локальный handoff**, не акт сдачи MVP: общего Python-проекта, PostgreSQL-репозиториев и рабочего сценария MAX в репозитории пока нет. Точная готовность каждого блока — в [`context/current-state.md`](../../context/current-state.md).
+Дата исходного handoff: 25.09.2026. Документ описывает состояние пула Z на ту дату.
+На 26.09.2026 общий Python-проект, A PostgreSQL-слой и часть K-модулей уже есть;
+production Z repositories и рабочий сценарий MAX всё ещё отсутствуют.
+Точная готовность каждого блока — в [`context/current-state.md`](../../context/current-state.md).
 
 ## Что можно воспроизвести сейчас
 
-Рабочие части Z01–Z13 покрыты unit/fake tests. Команды ниже запускаются из корня репозитория при установленных `uv` и Python 3.13; проектный lockfile создаёт Алина на A00.
+Рабочие части Z01–Z13 покрыты unit/fake tests. Ниже сохранены исходные команды
+handoff; актуальный проект уже содержит `pyproject.toml` и `uv.lock`, поэтому
+общий прогон выполняется через `uv run pytest -q`, `uv run ruff check` и `uv run mypy`.
 
 ```bash
 PYTHONPATH=src:. uv run --no-project --with reportlab --with pypdf --with pytest --with pytest-asyncio pytest -q -p no:cacheprovider

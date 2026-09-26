@@ -85,6 +85,7 @@
 | K13: события продолжения | Частично: восемь доверенных событий связаны с новым run и свежим делом, replay завершённого run идемпотентен на fake; A/Z producers, общий worker и live inference ещё не подключены | `application/agent/events.py`, `agent/continuation.py`, `tests/agent/test_k13_events.py` |
 | K14: сквозная проверка | Частично: A scheduler → K deadline → K agent run проверены на PostgreSQL 16 с fake LLM, включая stale и чужой дом; полный Z poll/PDF/MAX цикл отсутствует | `tests/infrastructure/test_k14_deadline_cycle.py`, K08–K13 tests |
 | K15: agent evals | Частично: оценщик и рубрика 24 кейсов проверены unit-тестами; реальные model metrics не измерены из-за нехватки памяти доступного Mac | `scripts/evaluate_agent.py`, `evals/k15-status.md`, `tests/agent/test_k15_evaluator.py` |
+| K16: demo handoff | Частично: четыре вариативных пути и provenance подготовлены; live MAX/G3 evidence ещё отсутствуют | `docs/release/katerina-demo-handoff.md`, `docs/release/max-mobile-web-matrix.md` |
 | Хранение опросов и production-интеграция агента | Не реализованы | A/Z core и K fake runtime есть; K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | A/Z tests ранее проходили с PostgreSQL 18; совместные проверки после слияния указаны в `context/current-state.md`; PG17/pgvector, реальный MAX и цельный стенд не проверены |
 
