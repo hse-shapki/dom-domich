@@ -74,6 +74,7 @@
 | K02: inference | Частично: HTTPX adapter/fake/timeout/retry проверены; 8 GiB Mac не выдержал live probe | `src/dom_domych/agent/llm.py`, `infrastructure/llm/llama_server.py`, `tests/agent/test_k02_llama_server.py`, `docs/engineering/11-track-k-inference-probe.md` |
 | K03: agent runtime | Частично: allowlist/schema/capability/budget и общий ToolResult проверены fake tests; production handlers не подключены | `src/dom_domych/agent/runtime.py`, `tests/agent/test_k03_runtime.py` |
 | K04: continuation | Частично: PostgreSQL runs/pending/tool audit и fresh context проверены локально; inbox не подключён | `src/dom_domych/agent/continuation.py`, `infrastructure/postgres/agent_runs.py`, `tests/infrastructure/test_k04_agent_runs.py` |
+| K05: knowledge | Частично: разрешённый HTTPS ingestion, review, русская FTS и scoped rules проверены на PostgreSQL 16; pgvector branch/live embeddings не проверены | `application/knowledge/service.py`, `infrastructure/postgres/knowledge.py`, `infrastructure/llm/embeddings.py`, `tests/infrastructure/test_k05_knowledge.py` |
 | Хранение опросов и production-интеграция агента | Не реализованы | A/Z core и K fake runtime есть; K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | A/Z tests ранее проходили с PostgreSQL 18; совместные проверки после слияния указаны в `context/current-state.md`; PG17/pgvector, реальный MAX и цельный стенд не проверены |
 
