@@ -17,6 +17,7 @@ K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. М�
 частичный offload вызвал swap. Live inference и p50/p95 не подтверждены;
 подробности: `docs/engineering/11-track-k-inference-probe.md`.
 K03: runtime проверяет allowlist, JSON schema, режим, capability и бюджет;
+единый реестр связывает все восемь опубликованных K schemas с KToolHandlers;
 использует общий A01 `ToolResult`, связывает ответ с tool call ID и не выдаёт
 ошибку handler за успех. Fake tool-chain проверен в `tests/agent/test_k03_runtime.py`.
 Постоянный audit, реальные handlers и вход из inbox ещё не подключены.
