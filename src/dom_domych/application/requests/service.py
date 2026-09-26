@@ -45,6 +45,11 @@ class RequestDraft:
     executor_operation_id: UUID | None = None
     registration_id: str | None = None
     registered_at: datetime | None = None
+    external_status: str | None = None
+    external_version: int = 0
+    document_id: UUID | None = None
+    document_snapshot_hash: str | None = None
+    document_file_key: UUID | None = None
 
     def to_view(self) -> RequestView:
         return RequestView(

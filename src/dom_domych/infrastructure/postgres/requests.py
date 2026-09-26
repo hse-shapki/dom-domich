@@ -18,7 +18,7 @@ from dom_domych.contracts.events import (
     EventSource,
 )
 from dom_domych.domain.executor.models import DemoOperation
-from dom_domych.domain.ports.core import JobIntent
+from dom_domych.domain.ports.core import DocumentRef, JobIntent, RequestRef
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
 from dom_domych.infrastructure.postgres.inbox import save_domain_event
 from dom_domych.infrastructure.postgres.jobs import PostgresJobQueue
@@ -43,6 +43,11 @@ def _draft(row: RequestRow) -> RequestDraft:
         executor_operation_id=row.executor_operation_id,
         registration_id=row.registration_id,
         registered_at=row.registered_at,
+        external_status=row.external_status,
+        external_version=row.external_version,
+        document_id=row.document_id,
+        document_snapshot_hash=row.document_snapshot_hash,
+        document_file_key=row.document_file_key,
     )
 
 
@@ -169,6 +174,12 @@ class PostgresRequestStore:
                 executor_operation_id=None,
                 registration_id=None,
                 registered_at=None,
+                external_status=None,
+                external_version=0,
+                external_status_updated_at=None,
+                document_id=None,
+                document_snapshot_hash=None,
+                document_file_key=None,
             )
             session.add(request)
             await session.flush()
@@ -365,6 +376,9 @@ class PostgresRequestStore:
             row.registration_id = operation.registration_number
             row.registered_at = operation.registered_at
             row.status = "registered"
+            row.external_status = "registered"
+            row.external_version = max(row.external_version, 1)
+            row.external_status_updated_at = operation.registered_at
             case = await session.scalar(
                 select(CaseRow)
                 .where(CaseRow.id == row.case_id, CaseRow.house_id == house_id)
@@ -439,4 +453,169 @@ class PostgresRequestStore:
                             expected_version=case.version,
                         )
                     )
+            return _draft(row)
+
+    async def record_external_status(
+        self,
+        event: EventEnvelope,
+        external: RequestRef,
+    ) -> RequestDraft:
+        """Фиксирует статус исполнителя отдельно от workflow и не закрывает дело."""
+
+        if event.house_id is None or event.entity is None:
+            raise ValueError("CONTINUATION_CONTEXT_MISSING")
+        if external.external_status not in {"registered", "in_progress", "done"}:
+            raise ValueError("INVALID_EXTERNAL_STATUS")
+        if (
+            external.house_id != event.house_id
+            or external.request_id != event.entity.entity_id
+            or external.case_id != event.entity.case_id
+            or external.version != event.entity.entity_version
+        ):
+            raise ValueError("EXECUTOR_RESULT_MISMATCH")
+        async with self.sessions.begin() as session:
+            prior = await session.scalar(
+                select(CaseEventRow).where(
+                    CaseEventRow.house_id == event.house_id,
+                    CaseEventRow.operation_id == event.event_id,
+                )
+            )
+            row = await session.scalar(
+                select(RequestRow)
+                .where(
+                    RequestRow.id == external.request_id,
+                    RequestRow.house_id == event.house_id,
+                )
+                .with_for_update()
+            )
+            if row is None:
+                raise ValueError("REQUEST_NOT_FOUND")
+            if prior is not None:
+                return _draft(row)
+            if row.case_id != external.case_id or row.registration_id is None:
+                raise ValueError("INVALID_STATE")
+            allowed = {
+                None: {"registered"},
+                "registered": {"registered", "in_progress", "done"},
+                "in_progress": {"in_progress", "done"},
+                "done": {"done"},
+            }
+            if external.external_status not in allowed.get(row.external_status, set()):
+                raise ValueError("INVALID_EXTERNAL_TRANSITION")
+            if external.version < row.external_version:
+                raise ValueError("STALE_EXTERNAL_VERSION")
+            if external.version == row.external_version:
+                if external.external_status != row.external_status:
+                    raise ValueError("EXTERNAL_VERSION_CONFLICT")
+                return _draft(row)
+            case = await session.scalar(
+                select(CaseRow)
+                .where(CaseRow.id == row.case_id, CaseRow.house_id == event.house_id)
+                .with_for_update()
+            )
+            if case is None or case.closed_at is not None:
+                raise ValueError("CASE_NOT_AVAILABLE")
+            previous_version = case.version
+            case.version += 1
+            row.external_status = external.external_status
+            row.external_version = external.version
+            row.external_status_updated_at = event.occurred_at
+            session.add(
+                CaseEventRow(
+                    id=uuid4(),
+                    case_id=case.id,
+                    house_id=event.house_id,
+                    event_type=EventName.REQUEST_STATUS_CHANGED.value,
+                    before_version=previous_version,
+                    after_version=case.version,
+                    actor_id=None,
+                    source_message_id=None,
+                    operation_id=event.event_id,
+                    occurred_at=event.occurred_at,
+                    facts={
+                        "request_id": str(row.id),
+                        "external_status": external.external_status,
+                        "external_version": external.version,
+                    },
+                )
+            )
+            return _draft(row)
+
+    async def bind_document(
+        self,
+        event: EventEnvelope,
+        document: DocumentRef,
+    ) -> RequestDraft:
+        """Связывает готовый immutable документ с обращением в короткой UoW."""
+
+        if event.house_id is None or event.entity is None or event.entity.case_id is None:
+            raise ValueError("CONTINUATION_CONTEXT_MISSING")
+        if (
+            document.document_id != event.entity.entity_id
+            or document.house_id != event.house_id
+            or document.case_id != event.entity.case_id
+            or document.status != "ready"
+            or document.file_key is None
+            or len(document.snapshot_hash) != 64
+        ):
+            raise ValueError("DOCUMENT_RESULT_MISMATCH")
+        async with self.sessions.begin() as session:
+            prior = await session.scalar(
+                select(CaseEventRow).where(
+                    CaseEventRow.house_id == event.house_id,
+                    CaseEventRow.operation_id == event.event_id,
+                )
+            )
+            row = await session.scalar(
+                select(RequestRow)
+                .where(
+                    RequestRow.case_id == document.case_id,
+                    RequestRow.house_id == event.house_id,
+                )
+                .order_by(RequestRow.draft_version.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            if row is None:
+                raise ValueError("REQUEST_NOT_FOUND")
+            if prior is not None:
+                return _draft(row)
+            bound = (row.document_id, row.document_snapshot_hash, row.document_file_key)
+            expected = (document.document_id, document.snapshot_hash, document.file_key)
+            if row.document_id is not None:
+                if bound != expected:
+                    raise ValueError("DOCUMENT_CONFLICT")
+                return _draft(row)
+            case = await session.scalar(
+                select(CaseRow)
+                .where(CaseRow.id == row.case_id, CaseRow.house_id == event.house_id)
+                .with_for_update()
+            )
+            if case is None or case.closed_at is not None:
+                raise ValueError("CASE_NOT_AVAILABLE")
+            previous_version = case.version
+            case.version += 1
+            row.document_id = document.document_id
+            row.document_snapshot_hash = document.snapshot_hash
+            row.document_file_key = document.file_key
+            session.add(
+                CaseEventRow(
+                    id=uuid4(),
+                    case_id=case.id,
+                    house_id=event.house_id,
+                    event_type=EventName.DOCUMENT_READY.value,
+                    before_version=previous_version,
+                    after_version=case.version,
+                    actor_id=None,
+                    source_message_id=None,
+                    operation_id=event.event_id,
+                    occurred_at=event.occurred_at,
+                    facts={
+                        "request_id": str(row.id),
+                        "document_id": str(document.document_id),
+                        "snapshot_hash": document.snapshot_hash,
+                        "file_key": str(document.file_key),
+                    },
+                )
+            )
             return _draft(row)

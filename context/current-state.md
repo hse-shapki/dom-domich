@@ -51,8 +51,10 @@ case/outbox/jobs в одной UoW отсутствует, поэтому скв
 K10: RequestService сверяет актуальную версию дела и проверенное правило,
 хранит draft hash/version и явное согласование. Изменение черновика сбрасывает
 approval, submit в demo идемпотентен через operation key, статус registered
-появляется только от доверенного DemoOperation. Миграция и цикл проверены на
-PostgreSQL 16 с fake executor; production Z ExecutorStore/PDF link ещё не связаны.
+появляется только от доверенного DemoOperation. Готовый документ теперь связывается
+с request по `DocumentPort` с проверкой дома/case/hash/file key. Миграции и цикл
+проверены на PostgreSQL 18 с fake Z ports; production Z Document/Executor repositories
+ещё отсутствуют.
 K11: EmergencyService готовит draft сразу после проверки места и ответственного,
 не зависит от poll; при пробеле в месте/источнике возвращает точное уточнение,
 не выдумывает срок. Evidence intent идёт только в личный outbox, идемпотентен
@@ -65,12 +67,14 @@ K12: при доверенной регистрации проверенное �
 Общий scheduler composition, live MAX и нормативная ревизия источников не проверены.
 K13: bridge принимает poll/evidence/request/resolution/document события только от
 доверенных источников, разрешает case в доме и запускает новый followup run с
-актуальной версией дела. Повтор завершённого события не вызывает inference,
-неуспешный run может повториться. `request.registered` теперь атомарно пишет
-domain inbox event; A InboxWorker запускает K continuation на PostgreSQL 16 с
-fake LLM. `evidence.added` также атомарно пишется в domain inbox; consumer
-для него проверен только на fake. Остальные producers и общий production worker ещё не связаны,
-live inference не проверен.
+актуальной версией дела. Перед continuation `request.status_changed` перечитывается
+через `ExecutorPort`, а `document.ready` — через `DocumentPort`; внешний статус и
+immutable document refs сохраняются отдельно от workflow в одной транзакции с
+versioned case event. `done` не закрывает дело. Повтор завершённого события не
+вызывает inference, неуспешный run может повториться. `request.registered` и
+`evidence.added` атомарно пишутся в domain inbox. Новый consumer и migration/check
+проверены на PostgreSQL 18; producers Z, общий production worker и live inference
+ещё не подключены.
 K14: сквозная локальная проверка проходит от due job A через K followup draft
 до сохранённого нового agent run на PostgreSQL 16 с fake LLM. Повтор,
 устаревшая версия и чужой дом проверены; полный Z poll/PDF/MAX путь пока

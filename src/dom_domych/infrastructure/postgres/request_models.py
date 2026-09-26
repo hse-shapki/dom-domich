@@ -47,6 +47,12 @@ class RequestRow(Base):
     executor_operation_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
     registration_id: Mapped[str | None] = mapped_column(String(100))
     registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    external_status: Mapped[str | None] = mapped_column(String(40))
+    external_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    external_status_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    document_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    document_snapshot_hash: Mapped[str | None] = mapped_column(String(64))
+    document_file_key: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
 
 
 class RequestOperationRow(Base):

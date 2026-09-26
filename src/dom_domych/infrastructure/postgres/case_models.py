@@ -13,6 +13,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -26,6 +29,13 @@ class CaseRow(Base):
         UniqueConstraint("id", "house_id"),
         Index("ix_cases_house_status_created", "house_id", "status", "created_at"),
         Index("ix_cases_house_location", "house_id", "entrance", "floor", "object_name"),
+        Index(
+            "ix_cases_fts",
+            sql_text(
+                "to_tsvector('russian'::regconfig, (title::text || ' '::text) || description)"
+            ),
+            postgresql_using="gin",
+        ),
         ForeignKeyConstraint(["recurrence_of", "house_id"], ["cases.id", "cases.house_id"]),
     )
 

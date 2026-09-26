@@ -3,7 +3,19 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -33,6 +45,12 @@ class KnowledgeChunkRow(Base):
             ["source_id", "revision"],
             ["knowledge_sources.source_id", "knowledge_sources.revision"],
             ondelete="CASCADE",
+        ),
+        UniqueConstraint("source_id", "revision", "ordinal"),
+        Index(
+            "ix_knowledge_chunks_fts",
+            sql_text("to_tsvector('russian', text)"),
+            postgresql_using="gin",
         ),
     )
 

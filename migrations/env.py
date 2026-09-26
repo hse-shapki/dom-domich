@@ -9,11 +9,13 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy.pool import NullPool
 
+from dom_domych.infrastructure.postgres import (
+    agent_models,  # noqa: F401
+    case_models,  # noqa: F401
+    knowledge_models,  # noqa: F401
+    request_models,  # noqa: F401
+)
 from dom_domych.infrastructure.postgres import models as core_models  # noqa: F401
-from dom_domych.infrastructure.postgres import agent_models  # noqa: F401
-from dom_domych.infrastructure.postgres import knowledge_models  # noqa: F401
-from dom_domych.infrastructure.postgres import case_models  # noqa: F401
-from dom_domych.infrastructure.postgres import request_models  # noqa: F401
 from dom_domych.infrastructure.postgres.base import Base
 
 config = context.config
