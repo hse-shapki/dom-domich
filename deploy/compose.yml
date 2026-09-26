@@ -12,6 +12,11 @@ x-app: &app
     MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:?Set MAX_WEBHOOK_SECRET outside Git}
     MAX_INGRESS_MODE: webhook
     PAYLOAD_RETENTION_DAYS: ${PAYLOAD_RETENTION_DAYS:-30}
+    LLM_BASE_URL: ${LLM_BASE_URL:?Set reachable OpenAI-compatible llama-server URL}
+    LLM_MODEL: ${LLM_MODEL:?Set served model alias}
+    LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-512}
+    LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
+    LLM_ATTEMPTS: ${LLM_ATTEMPTS:-2}
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -66,6 +71,20 @@ services:
   outbox:
     <<: *app
     command: ["dom-domych-process", "outbox"]
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  inbox:
+    <<: *app
+    command: ["dom-domych-process", "inbox"]
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  scheduler:
+    <<: *app
+    command: ["dom-domych-process", "scheduler"]
     read_only: true
     tmpfs:
       - /tmp

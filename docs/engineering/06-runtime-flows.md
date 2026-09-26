@@ -181,8 +181,9 @@ K composition регистрирует обработчик изменения r
 continuation, поэтому новый run читает уже зафиксированную версию. Тот же helper
 подключает revision reader и deadline handler к общим A dispatcher/scheduler и
 собирает coordinator на production K repositories. Это проверено на локальном
-PostgreSQL 18 с fake LLM и fake Z ports. Отдельный production process нельзя
-включать до появления PostgreSQL реализаций Z `ExecutorPort` и `DocumentPort`.
+PostgreSQL 18 с fake LLM и fake Z ports. A process root теперь запускает этот K
+контур с настраиваемым llama-server; события, требующие отсутствующих PostgreSQL
+реализаций Z `ExecutorPort` и `DocumentPort`, явно завершаются ошибкой и retry.
 
 ## 8. Аварии самой системы
 

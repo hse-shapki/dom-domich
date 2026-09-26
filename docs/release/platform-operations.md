@@ -3,7 +3,9 @@
 ## Развёртывание
 
 1. Скопировать `.env.example` в `.env` вне Git и задать `POSTGRES_PASSWORD`, production
-   `DATABASE_URL`, `MAX_BOT_TOKEN`, `MAX_WEBHOOK_SECRET`, `PUBLIC_HOST`.
+   `DATABASE_URL`, `MAX_BOT_TOKEN`, `MAX_WEBHOOK_SECRET`, `PUBLIC_HOST`, а также доступные
+   контейнерам `LLM_BASE_URL` и `LLM_MODEL`. Образ/веса модели в Compose не зафиксированы,
+   пока K15 не выбрал прошедшую evals модель; endpoint поднимается отдельно или override-файлом.
 2. Проверить `docker compose -f deploy/compose.yml config`, затем собрать образы без `latest`.
 3. Запустить `docker compose -f deploy/compose.yml up -d --build`. Одноразовый `migrate`
    применяет единственную Alembic history до старта API/outbox/maintenance.
@@ -21,11 +23,14 @@ uv run python -m scripts.max_operations register \
 ```
 
 Наружу опубликованы только 80/443 Caddy. PostgreSQL и процессы находятся во внутренней сети,
-данные БД, Caddy и FileStore — в named volumes. API, outbox и retention maintenance корректно
-закрывают HTTP clients и SQLAlchemy engine при SIGTERM. Maintenance раз в час идемпотентно удаляет
-просроченные файлы и редактирует payload завершённых inbox/outbox по `PAYLOAD_RETENTION_DAYS`.
-Текущий compose не запускает inbox/scheduler: production handlers
-K/Z и их repositories отсутствуют в этой ветке, поэтому фиктивно подтверждать события нельзя.
+данные БД, Caddy и FileStore — в named volumes. API, inbox, scheduler, outbox и retention
+maintenance корректно закрывают HTTP clients и SQLAlchemy engine при SIGTERM. Maintenance раз в
+час идемпотентно удаляет просроченные файлы и редактирует payload завершённых inbox/outbox по
+`PAYLOAD_RETENTION_DAYS`. Inbox регистрирует onboarding перед K message handler, затем K
+continuation handlers; scheduler использует тот же dispatcher и K revision reader. Пока
+отсутствуют production Z executor/document repositories, соответствующие события явно
+завершаются ошибкой и проходят bounded retry/dead-letter, а не подтверждаются fake-результатом.
+Poll callbacks, PDF jobs и полный G3 runtime остаются открыты.
 
 Dev polling запускается только с `MAX_INGRESS_MODE=polling` командой
 `dom-domych-process polling`; API factory при этом отказывает в старте, а poller проверяет через
