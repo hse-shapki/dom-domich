@@ -42,10 +42,12 @@ K07: созданы `cases` и поиск кандидатов с домом, л
 vector branch и реальные embeddings ещё не проверены.
 K08: CaseService проверяет доверенный event/actor/capability, PostgreSQL
 writer под advisory lock повторяет поиск кандидатов, хранит operation hash,
-case messages, versioned events и recurrence. Тест на PostgreSQL 16 провёл
+case messages, versioned events и recurrence. Тест на PostgreSQL 18 провёл
 12 конкурентных сообщений к одному делу, повтор операции, stale version,
 два дела в одном сообщении и чужой дом. Evidence-таблица есть, но её
 application use case и сквозная связка с A/Z ещё не подключены.
+Для Z06 добавлен scoped reader автора инициативы из неизменяемой origin-связи;
+он не принимает author/house из аргументов модели. Z repository/UoW ещё отсутствует.
 K09: ProblemWorkflow проверяет scope дела, создаёт frozen audience/poll на
 fake atomic store, не открывает опрос при N=0 и передаёт адресный evidence
 запрос только ответившим «да» по доверенному итогу Z. EvidenceService пишет
@@ -104,7 +106,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | AudienceService Z03 | Частично: выбор и история snapshot проверены на fake | `src/dom_domych/domain/audiences/models.py`, `src/dom_domych/application/audiences/service.py`, `tests/domain/test_audience_service.py`; нет PostgreSQL repository/migration |
 | PollService Z04 | Частично: поведение и конкуренция проверены на fake | `src/dom_domych/domain/polls/models.py`, `src/dom_domych/application/polls/service.py`, `tests/domain/test_poll_service.py`; нет PostgreSQL repository/migration и MAX callback |
 | Callback handler Z05 | Частично: token/actor/revision/expiry проверены на fake | `src/dom_domych/application/polls/callback.py`, `tests/domain/test_poll_callback.py`; A10 MAX transport/action storage существуют, production PollRepository ещё не подключён |
-| InitiativeService Z06 | Частично: редакции и замена poll проверены на fake | `src/dom_domych/domain/initiatives/models.py`, `src/dom_domych/application/initiatives/service.py`, `tests/fakes/initiatives.py`, `tests/domain/test_initiative_service.py`; нет K CasePort, PostgreSQL UoW и MAX token revocation |
+| InitiativeService Z06 | Частично: K case/author reader проверен на PostgreSQL 18, редакции и замена poll — на fake | `infrastructure/postgres/initiative_cases.py`, `application/initiatives/service.py`, tests; нет PostgreSQL UoW инициатив/опросов и MAX token revocation |
 | Публичные карточки Z07 | Частично: тексты/шкалы проверены unit-тестами | `src/dom_domych/application/cards/builders.py`, `tests/domain/test_public_cards.py`; A DeliveryPort/edit существует, карточки и coalescing ещё не подключены |
 | Напоминания и итог инициативы Z08 | Частично: частотный лимит и supported/not_supported проверены на fake | `src/dom_domych/application/initiatives/followup.py`, `tests/fakes/initiative_followup.py`, `tests/domain/test_initiative_followup.py`; A DeliveryPort/jobs существуют, Z/K production wiring ещё нет |
 | FileStore и immutable snapshot Z09 | Частично: проверены локально | `src/dom_domych/infrastructure/files/local.py`, `src/dom_domych/domain/documents/snapshot.py`, тесты в `tests/infrastructure/` и `tests/domain/test_document_snapshot.py`; нет PDF worker и PostgreSQL metadata |
