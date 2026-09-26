@@ -54,6 +54,11 @@ approval, submit в demo идемпотентен через operation key, ст
 появляется только от доверенного DemoOperation. Миграция и цикл проверены на
 PostgreSQL 16 с fake executor; production Z ExecutorStore/PDF link и SLA jobs
 ещё не связаны.
+K11: EmergencyService готовит draft сразу после проверки места и ответственного,
+не зависит от poll; при пробеле в месте/источнике возвращает точное уточнение,
+не выдумывает срок. Evidence intent идёт только в личный outbox, идемпотентен
+на PostgreSQL 16. Fake route и outbox tests проходят; live MAX и общий runtime
+не подключены.
 
 | Область | Состояние | Проверяемое основание |
 |---|---|---|
