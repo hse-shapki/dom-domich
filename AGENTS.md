@@ -76,6 +76,7 @@
 | K04: continuation | Частично: PostgreSQL runs/pending/tool audit и fresh context проверены локально; inbox не подключён | `src/dom_domych/agent/continuation.py`, `infrastructure/postgres/agent_runs.py`, `tests/infrastructure/test_k04_agent_runs.py` |
 | K05: knowledge | Частично: разрешённый HTTPS ingestion, review, русская FTS и scoped rules проверены на PostgreSQL 16; pgvector branch/live embeddings не проверены | `application/knowledge/service.py`, `infrastructure/postgres/knowledge.py`, `infrastructure/llm/embeddings.py`, `tests/infrastructure/test_k05_knowledge.py` |
 | K06: triage | Частично: пять маршрутов, несколько тем, срочный guard и ответ только с проверенным source проверены fake tests; live eval/inbox wiring отсутствуют | `src/dom_domych/agent/triage.py`, `tests/agent/test_k06_triage.py` |
+| K07: case retrieval | Частично: house/location/object/30-day closed filters и FTS проверены на PostgreSQL 16; pgvector branch не проверена | `application/cases/candidates.py`, `infrastructure/postgres/case_candidates.py`, `tests/infrastructure/test_k07_candidates.py` |
 | Хранение опросов и production-интеграция агента | Не реализованы | A/Z core и K fake runtime есть; K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | A/Z tests ранее проходили с PostgreSQL 18; совместные проверки после слияния указаны в `context/current-state.md`; PG17/pgvector, реальный MAX и цельный стенд не проверены |
 

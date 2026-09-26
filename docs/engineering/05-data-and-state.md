@@ -60,7 +60,9 @@ erDiagram
 | `agent_runs/tool_calls` | event/case, versions, model/prompt revision, tool args/result, latency, status |
 | `inbox_events/outbox_messages/scheduled_jobs` | dedupe key, payload, status, attempts, lease owner/until, available time, error |
 
-Это спецификация всей схемы. Core-таблицы реестра A02 уже имеют ORM-модели и первую миграцию; модели и миграции дел, опросов, документов и очередей ещё предстоит написать. Точный статус по модулям — в [проверенном состоянии](../../context/current-state.md).
+Это спецификация всей схемы. Core-таблицы A02 и базовая таблица `cases` K07
+имеют ORM-модели и миграции; сообщения/evidence/requests и production-хранение
+опросов ещё не завершены. Точный статус — в [проверенном состоянии](../../context/current-state.md).
 
 ### Уникальность и индексы
 
