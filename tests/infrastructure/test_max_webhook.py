@@ -105,7 +105,13 @@ async def test_webhook_commits_once_before_ack_and_rejects_bad_secret() -> None:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            assert (await client.get("/ready")).status_code == 200
+            readiness = await client.get("/ready")
+            assert readiness.status_code == 200
+            assert readiness.json() == {
+                "status": "degraded",
+                "database": "ready",
+                "llm": "not_configured",
+            }
             bad = await client.post("/webhook/max", json=message_update(message_id))
             assert bad.status_code == 401
             headers = {"X-Max-Bot-Api-Secret": "test-secret"}
@@ -131,6 +137,42 @@ async def test_webhook_commits_once_before_ack_and_rejects_bad_secret() -> None:
             assert rows[0].status == "pending"
             assert rows[0].normalized_event is not None
             assert rows[0].raw_update["update_type"] == "message_created"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("llm_status_code", "expected_status", "expected_llm"),
+    ((200, "ready", "ready"), (503, "degraded", "unavailable")),
+)
+async def test_readiness_reports_llm_degradation_without_rejecting_ingress(
+    llm_status_code: int, expected_status: str, expected_llm: str
+) -> None:
+    database_url = os.environ.get("TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("TEST_DATABASE_URL needs a migrated PostgreSQL database")
+
+    async def llm_handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/health"
+        return httpx.Response(llm_status_code)
+
+    app = create_app(
+        database_url,
+        "test-secret",
+        "http://llama.test",
+        llm_transport=httpx.MockTransport(llm_handler),
+    )
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            readiness = await client.get("/health/ready")
+
+    assert readiness.status_code == 200
+    assert readiness.json() == {
+        "status": expected_status,
+        "database": "ready",
+        "llm": expected_llm,
+    }
 
 
 @pytest.mark.asyncio

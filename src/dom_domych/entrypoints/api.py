@@ -2,9 +2,10 @@
 
 import hmac
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import UTC, datetime
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import ValidationError
 from sqlalchemy import text
@@ -16,14 +17,40 @@ from dom_domych.infrastructure.postgres.inbox import save_inbox_event
 from dom_domych.infrastructure.postgres.session import database_lifespan
 
 
-def create_app(database_url: str, webhook_secret: str) -> FastAPI:
+async def _llm_is_ready(client: httpx.AsyncClient) -> bool:
+    """Проверяет inference без генерации и не превращает его сбой в сбой ingress."""
+
+    try:
+        response = await client.get("/health")
+        return response.is_success
+    except httpx.HTTPError:
+        return False
+
+
+def create_app(
+    database_url: str,
+    webhook_secret: str,
+    llm_base_url: str | None = None,
+    *,
+    llm_transport: httpx.AsyncBaseTransport | None = None,
+) -> FastAPI:
     if not webhook_secret:
         raise ValueError("MAX_WEBHOOK_SECRET is required")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with database_lifespan(database_url) as sessions:
+        async with AsyncExitStack() as stack:
+            sessions = await stack.enter_async_context(database_lifespan(database_url))
             app.state.sessions = sessions
+            app.state.llm = None
+            if llm_base_url is not None:
+                app.state.llm = await stack.enter_async_context(
+                    httpx.AsyncClient(
+                        base_url=llm_base_url,
+                        timeout=httpx.Timeout(2.0),
+                        transport=llm_transport,
+                    )
+                )
             yield
 
     app = FastAPI(lifespan=lifespan)
@@ -42,7 +69,15 @@ def create_app(database_url: str, webhook_secret: str) -> FastAPI:
                 await session.execute(text("SELECT 1"))
         except Exception as exc:
             raise HTTPException(status_code=503, detail="database unavailable") from exc
-        return {"status": "ready"}
+        llm: httpx.AsyncClient | None = app.state.llm
+        if llm is None:
+            return {"status": "degraded", "database": "ready", "llm": "not_configured"}
+        llm_status = "ready" if await _llm_is_ready(llm) else "unavailable"
+        return {
+            "status": "ready" if llm_status == "ready" else "degraded",
+            "database": "ready",
+            "llm": llm_status,
+        }
 
     @app.post("/webhook/max")
     async def webhook(
@@ -77,4 +112,8 @@ def create_app_from_env() -> FastAPI:
     settings = AppSettings.from_env()
     if settings.max_ingress_mode != "webhook":
         raise RuntimeError("API ingress requires MAX_INGRESS_MODE=webhook")
-    return create_app(settings.database_url, settings.max_webhook_secret)
+    return create_app(
+        settings.database_url,
+        settings.max_webhook_secret,
+        settings.llm_base_url,
+    )

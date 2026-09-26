@@ -9,7 +9,9 @@
 2. Проверить `docker compose -f deploy/compose.yml config`, затем собрать образы без `latest`.
 3. Запустить `docker compose -f deploy/compose.yml up -d --build`. Одноразовый `migrate`
    применяет единственную Alembic history до старта API/outbox/maintenance.
-4. Проверить `/health/live` и `/health/ready`, затем отдельно зарегистрировать MAX webhook на
+4. Проверить `/health/live` и `/health/ready`. Readiness возвращает `503`, если недоступна БД;
+   при доступной БД и недоступном inference возвращает HTTP 200 со статусом `degraded`, чтобы
+   ingress продолжал надёжно принимать события. Затем отдельно зарегистрировать MAX webhook на
    `https://<PUBLIC_HOST>/webhook/max` с тем же secret.
 
 Операционные команды не печатают токен/secret:
