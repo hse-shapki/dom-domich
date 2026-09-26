@@ -2,7 +2,7 @@
 
 > Реализация K03 в ветке `kae`: `src/dom_domych/agent/runtime.py` проверяет
 > allowlist, Pydantic JSON, режим, capability и число вызовов. Единый реестр
-> `agent/tools.py` связывает восемь K schemas с `KToolHandlers`, а
+> `agent/tools.py` связывает девять K schemas с `KToolHandlers`, а
 > `application/agent/composition.py` собирает их с PostgreSQL repositories.
 > K04 сохраняет run/tool audit и pending questions в PostgreSQL; при новом
 > событии перечитывается версия дела и выбирается вопрос текущего actor/дома.
@@ -98,6 +98,7 @@ ToolResult:
 | `request.prepare` | case ID, responsible ID, source refs | RequestService; маршрут и необходимые данные | Draft ID, согласование/готовность |
 | `request.submit` | draft ID, expectedVersion | RequestService; policy, approval, demo/live | Operation ID; регистрация отдельным событием |
 | `request.get_status` | request ID | ExecutorPort | Статус и происхождение данных |
+| `emergency.handle` | case ID, expectedVersion | EmergencyService; точное место, проверенное правило, личный evidence outbox | Черновик либо конкретное уточнение без ожидания poll |
 | `schedule.check` | case ID, тип проверки | SchedulerService; срок из правила/опроса | Job ID; LLM не подставляет произвольный норматив |
 | `resolution.start_check` | case ID | ResolutionService; статус исполнителя, исходная категория | Poll ID |
 | `notification.send` | template/text, audience/question ID | NotificationService; recipient scope, limits | Outbox operation ID |

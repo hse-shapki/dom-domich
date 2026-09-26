@@ -39,8 +39,9 @@ def test_registry_covers_published_k_schemas_once() -> None:
         "request.prepare",
         "request.submit",
         "request.get_status",
+        "emergency.handle",
     }
-    assert len(definitions) == 8
+    assert len(definitions) == 9
     assert all(definition.input_model is not None for definition in definitions)
     assert next(item for item in definitions if item.name == "request.submit").effect == "external"
 

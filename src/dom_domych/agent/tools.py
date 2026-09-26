@@ -80,6 +80,13 @@ def build_k_tool_definitions(handlers: KToolHandlers) -> tuple[ToolDefinition, .
             "read",
             "request.read",
         ),
+        (
+            "emergency.handle",
+            "Без ожидания опроса подготовить срочное обращение или точное уточнение.",
+            frozenset({AgentMode.TRIAGE, AgentMode.PROBLEM}),
+            "write",
+            "emergency.handle",
+        ),
     )
     definitions: list[ToolDefinition] = []
     for name, description, modes, effect, capability in specs:

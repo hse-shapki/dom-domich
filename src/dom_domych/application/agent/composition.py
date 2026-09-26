@@ -26,6 +26,7 @@ from dom_domych.application.requests.deadline import (
     RequestDeadlineHandler,
     RequestDeadlineRevisionReader,
 )
+from dom_domych.application.requests.emergency import EmergencyService
 from dom_domych.application.requests.events import RequestEventHandler, register_request_events
 from dom_domych.application.requests.service import DemoSubmitPort, RequestService
 from dom_domych.domain.knowledge.ports import EmbeddingPort
@@ -33,6 +34,7 @@ from dom_domych.domain.ports.core import Clock, DocumentPort, ExecutorPort
 from dom_domych.infrastructure.postgres.agent_runs import PostgresRunStore
 from dom_domych.infrastructure.postgres.case_candidates import PostgresCaseReader
 from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
+from dom_domych.infrastructure.postgres.emergency_evidence import PostgresEmergencyEvidenceQueue
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
 from dom_domych.infrastructure.postgres.message_agent import (
     PostgresMessagePrincipals,
@@ -77,14 +79,22 @@ def build_k_tool_handlers(
         KnowledgeService(knowledge_repository, frozenset(), embeddings),
         clock,
     )
+    request_cases = PostgresRequestCases(sessions)
     requests = RequestService(
-        PostgresRequestCases(sessions),
+        request_cases,
         knowledge_repository,
         PostgresRequestStore(sessions, clock),
         executor,
         clock,
     )
-    return KToolHandlers(cases, knowledge, requests)
+    emergencies = EmergencyService(
+        request_cases,
+        knowledge_repository,
+        requests,
+        PostgresEmergencyEvidenceQueue(sessions, clock),
+        clock,
+    )
+    return KToolHandlers(cases, knowledge, requests, emergencies)
 
 
 def build_k_coordinator(

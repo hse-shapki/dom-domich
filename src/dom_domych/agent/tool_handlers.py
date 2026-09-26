@@ -11,6 +11,8 @@ from dom_domych.agent.contracts import (
     CaseGet,
     CasePort,
     CaseSearch,
+    EmergencyHandle,
+    EmergencyPort,
     KnowledgePort,
     KnowledgeSearch,
     RequestGetStatus,
@@ -31,6 +33,7 @@ _CAPABILITIES = {
     "request.prepare": "request.write",
     "request.submit": "request.submit",
     "request.get_status": "request.read",
+    "emergency.handle": "emergency.handle",
 }
 
 
@@ -41,10 +44,17 @@ def _error(code: ErrorCode) -> ToolResult:
 class KToolHandlers:
     """Проверяет схему и права до обращения к port; house/actor не берёт из JSON."""
 
-    def __init__(self, cases: CasePort, knowledge: KnowledgePort, requests: RequestPort) -> None:
+    def __init__(
+        self,
+        cases: CasePort,
+        knowledge: KnowledgePort,
+        requests: RequestPort,
+        emergencies: EmergencyPort | None = None,
+    ) -> None:
         self.cases = cases
         self.knowledge = knowledge
         self.requests = requests
+        self.emergencies = emergencies
 
     async def execute(self, name: str, arguments_json: str, context: TrustedContext) -> ToolResult:
         model = TOOL_INPUTS.get(name)
@@ -126,6 +136,32 @@ class KToolHandlers:
                     ok=True,
                     data=status_view.model_dump(mode="json"),
                     entity_version=status_view.draft_version,
+                )
+            if isinstance(command, EmergencyHandle):
+                if self.emergencies is None:
+                    return _error(ErrorCode.DEPENDENCY_UNAVAILABLE)
+                outcome = await self.emergencies.handle(
+                    command.case_id, command.expected_case_version, context
+                )
+                return ToolResult(
+                    ok=True,
+                    data={
+                        "case_id": str(outcome.case_id),
+                        "status": outcome.status,
+                        "urgency_source_ref": outcome.urgency_source_ref,
+                        "evidence_delivery_id": str(outcome.evidence_delivery_id),
+                        "request_id": str(outcome.request_id) if outcome.request_id else None,
+                        "rule_source_ref": outcome.rule_source_ref,
+                        "deadline_seconds": (
+                            int(outcome.deadline.total_seconds()) if outcome.deadline else None
+                        ),
+                        "deadline_origin": outcome.deadline_origin,
+                    },
+                    source_refs=tuple(
+                        ref
+                        for ref in (outcome.urgency_source_ref, outcome.rule_source_ref)
+                        if ref is not None
+                    ),
                 )
         except ValueError as exc:
             if str(exc) == "VERSION_CONFLICT":

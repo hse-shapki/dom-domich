@@ -6,6 +6,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from dom_domych.agent.contracts import RequestPrepare, RequestView, TrustedContext
+from dom_domych.agent.fakes import FakeCasePort, FakeKnowledgePort, FakeRequestPort
+from dom_domych.agent.tool_handlers import KToolHandlers
 from dom_domych.application.requests.emergency import EmergencyService
 from dom_domych.application.requests.service import RequestCase
 from dom_domych.contracts.base import ExecutionMode, PrincipalType
@@ -110,3 +112,30 @@ async def test_missing_location_or_rule_requests_clarification_without_poll() ->
     service = EmergencyService(Cases(located), Rules(None), requests, evidence, FixedClock())
     assert (await service.handle(case_id, 1, context)).status == "needs_verified_responsible"
     assert requests.calls == []
+
+
+@pytest.mark.asyncio
+async def test_emergency_is_available_through_typed_agent_handler() -> None:
+    house_id, case_id = uuid4(), uuid4()
+    case = RequestCase(
+        case_id, house_id, "emergency", 1, "detected", "leak", "Течёт", "Течёт вода", ""
+    )
+    service = EmergencyService(Cases(case), Rules(None), Requests(), Evidence(), FixedClock())
+    fake_cases = FakeCasePort()
+    handlers = KToolHandlers(
+        fake_cases,
+        FakeKnowledgePort(),
+        FakeRequestPort(fake_cases),
+        service,
+    )
+    context = _context(house_id)
+
+    result = await handlers.execute(
+        "emergency.handle",
+        f'{{"case_id":"{case_id}","expected_case_version":1}}',
+        context,
+    )
+
+    assert result.ok
+    assert result.data is not None and result.data["status"] == "clarify_location"
+    assert result.source_refs == (f"event:{context.event_id}",)

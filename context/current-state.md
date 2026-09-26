@@ -17,7 +17,8 @@ K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. М�
 частичный offload вызвал swap. Live inference и p50/p95 не подтверждены;
 подробности: `docs/engineering/11-track-k-inference-probe.md`.
 K03: runtime проверяет allowlist, JSON schema, режим, capability и бюджет;
-единый реестр связывает все восемь опубликованных K schemas с KToolHandlers;
+единый реестр связывает девять опубликованных K schemas с KToolHandlers,
+включая срочный `emergency.handle` без ожидания опроса;
 production K case/knowledge/request services собираются одним composition helper,
 но live inference и Z production ports отсутствуют.
 использует общий A01 `ToolResult`, связывает ответ с tool call ID и не выдаёт
@@ -65,8 +66,9 @@ approval, submit в demo идемпотентен через operation key, ст
 K11: EmergencyService готовит draft сразу после проверки места и ответственного,
 не зависит от poll; при пробеле в месте/источнике возвращает точное уточнение,
 не выдумывает срок. Evidence intent идёт только в личный outbox, идемпотентен
-на PostgreSQL 16. Fake route и outbox tests проходят; live MAX и общий runtime
-не подключены.
+на PostgreSQL 18. Use case опубликован как typed agent tool и собран с production
+K services; fake route и PostgreSQL tests проходят. Live MAX и production Z
+executor не подключены.
 K12: при доверенной регистрации проверенное и применимое правило с origin
 `request.registered` ставит job атомарно с обновлением дела. Due handler повторно
 проверяет house/version/status под lock и сохраняет черновик followup со ссылками

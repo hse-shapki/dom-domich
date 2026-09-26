@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
@@ -101,6 +101,11 @@ class RequestGetStatus(StrictModel):
     request_id: UUID
 
 
+class EmergencyHandle(StrictModel):
+    case_id: UUID
+    expected_case_version: int = Field(ge=1)
+
+
 class RequestView(StrictModel):
     request_id: UUID
     case_id: UUID
@@ -161,6 +166,38 @@ class RequestPort(Protocol):
     async def get_status(self, request_id: UUID, context: TrustedContext) -> RequestView | None: ...
 
 
+class EmergencyResult(Protocol):
+    @property
+    def case_id(self) -> UUID: ...
+
+    @property
+    def status(self) -> str: ...
+
+    @property
+    def urgency_source_ref(self) -> str: ...
+
+    @property
+    def evidence_delivery_id(self) -> UUID: ...
+
+    @property
+    def request_id(self) -> UUID | None: ...
+
+    @property
+    def rule_source_ref(self) -> str | None: ...
+
+    @property
+    def deadline(self) -> timedelta | None: ...
+
+    @property
+    def deadline_origin(self) -> str | None: ...
+
+
+class EmergencyPort(Protocol):
+    async def handle(
+        self, case_id: UUID, expected_case_version: int, context: TrustedContext
+    ) -> EmergencyResult: ...
+
+
 TOOL_INPUTS: dict[str, type[StrictModel]] = {
     "case.search": CaseSearch,
     "case.get": CaseGet,
@@ -170,4 +207,5 @@ TOOL_INPUTS: dict[str, type[StrictModel]] = {
     "request.prepare": RequestPrepare,
     "request.submit": RequestSubmit,
     "request.get_status": RequestGetStatus,
+    "emergency.handle": EmergencyHandle,
 }
