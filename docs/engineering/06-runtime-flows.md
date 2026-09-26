@@ -164,6 +164,13 @@ sequenceDiagram
 | `document.ready` | PDF worker | Attachment/outbox |
 | `delivery.failed` | Outbox | Статус недоставки, ограниченный retry/другой допустимый шаг |
 
+K composition регистрирует обработчик изменения request/document раньше agent
+continuation, поэтому новый run читает уже зафиксированную версию. Тот же helper
+подключает revision reader и deadline handler к общим A dispatcher/scheduler и
+собирает coordinator на production K repositories. Это проверено на локальном
+PostgreSQL 18 с fake LLM и fake Z ports. Отдельный production process нельзя
+включать до появления PostgreSQL реализаций Z `ExecutorPort` и `DocumentPort`.
+
 ## 8. Аварии самой системы
 
 - Падение после inbox insert: событие подхватит worker.

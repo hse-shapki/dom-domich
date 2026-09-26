@@ -18,6 +18,8 @@ K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. М�
 подробности: `docs/engineering/11-track-k-inference-probe.md`.
 K03: runtime проверяет allowlist, JSON schema, режим, capability и бюджет;
 единый реестр связывает все восемь опубликованных K schemas с KToolHandlers;
+production K case/knowledge/request services собираются одним composition helper,
+но live inference и Z production ports отсутствуют.
 использует общий A01 `ToolResult`, связывает ответ с tool call ID и не выдаёт
 ошибку handler за успех. Fake tool-chain проверен в `tests/agent/test_k03_runtime.py`.
 Постоянный audit, реальные handlers и вход из inbox ещё не подключены.
@@ -76,8 +78,9 @@ versioned case event. `done` не закрывает дело. Повтор за
 `evidence.added` атомарно пишутся в domain inbox. Новый consumer и migration/check
 проверены на PostgreSQL 18; producers Z, общий production worker и live inference
 ещё не подключены.
-K14: сквозная локальная проверка проходит от due job A через K followup draft
-до сохранённого нового agent run на PostgreSQL 16 с fake LLM. Повтор,
+K14: сквозная локальная проверка проходит от due job A через production K
+composition и followup draft до сохранённого нового agent run на PostgreSQL 18
+с fake LLM/Z ports. Повтор,
 устаревшая версия и чужой дом проверены; полный Z poll/PDF/MAX путь пока
 невозможен без production ports/composition.
 K15: оценщик traces считает маршруты, критические ошибки, источник, задержки
@@ -96,7 +99,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Корневые правила для агентов | Есть | `AGENTS.md` |
 | Постоянный контекст | Есть | `context/README.md`, `decisions.md`, `product.md`, `engineering.md`, `current-state.md` |
 | Чистые доменные правила опросов Z01 | Проверены на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`: 23 теста |
-| Общие контракты A01 / предложения K00/Z00 | Частично: DTO/ports, K fake handlers и tests совместимы; production ports не связаны | `src/dom_domych/contracts/`, `src/dom_domych/domain/ports/core.py`, `tests/contracts/test_core.py`, `tests/agent/test_k00_contracts.py` |
+| Общие контракты A01 / предложения K00/Z00 | Частично: DTO/ports и K tool registry совместимы; production K services собраны, Z repositories не связаны | `src/dom_domych/contracts/`, `src/dom_domych/domain/ports/core.py`, `src/dom_domych/application/agent/composition.py`, K00/K03/K14 tests |
 | Синтетический дом Z02 | Проверен как fixture и seed A02 | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`, `scripts/seed_demo_house.py`: 4 fixture-теста |
 | AudienceService Z03 | Частично: выбор и история snapshot проверены на fake | `src/dom_domych/domain/audiences/models.py`, `src/dom_domych/application/audiences/service.py`, `tests/domain/test_audience_service.py`; нет PostgreSQL repository/migration |
 | PollService Z04 | Частично: поведение и конкуренция проверены на fake | `src/dom_domych/domain/polls/models.py`, `src/dom_domych/application/polls/service.py`, `tests/domain/test_poll_service.py`; нет PostgreSQL repository/migration и MAX callback |
@@ -128,7 +131,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Backup/restore A15 | Проверено локально на PostgreSQL 18 и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Alembic head, 2 дома/20 проживаний и PDF с тем же SHA-256, временные данные удалены |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
-| Агент K00–K04 | Частично: contracts, dataset, fake LLM/runtime/continuation | `src/dom_domych/agent/`, `tests/agent/`, `evals/`; A01 integration, durable run store и live inference открыты |
+| Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены с fake LLM | `src/dom_domych/agent/`, `application/agent/composition.py`, `tests/agent/`, `evals/`; live inference и общий process открыты |
 | Хранение опросов | Не реализовано | Z domain/application и A core есть; PostgreSQL repository/migration и wiring отсутствуют |
 | Рабочий стенд и внешние проверки | Не подтверждены | Production Compose schema валидна, но Docker daemon недоступен; доступ MAX/модели, HTTPS, mobile/web и цельный runtime не проверялись |
 
@@ -136,8 +139,9 @@ K16: четыре вариативных демо-пути, ссылки на п
 
 ## Следующий шаг по утверждённому плану
 
-Следующий блокирующий шаг — объединить K/Z production repositories, migrations и handlers с A14
-composition root. До этого inbox/scheduler нельзя запускать как будто события обработаны. Затем нужны
+K handlers и repositories теперь собираются в отдельном composition helper для A dispatcher/scheduler.
+Следующий блокирующий шаг — реализовать Z production repositories/producers и передать их в этот
+helper из A14 process root; без них цельный inbox/scheduler нельзя запускать. Затем нужны
 реальный MAX/LLM доступ, HTTPS smoke, PostgreSQL 17/pgvector restore test и G1–G3/mobile-web
 прогоны. Все 168 tests, включая PostgreSQL integrations, прошли на временной локальной
 PostgreSQL 18; БД после проверки удалена.

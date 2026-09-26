@@ -2,31 +2,22 @@
 
 import os
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import delete, select
 
-from dom_domych.agent.continuation import AgentCoordinator, ContextBuilder
 from dom_domych.agent.llm import FakeLlmPort, LlmResponse
-from dom_domych.agent.runtime import AgentRuntime
-from dom_domych.application.agent.events import (
-    AgentEventHandler,
-    PostgresContinuationCaseResolver,
-    register_agent_events,
+from dom_domych.application.agent.composition import (
+    build_k_coordinator,
+    register_k_continuations,
 )
-from dom_domych.application.cases.candidates import CandidateService
 from dom_domych.application.jobs.inbox_worker import EventDispatcher
 from dom_domych.application.jobs.scheduler import JobScheduler, RevisionRouter
-from dom_domych.application.requests.deadline import (
-    RequestDeadlineHandler,
-    RequestDeadlineRevisionReader,
-)
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
-from dom_domych.domain.ports.core import JobIntent
+from dom_domych.domain.executor.models import ApprovedDraft, DemoOperation
+from dom_domych.domain.ports.core import DocumentRef, JobIntent, RequestRef
 from dom_domych.infrastructure.postgres.agent_models import AgentRunRow
-from dom_domych.infrastructure.postgres.agent_runs import PostgresRunStore
-from dom_domych.infrastructure.postgres.case_candidates import PostgresCaseReader
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
 from dom_domych.infrastructure.postgres.jobs import PostgresJobQueue
 from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
@@ -41,6 +32,21 @@ class MovingClock:
 
     def now(self) -> datetime:
         return self.at
+
+
+class UnusedExecutor:
+    async def submit(
+        self, draft: ApprovedDraft, operation_key: str, house_id: UUID
+    ) -> DemoOperation:
+        raise AssertionError("deadline continuation must not submit a request")
+
+    async def get_status(self, request_id: UUID, house_id: UUID) -> RequestRef:
+        raise AssertionError("deadline continuation must not read an external status")
+
+
+class UnusedDocuments:
+    async def get(self, document_id: UUID, house_id: UUID) -> DocumentRef | None:
+        raise AssertionError("deadline continuation must not read a document")
 
 
 @pytest.mark.asyncio
@@ -147,20 +153,16 @@ async def test_registered_request_deadline_dispatches_fresh_run_once() -> None:
                     )
                 )
             llm = FakeLlmPort([LlmResponse("Нужно проверить черновик и статус")])
-            coordinator = AgentCoordinator(
-                ContextBuilder(
-                    CandidateService(PostgresCaseReader(sessions)), PostgresRunStore(sessions)
-                ),
-                AgentRuntime(llm, []),
-            )
-            agent = AgentEventHandler(PostgresContinuationCaseResolver(sessions), coordinator)
+            coordinator = build_k_coordinator(sessions, llm, clock, UnusedExecutor())
             dispatcher, revisions = EventDispatcher({}), RevisionRouter()
-            register_agent_events(
+            register_k_continuations(
                 dispatcher,
                 revisions,
-                agent,
-                RequestDeadlineHandler(sessions, clock),
-                RequestDeadlineRevisionReader(sessions),
+                sessions,
+                clock,
+                coordinator,
+                UnusedExecutor(),
+                UnusedDocuments(),
             )
             scheduler = JobScheduler(sessions, dispatcher, revisions, clock, "k14-worker")
             assert await scheduler.run_once()
@@ -189,7 +191,7 @@ async def test_registered_request_deadline_dispatches_fresh_run_once() -> None:
                 entity=EntityEventPayload(entity_id=case_id, entity_version=5),
             )
             with pytest.raises(ValueError, match="CASE_NOT_FOUND"):
-                await agent(foreign_event)
+                await dispatcher.handle(foreign_event)
             async with sessions.begin() as session:
                 stale_id = await PostgresJobQueue(session).enqueue(
                     JobIntent(
