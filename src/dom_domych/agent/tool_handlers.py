@@ -134,5 +134,13 @@ class KToolHandlers:
                 return _error(ErrorCode.INSUFFICIENT_CONTEXT)
             if str(exc) == "MESSAGE_ALREADY_ATTACHED":
                 return _error(ErrorCode.CONFLICT)
+            if str(exc) == "CANDIDATES_CHANGED":
+                return _error(ErrorCode.CANDIDATES_CHANGED)
+            if str(exc) == "INVALID_STATE":
+                return _error(ErrorCode.INVALID_STATE)
+            if str(exc) == "CONFLICT":
+                return _error(ErrorCode.CONFLICT)
             raise
+        except PermissionError:
+            return _error(ErrorCode.FORBIDDEN)
         raise AssertionError("Неизвестная модель tool")

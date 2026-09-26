@@ -37,6 +37,12 @@ K07: созданы `cases` и поиск кандидатов с домом, л
 недавно закрытыми делами и консервативным vector fallback. Миграция и
 изоляция домов/подъездов проверены на PostgreSQL 16 без pgvector;
 vector branch и реальные embeddings ещё не проверены.
+K08: CaseService проверяет доверенный event/actor/capability, PostgreSQL
+writer под advisory lock повторяет поиск кандидатов, хранит operation hash,
+case messages, versioned events и recurrence. Тест на PostgreSQL 16 провёл
+12 конкурентных сообщений к одному делу, повтор операции, stale version,
+два дела в одном сообщении и чужой дом. Evidence-таблица есть, но её
+application use case и сквозная связка с A/Z ещё не подключены.
 
 | Область | Состояние | Проверяемое основание |
 |---|---|---|
