@@ -10,8 +10,9 @@
 Production ports и PostgreSQL ещё не подключены.
 K01: подготовлен русский набор из 24 синтетических кейсов и нулевой baseline
 в `evals/`; прогон реальной модели пока не выполнен.
-K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. Модели и
-`llama.cpp` загружены локально, но на 8 GiB Mac текстовая модель не дала
+K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. Модели
+проверены по SHA-256 и удалены из cache; `llama.cpp` доступен локально.
+На 8 GiB Mac текстовая модель не дала
 успешного ответа: полный Metal offload упёрся в память, CPU превысил 120 с,
 частичный offload вызвал swap. Live inference и p50/p95 не подтверждены;
 подробности: `docs/engineering/11-track-k-inference-probe.md`.
