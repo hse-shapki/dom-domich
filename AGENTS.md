@@ -27,7 +27,7 @@
 
 ## 3. Что уже сделано
 
-**Состояние проверено 25.09.2026: A/Z модули и K00–K04 частично реализованы; сквозного приложения и live MAX пока нет.**
+**Состояние проверено 26.09.2026: A/Z модули и K00–K14 частично реализованы; цельного приложения и live MAX пока нет.**
 
 | Часть | Статус | Подтверждение |
 |---|---|---|
@@ -52,7 +52,7 @@
 | Итог результата Z13 | Частично, проверено с fake case/poll/outbox | Те же модули resolution: `closed` только после положительного опроса, `reopened` при отрицательном, `resolution_unconfirmed` при нехватке ответов; нет K production transition/jobs |
 | PDF QA Z15 | Частично, локальные 4 образца проверены | `docs/release/zamira-pdf-qa.md`; MAX mobile/web и PDF после outbox не проверены |
 | Материалы Z16 | Частично, локальный handoff готов | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
-| Python-проект, зависимости и CI A00 | Проверено локально; CI ещё не запускался на GitHub | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 168 тестов, Ruff и mypy проходят |
+| Python-проект, зависимости и CI A00 | Проверено локально; CI ещё не запускался на GitHub | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 222 теста, Ruff и mypy проходят |
 | PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18, PG17/pgvector Compose не запущен | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`; миграция и повторный seed без дублей |
 | HouseContextPort A05 | Частично: чтение реестра и стык с Z проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: приглашение, привязка MAX ID, DM `/start`, stopped и выбор дома проверены локально | `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, `tests/infrastructure/test_demo_enrollment.py`; выдача кодов реальным operator и live MAX ещё не подключены |
@@ -74,9 +74,9 @@
 | K02: inference | Частично: HTTPX adapter/fake/timeout/retry проверены; 8 GiB Mac не выдержал live probe | `src/dom_domych/agent/llm.py`, `infrastructure/llm/llama_server.py`, `tests/agent/test_k02_llama_server.py`, `docs/engineering/11-track-k-inference-probe.md` |
 | K03: agent runtime | Частично: allowlist/schema/capability/budget и девять K tools собраны с production K services; live inference не проверен | `src/dom_domych/agent/runtime.py`, `agent/tools.py`, `application/agent/composition.py`, K03/K14 tests |
 | K04: continuation | Частично: PostgreSQL runs/pending/tool audit, fresh context и K dispatcher/scheduler composition проверены локально; production process не включён без Z ports | `src/dom_domych/agent/continuation.py`, `application/agent/composition.py`, K04/K14 tests |
-| K05: knowledge | Частично: разрешённый HTTPS ingestion, review, русская FTS и scoped rules проверены на PostgreSQL 16; pgvector branch/live embeddings не проверены | `application/knowledge/service.py`, `infrastructure/postgres/knowledge.py`, `infrastructure/llm/embeddings.py`, `tests/infrastructure/test_k05_knowledge.py` |
+| K05: knowledge | Частично: разрешённый HTTPS ingestion, review, русская FTS и scoped rules проверены на PostgreSQL 18; PG17/pgvector/live embeddings не проверены | `application/knowledge/service.py`, `infrastructure/postgres/knowledge.py`, `infrastructure/llm/embeddings.py`, `tests/infrastructure/test_k05_knowledge.py` |
 | K06: triage | Частично: пять маршрутов, несколько тем и срочный guard подключены к MAX inbox; actor/дом берутся из подтверждённого проживания, ответ ставится в outbox; live eval отсутствует | `agent/triage.py`, `application/agent/messages.py`, `infrastructure/postgres/message_agent.py`, K06/K14 tests |
-| K07: case retrieval | Частично: house/location/object/30-day closed filters и FTS проверены на PostgreSQL 16; pgvector branch не проверена | `application/cases/candidates.py`, `infrastructure/postgres/case_candidates.py`, `tests/infrastructure/test_k07_candidates.py` |
+| K07: case retrieval | Частично: house/location/object/30-day closed filters и FTS проверены на PostgreSQL 18; PG17/pgvector branch не проверена | `application/cases/candidates.py`, `infrastructure/postgres/case_candidates.py`, `tests/infrastructure/test_k07_candidates.py` |
 | K08: CaseService | Частично: create/attach/recurrence, events, idempotency, конкурентный dedupe и Z06 case/author adapter проверены на PostgreSQL 18; Z transactional repository ещё нужен | `application/cases/service.py`, `infrastructure/postgres/case_writer.py`, `initiative_cases.py`, K08 tests |
 | K09: обычная проблема | Частично: scope/audience/poll/evidence маршрут проверен с Z fake; evidence refs на PostgreSQL, но общий Z PollRepository/UoW/outbox ещё отсутствует | `application/cases/problem.py`, `application/cases/evidence.py`, `infrastructure/postgres/case_evidence.py`, K09 tests |
 | K10: RequestService | Частично: verified rule, версии draft/approval, idempotent demo submit, trusted registration и связь готового документа проверены на PostgreSQL 18 + fake Z ports; production Z repositories отсутствуют | `application/requests/service.py`, `application/requests/events.py`, `infrastructure/postgres/requests.py`, K10/K13 tests |

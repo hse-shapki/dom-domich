@@ -1,13 +1,12 @@
 # Проверенное состояние проекта
 
-Проверено 25.09.2026 по рабочему дереву репозитория. Этот файл меняется после реализации задач; старое значение статуса не является вечной истиной.
+Проверено 26.09.2026 по ветке `kae`. Этот файл меняется после реализации задач; старое значение статуса не является вечной истиной.
 
 ## Факты на дату проверки
 
-После слияния `main` в `kae` K00 реализована на уровне contract/fake handlers
-с общим A01 `TrustedContext`/`ToolResult` в `src/dom_domych/agent/`,
-`tests/agent/test_k00_contracts.py`, `docs/engineering/10-track-k-contracts.md`.
-Production ports и PostgreSQL ещё не подключены.
+После слияния `main` в `kae` K00 contracts используют общий A01
+`TrustedContext`/`ToolResult`; девять schemas связаны с production K services
+через единый tool registry. Z production ports остаются внешней зависимостью.
 K01: подготовлен русский набор из 24 синтетических кейсов и нулевой baseline
 в `evals/`; прогон реальной модели пока не выполнен.
 K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. Модели
@@ -19,19 +18,17 @@ K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. М�
 K03: runtime проверяет allowlist, JSON schema, режим, capability и бюджет;
 единый реестр связывает девять опубликованных K schemas с KToolHandlers,
 включая срочный `emergency.handle` без ожидания опроса;
-production K case/knowledge/request services собираются одним composition helper,
-но live inference и Z production ports отсутствуют.
-использует общий A01 `ToolResult`, связывает ответ с tool call ID и не выдаёт
-ошибку handler за успех. Fake tool-chain проверен в `tests/agent/test_k03_runtime.py`.
-Постоянный audit, реальные handlers и вход из inbox ещё не подключены.
+production K case/knowledge/request services собираются одним composition helper.
+Runtime связывает ответ с tool call ID, сохраняет краткий audit и не выдаёт ошибку
+handler за успех. Production K handlers и вход из inbox подключены; live inference
+и Z production ports отсутствуют.
 K04: `ContextBuilder` перечитывает текущую версию дела и actor-scoped pending
 question. PostgreSQL хранит runs, pending questions и краткий tool audit;
-миграция и восстановление через новый store проверены на PostgreSQL 16.
-Связка с inbox и повторное воспроизведение итогового ответа ещё не реализованы.
+миграция, восстановление и composition с inbox проверены на PostgreSQL 18.
 K05: разрешённый HTTPS источник поступает как непроверенная версия, затем
 явно review; поиск использует русскую FTS по проверенным версиям и изолирует
 дома. Rule требует проверенного источника, scope и явной точки отсчёта срока.
-PostgreSQL 16 migration/search и HTTPX embedding adapter проверены локально;
+PostgreSQL 18 migration/search и HTTPX embedding adapter проверены локально;
 ветка pgvector в целевом PG17 и live embedding не проверены.
 K06: типизированная классификация пяти типов и разделение нескольких проблем
 в сообщении проверены fake tests. Срочные выражения имеют консервативный
@@ -41,7 +38,7 @@ fallback; вопрос без проверенного источника вед
 сохраняется в outbox. Живые agent evals не измерены.
 K07: созданы `cases` и поиск кандидатов с домом, локацией, объектом, FTS,
 недавно закрытыми делами и консервативным vector fallback. Миграция и
-изоляция домов/подъездов проверены на PostgreSQL 16 без pgvector;
+изоляция домов/подъездов проверены на PostgreSQL 18 без pgvector;
 vector branch и реальные embeddings ещё не проверены.
 K08: CaseService проверяет доверенный event/actor/capability, PostgreSQL
 writer под advisory lock повторяет поиск кандидатов, хранит operation hash,
@@ -54,7 +51,7 @@ application use case и сквозная связка с A/Z ещё не под�
 K09: ProblemWorkflow проверяет scope дела, создаёт frozen audience/poll на
 fake atomic store, не открывает опрос при N=0 и передаёт адресный evidence
 запрос только ответившим «да» по доверенному итогу Z. EvidenceService пишет
-private ref и versioned event на PostgreSQL 16. Production объединение Z poll,
+private ref и versioned event на PostgreSQL 18. Production объединение Z poll,
 case/outbox/jobs в одной UoW отсутствует, поэтому сквозной маршрут не готов.
 K10: RequestService сверяет актуальную версию дела и проверенное правило,
 хранит draft hash/version и явное согласование. Изменение черновика сбрасывает
@@ -72,8 +69,9 @@ executor не подключены.
 K12: при доверенной регистрации проверенное и применимое правило с origin
 `request.registered` ставит job атомарно с обновлением дела. Due handler повторно
 проверяет house/version/status под lock и сохраняет черновик followup со ссылками
-на регистрацию и источник; отправку не утверждает. Проверено на PostgreSQL 16.
-Общий scheduler composition, live MAX и нормативная ревизия источников не проверены.
+на регистрацию и источник; отправку не утверждает. K handler/revision reader
+подключены к A scheduler composition и проверены на PostgreSQL 18. Production
+process, live MAX и нормативная ревизия источников не проверены.
 K13: bridge принимает poll/evidence/request/resolution/document события только от
 доверенных источников, разрешает case в доме и запускает новый followup run с
 актуальной версией дела. Перед continuation `request.status_changed` перечитывается
@@ -86,8 +84,7 @@ versioned case event. `done` не закрывает дело. Повтор за
 ещё не подключены.
 K14: сквозная локальная проверка проходит от due job A через production K
 composition и followup draft до сохранённого нового agent run на PostgreSQL 18
-с fake LLM/Z ports. Повтор,
-устаревшая версия и чужой дом проверены; полный Z poll/PDF/MAX путь пока
+с fake LLM/Z ports. Повтор, устаревшая версия и чужой дом проверены; полный Z poll/PDF/MAX путь пока
 невозможен без production ports/composition.
 Отдельно проверен путь нормализованного MAX message через durable inbox,
 подтверждённое проживание, typed triage и production `case.create` до agent run
@@ -123,7 +120,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Итоги проверки результата Z13 | Частично: closed/reopened/unconfirmed проверены на fake | Те же файлы resolution; отдельный K production transition и отмена jobs ещё нужны |
 | PDF QA Z15 | Частично: локально просмотрены 4 образца | `docs/release/zamira-pdf-qa.md`; mobile/web MAX и outbox ещё не проверены |
 | Материалы Z16 | Частично: локальный handoff и воспроизведение PDF готовы | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
-| Python-проект и зависимости A00 | Проверено локально | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; `uv sync --locked`, Ruff, mypy, 168 tests прошли; удалённый CI ещё не запускался |
+| Python-проект и зависимости A00 | Проверено локально | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; `uv sync --locked`, Ruff, mypy, 222 tests прошли; удалённый CI ещё не запускался |
 | PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: migration/check и повторный seed; PG17/pgvector Compose не запущен |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: приглашение, привязка MAX ID, DM `/start`, stopped и выбор дома проверены локально | `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, `tests/infrastructure/test_demo_enrollment.py`; выдача кодов реальным operator и live MAX ещё не подключены |
@@ -152,8 +149,8 @@ K handlers и repositories теперь собираются в отдельно
 Следующий блокирующий шаг — реализовать Z production repositories/producers и передать их в этот
 helper из A14 process root; без них цельный inbox/scheduler нельзя запускать. Затем нужны
 реальный MAX/LLM доступ, HTTPS smoke, PostgreSQL 17/pgvector restore test и G1–G3/mobile-web
-прогоны. Все 168 tests, включая PostgreSQL integrations, прошли на временной локальной
-PostgreSQL 18; БД после проверки удалена.
+прогоны. Все 222 tests, включая PostgreSQL integrations, прошли на локальной
+PostgreSQL 18; целевые PostgreSQL 17/pgvector и Docker Compose не проверялись.
 
 ## Как обновлять после задачи
 
