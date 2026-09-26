@@ -71,7 +71,7 @@
 | Release A17 | Частично: runbook, env placeholders, secret/history audit, transitive license inventory и evidence/archive tool подготовлены | `scripts/release_audit.py`, `docs/release/platform-operations.md`; история чиста, но лицензия собственного проекта не выбрана; tag/digests допустимы только после G3 |
 | K00: стыки агента, дел и знаний | Проверено на contract/fake уровне; production порты ещё не связаны | `src/dom_domych/agent/contracts.py`, `fakes.py`, `tool_handlers.py`, `tests/agent/test_k00_contracts.py` |
 | K01: eval dataset | Проверен формат и покрытие; модель не запускалась | `evals/k01_cases.jsonl`, `evals/README.md`, `tests/agent/test_k01_dataset.py` |
-| K02: inference | Частично: port/fake/timeout/retry; live probe не выполнен | `src/dom_domych/agent/llm.py`, `docs/engineering/11-track-k-inference-probe.md` |
+| K02: inference | Частично: HTTPX adapter/fake/timeout/retry проверены; 8 GiB Mac не выдержал live probe | `src/dom_domych/agent/llm.py`, `infrastructure/llm/llama_server.py`, `tests/agent/test_k02_llama_server.py`, `docs/engineering/11-track-k-inference-probe.md` |
 | K03: agent runtime | Частично: локальный allowlist/schema/capability/budget с fake tests, без persistence/real handlers | `src/dom_domych/agent/runtime.py`, `tests/agent/test_k03_runtime.py` |
 | K04: continuation | Частично: fresh context и pending questions на fake store; durable persistence отсутствует | `src/dom_domych/agent/continuation.py`, `tests/agent/test_k04_continuation.py` |
 | Хранение опросов и production-интеграция агента | Не реализованы | A/Z core и K fake runtime есть; K/Z ORM интеграций ещё нет |

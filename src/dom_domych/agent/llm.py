@@ -13,6 +13,7 @@ from typing import Protocol
 class LlmToolCall:
     name: str
     arguments_json: str
+    call_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +26,7 @@ class LlmPort(Protocol):
     """Модель получает только подготовленный контекст и JSON schemas."""
 
     async def complete(
-        self, messages: Sequence[dict[str, str]], tools: Sequence[dict[str, object]]
+        self, messages: Sequence[dict[str, object]], tools: Sequence[dict[str, object]]
     ) -> LlmResponse: ...
 
 
@@ -40,7 +41,7 @@ class RetryingLlmPort:
         self.attempts = attempts
 
     async def complete(
-        self, messages: Sequence[dict[str, str]], tools: Sequence[dict[str, object]]
+        self, messages: Sequence[dict[str, object]], tools: Sequence[dict[str, object]]
     ) -> LlmResponse:
         for attempt in range(self.attempts):
             try:
@@ -61,7 +62,7 @@ class FakeLlmPort:
         self.call_count = 0
 
     async def complete(
-        self, messages: Sequence[dict[str, str]], tools: Sequence[dict[str, object]]
+        self, messages: Sequence[dict[str, object]], tools: Sequence[dict[str, object]]
     ) -> LlmResponse:
         self.call_count += 1
         if not self.responses:
