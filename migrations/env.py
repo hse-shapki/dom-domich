@@ -13,6 +13,7 @@ from dom_domych.infrastructure.postgres import models as core_models  # noqa: F4
 from dom_domych.infrastructure.postgres import agent_models  # noqa: F401
 from dom_domych.infrastructure.postgres import knowledge_models  # noqa: F401
 from dom_domych.infrastructure.postgres import case_models  # noqa: F401
+from dom_domych.infrastructure.postgres import request_models  # noqa: F401
 from dom_domych.infrastructure.postgres.base import Base
 
 config = context.config

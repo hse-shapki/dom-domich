@@ -79,6 +79,7 @@
 | K07: case retrieval | Частично: house/location/object/30-day closed filters и FTS проверены на PostgreSQL 16; pgvector branch не проверена | `application/cases/candidates.py`, `infrastructure/postgres/case_candidates.py`, `tests/infrastructure/test_k07_candidates.py` |
 | K08: CaseService | Частично: create/attach/recurrence, events, idempotency и конкурентный dedupe проверены на PostgreSQL 16; A/Z wiring ещё нужна | `application/cases/service.py`, `infrastructure/postgres/case_writer.py`, `tests/infrastructure/test_k08_case_service.py` |
 | K09: обычная проблема | Частично: scope/audience/poll/evidence маршрут проверен с Z fake; evidence refs на PostgreSQL, но общий Z PollRepository/UoW/outbox ещё отсутствует | `application/cases/problem.py`, `application/cases/evidence.py`, `infrastructure/postgres/case_evidence.py`, K09 tests |
+| K10: RequestService | Частично: verified rule, версии draft/approval, idempotent demo submit и trusted registration проверены на PostgreSQL 16 + fake executor; Z document/production executor не связаны | `application/requests/service.py`, `infrastructure/postgres/requests.py`, `tests/infrastructure/test_k10_requests.py` |
 | Хранение опросов и production-интеграция агента | Не реализованы | A/Z core и K fake runtime есть; K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | A/Z tests ранее проходили с PostgreSQL 18; совместные проверки после слияния указаны в `context/current-state.md`; PG17/pgvector, реальный MAX и цельный стенд не проверены |
 

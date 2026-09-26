@@ -140,6 +140,14 @@ class KToolHandlers:
                 return _error(ErrorCode.INVALID_STATE)
             if str(exc) == "CONFLICT":
                 return _error(ErrorCode.CONFLICT)
+            if str(exc) == "APPROVAL_REQUIRED":
+                return _error(ErrorCode.APPROVAL_REQUIRED)
+            if str(exc) in {"INSUFFICIENT_CONTEXT", "UNVERIFIED_RESPONSIBLE", "SOURCE_REF_MISSING"}:
+                return _error(ErrorCode.INSUFFICIENT_CONTEXT)
+            if str(exc) == "SOURCE_REF_UNVERIFIED":
+                return _error(ErrorCode.VALIDATION_ERROR)
+            if str(exc) in {"LIVE_SUBMISSION_NOT_CONFIGURED", "EXECUTOR_RESULT_MISMATCH"}:
+                return _error(ErrorCode.DEPENDENCY_UNAVAILABLE)
             raise
         except PermissionError:
             return _error(ErrorCode.FORBIDDEN)

@@ -48,6 +48,12 @@ fake atomic store, не открывает опрос при N=0 и переда
 запрос только ответившим «да» по доверенному итогу Z. EvidenceService пишет
 private ref и versioned event на PostgreSQL 16. Production объединение Z poll,
 case/outbox/jobs в одной UoW отсутствует, поэтому сквозной маршрут не готов.
+K10: RequestService сверяет актуальную версию дела и проверенное правило,
+хранит draft hash/version и явное согласование. Изменение черновика сбрасывает
+approval, submit в demo идемпотентен через operation key, статус registered
+появляется только от доверенного DemoOperation. Миграция и цикл проверены на
+PostgreSQL 16 с fake executor; production Z ExecutorStore/PDF link и SLA jobs
+ещё не связаны.
 
 | Область | Состояние | Проверяемое основание |
 |---|---|---|

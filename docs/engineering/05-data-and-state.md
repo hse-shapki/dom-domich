@@ -164,6 +164,14 @@ stateDiagram-v2
 
 `requests.external_status` хранится отдельно от `cases.workflow_status` и результата опроса. Пометка исполнителя `done` не равна `closed`.
 
+K10 RequestService хранит `prepared → approved → submitting → submitted →
+registered` отдельно от CaseRow. Ревизия черновика сбрасывает согласование;
+проверенный rule source ID/revision и ответственный сверяются backend.
+`submitted` в fake executor не равен регистрации. Только проверенный
+`DemoOperation` с номером и временем переводит запрос в `registered`, дело —
+в `in_progress`. PostgreSQL UoW/повторы проверены локально; PDF snapshot,
+production ExecutorStore и SLA jobs ещё не связаны.
+
 [ResolutionService](../../src/dom_domych/application/resolution/service.py) Z12 после доверенного demo `done` открывает отдельный poll для **исходного** `AudienceSnapshot`, проверяя дом, request и право worker. Репозиторный контракт требует в одной UoW перевести дело в `checking_resolution`, сохранить poll, уведомления, deadline и done event key. При `eligible=0` создаётся проверка без адресатов, чтобы финализация дала `resolution_unconfirmed`, а не ложное закрытие. Пока это доказано только на fake; K CasePort, PostgreSQL и MAX-доставка ещё не подключены.
 
 Z13 финализирует этот опрос по сохранённому `demo-resolution-v1`: отрицательный порог проверяется раньше положительного; `closed` достигается только после подтверждения жителей, `reopened` порождает `resolution.rejected`, нехватка ответов оставляет `resolution_unconfirmed`. Fake проверяет повторный/устаревший job, ревизию poll/case и нейтрализацию будущих jobs при закрытии. Production K transition, durable outbox/jobs и PostgreSQL-конкуренция ещё требуют интеграции.
