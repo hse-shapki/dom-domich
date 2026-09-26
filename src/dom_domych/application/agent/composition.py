@@ -10,11 +10,13 @@ from dom_domych.agent.llm import LlmPort
 from dom_domych.agent.runtime import AgentRuntime
 from dom_domych.agent.tool_handlers import KToolHandlers
 from dom_domych.agent.tools import build_k_tool_definitions
+from dom_domych.agent.triage import LlmTriagePort, TriageService
 from dom_domych.application.agent.events import (
     AgentEventHandler,
     PostgresContinuationCaseResolver,
     register_agent_events,
 )
+from dom_domych.application.agent.messages import MessageAgentHandler
 from dom_domych.application.cases.candidates import CandidateService
 from dom_domych.application.cases.service import CaseService
 from dom_domych.application.jobs.inbox_worker import EventDispatcher
@@ -32,6 +34,10 @@ from dom_domych.infrastructure.postgres.agent_runs import PostgresRunStore
 from dom_domych.infrastructure.postgres.case_candidates import PostgresCaseReader
 from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
+from dom_domych.infrastructure.postgres.message_agent import (
+    PostgresMessagePrincipals,
+    PostgresMessageReplies,
+)
 from dom_domych.infrastructure.postgres.requests import (
     PostgresRequestCases,
     PostgresRequestStore,
@@ -99,6 +105,30 @@ def build_k_coordinator(
             PostgresRunStore(sessions),
         ),
         runtime,
+    )
+
+
+def build_k_message_agent(
+    sessions: async_sessionmaker[AsyncSession],
+    llm: LlmPort,
+    clock: Clock,
+    coordinator: AgentCoordinator,
+    resident_capabilities: frozenset[str],
+    *,
+    embeddings: EmbeddingPort | None = None,
+) -> MessageAgentHandler:
+    """Собирает message handler; набор прав задаёт composition root, не модель."""
+
+    knowledge = KnowledgeService(
+        PostgresKnowledgeRepository(sessions),
+        frozenset(),
+        embeddings,
+    )
+    return MessageAgentHandler(
+        PostgresMessagePrincipals(sessions, clock, resident_capabilities),
+        TriageService(LlmTriagePort(llm), knowledge),
+        coordinator,
+        PostgresMessageReplies(sessions, clock),
     )
 
 

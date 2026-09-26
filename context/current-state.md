@@ -35,7 +35,9 @@ PostgreSQL 16 migration/search и HTTPX embedding adapter проверены л�
 K06: типизированная классификация пяти типов и разделение нескольких проблем
 в сообщении проверены fake tests. Срочные выражения имеют консервативный
 fallback; вопрос без проверенного источника ведёт к уточнению. Сервис отдаёт
-маршрут, но ещё не подключён к inbox/CaseService; живые agent evals не измерены.
+маршрут в agent coordinator из общего inbox. PostgreSQL resolver выдаёт actor,
+дом и настроенные capabilities только активному подтверждённому жителю; ответ
+сохраняется в outbox. Живые agent evals не измерены.
 K07: созданы `cases` и поиск кандидатов с домом, локацией, объектом, FTS,
 недавно закрытыми делами и консервативным vector fallback. Миграция и
 изоляция домов/подъездов проверены на PostgreSQL 16 без pgvector;
@@ -85,6 +87,9 @@ composition и followup draft до сохранённого нового agent r
 с fake LLM/Z ports. Повтор,
 устаревшая версия и чужой дом проверены; полный Z poll/PDF/MAX путь пока
 невозможен без production ports/composition.
+Отдельно проверен путь нормализованного MAX message через durable inbox,
+подтверждённое проживание, typed triage и production `case.create` до agent run
+и reply outbox; реальный MAX при этом не использовался.
 K15: оценщик traces считает маршруты, критические ошибки, источник, задержки
 и tool calls по K01 dataset; unit-тесты проходят. Реальные метрики модели
 не измерены: Qwen3-8B на 8 GiB Mac не дал ответа и вызвал swap. Версии и
@@ -122,14 +127,14 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Demo onboarding A06 | Частично: приглашение, привязка MAX ID, DM `/start`, stopped и выбор дома проверены локально | `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, `tests/infrastructure/test_demo_enrollment.py`; выдача кодов реальным operator и live MAX ещё не подключены |
 | MAX Bot API A03 | Частично: документированные методы проверены через MockTransport | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; upload bytes добавлен в A11, реальный токен/бот не проверены |
 | Webhook/inbox A04 | Частично: text/callback/attachment refs/deletion/lifecycle/membership/admin permissions и unknown Update, dedupe/durable insert проверены на PostgreSQL 18 | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`, `tests/infrastructure/test_max_webhook.py`; HTTPS/MAX smoke отсутствует |
-| Inbox worker A07 | Частично: lease, recovery и retry проверены на PostgreSQL 18 | `application/jobs/inbox_worker.py`, `infrastructure/postgres/inbox_worker.py`, `tests/infrastructure/test_inbox_worker.py`; отдельный production-процесс и K/Z handlers ещё не подключены |
+| Inbox worker A07 | Частично: lease/recovery/retry и K message handler проверены на PostgreSQL 18 | `application/agent/messages.py`, `infrastructure/postgres/message_agent.py`, inbox/K14 tests; production process и Z handlers ещё не подключены |
 | DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit и недоступный адресат проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`, `tests/infrastructure/test_delivery_outbox.py`; PDF upload добавлен в A11, реальный MAX и production-процесс ещё не подключены |
 | JobPort/scheduler A09 | Частично: дедлайны, idempotency и stale no-op проверены на PostgreSQL 18 | `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`, `tests/infrastructure/test_scheduled_jobs.py`; revision adapter K/Z и production-процесс ещё не подключены |
 | MAX poll callbacks A10 | Частично: actor/дом/токен и ACK проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/poll_actions.py`, `application/polls/max_callback.py`, `tests/infrastructure/test_max_poll_callback.py`; Z PollRepository и live MAX ещё не подключены |
 | MAX files A11 | Частично: PDF upload, token reuse/retry, безопасное фото, process-local rate limits и coalescing edit реализованы | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `infrastructure/max/rate_limit.py`, tests; live MAX mobile/web и K evidence linkage ещё нужны |
 | Deploy/runtime A12 | Частично: production Dockerfile, Compose/Caddy, API/outbox/retention lifecycle и health routes реализованы; Compose schema проверена | `Dockerfile`, `deploy/compose.yml`, `entrypoints/processes.py`, `docs/release/platform-operations.md`; Docker daemon, HTTPS и restart volumes не проверены, inbox/scheduler ждут K/Z wiring |
 | Надёжность A13 | Частично: bounded retry/dead-letter/delivery_unknown, rate limits, coalescing и heartbeat outbox/jobs проверены | `infrastructure/max/rate_limit.py`, queue workers/repositories и PostgreSQL tests; live rate-limit и потеря прав MAX не проверены |
-| Composition/polling A14 | Частично: dev polling сохраняет batch до marker, исключает webhook; dispatcher принимает цепочку A/K/Z handlers, revision router разделяет владельцев jobs | `infrastructure/max/polling.py`, `application/jobs/inbox_worker.py`, `application/jobs/scheduler.py`; production K/Z handlers/repositories и объединённые migrations отсутствуют |
+| Composition/polling A14 | Частично: dev polling сохраняет batch до marker; K message/continuation handlers и revision reader имеют production composition helper | `application/agent/composition.py`, `infrastructure/max/polling.py`, dispatcher/scheduler; process root и Z repositories отсутствуют |
 | Backup/restore A15 | Проверено локально на PostgreSQL 18 и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Alembic head, 2 дома/20 проживаний и PDF с тем же SHA-256, временные данные удалены |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
