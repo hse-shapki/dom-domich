@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -119,7 +120,11 @@ class PostgresRunStore:
             if row.status != "running":
                 if row.status == outcome.status:
                     return
-                raise ValueError("RUN_ALREADY_COMPLETED")
+                if row.status == "completed":
+                    raise ValueError("RUN_ALREADY_COMPLETED")
+                await session.execute(
+                    delete(AgentToolCallRow).where(AgentToolCallRow.run_id == run_id)
+                )
             row.status = outcome.status
             for sequence, item in enumerate(outcome.audit, start=1):
                 session.add(
@@ -134,6 +139,21 @@ class PostgresRunStore:
                         source_refs=list(item.source_refs),
                     )
                 )
+
+    async def get_outcome(self, run_id: UUID, house_id: UUID) -> RunOutcome | None:
+        async with self.sessions() as session:
+            row = await session.scalar(
+                select(AgentRunRow).where(
+                    AgentRunRow.id == run_id, AgentRunRow.house_id == house_id
+                )
+            )
+            if row is None or row.status == "running":
+                return None
+            if row.status not in {"completed", "failed", "budget_exhausted"}:
+                raise ValueError("INVALID_RUN_STATUS")
+            return RunOutcome(
+                cast(Literal["completed", "failed", "budget_exhausted"], row.status), "", ()
+            )
 
     async def invalidate_pending(self, question_id: UUID, house_id: UUID) -> None:
         async with self.sessions.begin() as session:

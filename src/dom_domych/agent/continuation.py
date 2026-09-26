@@ -43,6 +43,7 @@ class RunStore(Protocol):
     ) -> PendingQuestion | None: ...
     async def save_pending(self, question: PendingQuestion) -> None: ...
     async def complete_run(self, run_id: UUID, house_id: UUID, outcome: RunOutcome) -> None: ...
+    async def get_outcome(self, run_id: UUID, house_id: UUID) -> RunOutcome | None: ...
     async def invalidate_pending(self, question_id: UUID, house_id: UUID) -> None: ...
     async def mark_answered(
         self, question_id: UUID, house_id: UUID, actor_id: UUID, event_id: UUID
@@ -95,6 +96,10 @@ class FakeRunStore:
         if run is None or run.house_id != house_id:
             raise ValueError("RUN_NOT_FOUND")
         self.outcomes[run_id] = outcome
+
+    async def get_outcome(self, run_id: UUID, house_id: UUID) -> RunOutcome | None:
+        run = self.runs.get(run_id)
+        return self.outcomes.get(run_id) if run is not None and run.house_id == house_id else None
 
     async def invalidate_pending(self, question_id: UUID, house_id: UUID) -> None:
         question = self.questions.get(question_id)
@@ -200,6 +205,9 @@ class AgentCoordinator:
         now: datetime,
     ) -> RunOutcome:
         built = await self.builder.build(context, case_id=case_id, now=now)
+        prior = await self.builder.runs.get_outcome(built.run.run_id, context.house_id)
+        if prior is not None and prior.status == "completed":
+            return prior
         run_context = context.model_copy(update={"run_id": built.run.run_id})
         prepared = list(messages)
         if built.prompt_facts:
