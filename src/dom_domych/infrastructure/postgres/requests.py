@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from hashlib import sha256
 from uuid import UUID, uuid4
 
@@ -10,8 +11,12 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.requests.service import Clock, RequestCase, RequestDraft
+from dom_domych.contracts.events import EventName
 from dom_domych.domain.executor.models import DemoOperation
+from dom_domych.domain.ports.core import JobIntent
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
+from dom_domych.infrastructure.postgres.jobs import PostgresJobQueue
+from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
 from dom_domych.infrastructure.postgres.request_models import RequestOperationRow, RequestRow
 
 
@@ -379,4 +384,34 @@ class PostgresRequestStore:
                     facts={"request_id": str(request_id), "registration_id": row.registration_id},
                 )
             )
+            rule = await session.get(RuleVersionRow, row.rule_id)
+            if rule is not None and rule.duration_seconds is not None:
+                source = await session.get(
+                    KnowledgeSourceRow, (rule.source_id, rule.source_revision)
+                )
+                registered_at = operation.registered_at
+                if (
+                    registered_at is not None
+                    and rule.duration_seconds > 0
+                    and rule.deadline_origin == EventName.REQUEST_REGISTERED.value
+                    and rule.responsible_id == row.responsible_id
+                    and rule.house_id in {None, house_id}
+                    and (rule.valid_from is None or rule.valid_from <= registered_at)
+                    and (rule.valid_until is None or registered_at < rule.valid_until)
+                    and source is not None
+                    and source.reviewed
+                    and source.house_id in {None, house_id}
+                    and (source.valid_from is None or source.valid_from <= registered_at)
+                    and (source.valid_until is None or registered_at < source.valid_until)
+                ):
+                    await PostgresJobQueue(session).enqueue(
+                        JobIntent(
+                            house_id=house_id,
+                            operation_key=f"request-deadline:{request_id}:{row.registration_id}",
+                            event_name=EventName.REQUEST_DEADLINE_REACHED.value,
+                            due_at=registered_at + timedelta(seconds=rule.duration_seconds),
+                            entity_id=request_id,
+                            expected_version=case.version,
+                        )
+                    )
             return _draft(row)

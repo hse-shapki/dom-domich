@@ -32,6 +32,7 @@ class EventName(StrEnum):
     DOCUMENT_READY = "document.ready"
     REQUEST_REGISTERED = "request.registered"
     REQUEST_STATUS_CHANGED = "request.status_changed"
+    REQUEST_DEADLINE_REACHED = "request.deadline_reached"
     RESOLUTION_REJECTED = "resolution.rejected"
     JOB_DUE = "job.due"
 

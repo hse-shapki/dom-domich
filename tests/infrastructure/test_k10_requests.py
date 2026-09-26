@@ -1,20 +1,26 @@
 """K10: подготовка, ревизия, approval, submit и registration на PostgreSQL."""
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from dom_domych.agent.contracts import RequestPrepare, RequestSubmit, TrustedContext
+from dom_domych.application.requests.deadline import (
+    RequestDeadlineHandler,
+    RequestDeadlineRevisionReader,
+)
 from dom_domych.application.requests.service import RequestService
 from dom_domych.contracts.base import ExecutionMode, PrincipalType
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.executor.models import ApprovedDraft, DemoOperation, ExternalStatus
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
+from dom_domych.infrastructure.postgres.jobs import DueJob
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
 from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
-from dom_domych.infrastructure.postgres.models import HouseRow, ResidentRow
+from dom_domych.infrastructure.postgres.models import HouseRow, ResidentRow, ScheduledJobRow
 from dom_domych.infrastructure.postgres.request_models import RequestOperationRow, RequestRow
 from dom_domych.infrastructure.postgres.requests import PostgresRequestCases, PostgresRequestStore
 from dom_domych.infrastructure.postgres.session import database_lifespan
@@ -25,6 +31,11 @@ NOW = datetime(2026, 9, 26, 12, tzinfo=UTC)
 class FixedClock:
     def now(self) -> datetime:
         return NOW
+
+
+class LaterClock:
+    def now(self) -> datetime:
+        return NOW + timedelta(seconds=61)
 
 
 class FakeExecutor:
@@ -118,8 +129,8 @@ async def test_request_lifecycle_requires_reviewed_rule_and_real_registration() 
                     house_id=house_id,
                     topic="lighting",
                     responsible_id=responsible_id,
-                    duration_seconds=None,
-                    deadline_origin=None,
+                    duration_seconds=60,
+                    deadline_origin="request.registered",
                     valid_from=None,
                     valid_until=None,
                 )
@@ -174,6 +185,15 @@ async def test_request_lifecycle_requires_reviewed_rule_and_real_registration() 
             )
             submitted = await service.submit(submit, context)
             assert submitted.status == "submitted" and submitted.registration_id is None
+            async with sessions() as session:
+                assert (
+                    await session.scalar(
+                        select(ScheduledJobRow).where(
+                            ScheduledJobRow.entity_id == prepared.request_id
+                        )
+                    )
+                    is None
+                )
             assert await service.submit(submit, context) == submitted
             assert len(executor.operations) == 1
             with pytest.raises(PermissionError):
@@ -197,8 +217,100 @@ async def test_request_lifecycle_requires_reviewed_rule_and_real_registration() 
             async with sessions() as session:
                 case = await session.get(CaseRow, case_id)
                 assert case is not None and case.status == "in_progress"
+                job = await session.scalar(
+                    select(ScheduledJobRow).where(ScheduledJobRow.entity_id == prepared.request_id)
+                )
+                assert job is not None
+                assert job.due_at == NOW + timedelta(seconds=60)
+                assert job.event_name == EventName.REQUEST_DEADLINE_REACHED.value
+                job_id, version = job.id, job.expected_version
+            reader = RequestDeadlineRevisionReader(sessions)
+            due = DueJob(
+                job_id,
+                house_id,
+                EventName.REQUEST_DEADLINE_REACHED,
+                prepared.request_id,
+                version,
+                NOW + timedelta(seconds=60),
+                1,
+            )
+            assert await reader.current_version(due) == version
+            event = EventEnvelope(
+                event_id=job_id,
+                source=EventSource.SCHEDULER,
+                source_key=f"job:{job_id}",
+                name=EventName.REQUEST_DEADLINE_REACHED,
+                occurred_at=NOW + timedelta(seconds=60),
+                received_at=NOW + timedelta(seconds=61),
+                correlation_id=job_id,
+                house_id=house_id,
+                entity=EntityEventPayload(entity_id=prepared.request_id, entity_version=version),
+            )
+            handler = RequestDeadlineHandler(sessions, LaterClock())
+            await handler(
+                event.model_copy(
+                    update={
+                        "entity": EntityEventPayload(
+                            entity_id=prepared.request_id,
+                            entity_version=version + 1,
+                        )
+                    }
+                )
+            )
+            assert await reader.current_version(due) == version
+            await handler(event)
+            await handler(event)
+            assert await reader.current_version(due) is None
+            async with sessions() as session:
+                case = await session.get(CaseRow, case_id)
+                assert case is not None and case.status == "followup_draft"
+                assert case.version == version + 1
+                followups = (
+                    await session.scalars(
+                        select(CaseEventRow).where(
+                            CaseEventRow.case_id == case_id,
+                            CaseEventRow.event_type == EventName.REQUEST_DEADLINE_REACHED.value,
+                        )
+                    )
+                ).all()
+                assert len(followups) == 1
+                assert followups[0].facts["draft_status"] == "needs_review"
+            async with sessions.begin() as session:
+                case = await session.get(CaseRow, case_id)
+                assert case is not None
+                case.status = "closed"
+                case.closed_at = NOW + timedelta(seconds=62)
+                case.version += 1
+            closed_event = event.model_copy(
+                update={
+                    "event_id": uuid4(),
+                    "entity": EntityEventPayload(
+                        entity_id=prepared.request_id,
+                        entity_version=version + 2,
+                    ),
+                }
+            )
+            await handler(closed_event)
+            async with sessions() as session:
+                assert (
+                    len(
+                        (
+                            await session.scalars(
+                                select(CaseEventRow).where(
+                                    CaseEventRow.case_id == case_id,
+                                    CaseEventRow.event_type
+                                    == EventName.REQUEST_DEADLINE_REACHED.value,
+                                )
+                            )
+                        ).all()
+                    )
+                    == 1
+                )
         finally:
             async with sessions.begin() as session:
+                await session.execute(
+                    delete(ScheduledJobRow).where(ScheduledJobRow.entity_id == prepared.request_id)
+                )
                 await session.execute(
                     delete(RequestOperationRow).where(RequestOperationRow.house_id == house_id)
                 )

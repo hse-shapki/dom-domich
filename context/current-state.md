@@ -52,13 +52,17 @@ K10: RequestService сверяет актуальную версию дела и
 хранит draft hash/version и явное согласование. Изменение черновика сбрасывает
 approval, submit в demo идемпотентен через operation key, статус registered
 появляется только от доверенного DemoOperation. Миграция и цикл проверены на
-PostgreSQL 16 с fake executor; production Z ExecutorStore/PDF link и SLA jobs
-ещё не связаны.
+PostgreSQL 16 с fake executor; production Z ExecutorStore/PDF link ещё не связаны.
 K11: EmergencyService готовит draft сразу после проверки места и ответственного,
 не зависит от poll; при пробеле в месте/источнике возвращает точное уточнение,
 не выдумывает срок. Evidence intent идёт только в личный outbox, идемпотентен
 на PostgreSQL 16. Fake route и outbox tests проходят; live MAX и общий runtime
 не подключены.
+K12: при доверенной регистрации проверенное и применимое правило с origin
+`request.registered` ставит job атомарно с обновлением дела. Due handler повторно
+проверяет house/version/status под lock и сохраняет черновик followup со ссылками
+на регистрацию и источник; отправку не утверждает. Проверено на PostgreSQL 16.
+Общий scheduler composition, live MAX и нормативная ревизия источников не проверены.
 
 | Область | Состояние | Проверяемое основание |
 |---|---|---|
