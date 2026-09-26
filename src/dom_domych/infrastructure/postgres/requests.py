@@ -11,10 +11,16 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.requests.service import Clock, RequestCase, RequestDraft
-from dom_domych.contracts.events import EventName
+from dom_domych.contracts.events import (
+    EntityEventPayload,
+    EventEnvelope,
+    EventName,
+    EventSource,
+)
 from dom_domych.domain.executor.models import DemoOperation
 from dom_domych.domain.ports.core import JobIntent
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
+from dom_domych.infrastructure.postgres.inbox import save_domain_event
 from dom_domych.infrastructure.postgres.jobs import PostgresJobQueue
 from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
 from dom_domych.infrastructure.postgres.request_models import RequestOperationRow, RequestRow
@@ -369,9 +375,10 @@ class PostgresRequestStore:
             previous_version = case.version
             case.version += 1
             case.status = "in_progress"
+            registration_event_id = uuid4()
             session.add(
                 CaseEventRow(
-                    id=uuid4(),
+                    id=registration_event_id,
                     case_id=case.id,
                     house_id=house_id,
                     event_type="request.registered",
@@ -383,6 +390,24 @@ class PostgresRequestStore:
                     occurred_at=operation.registered_at,
                     facts={"request_id": str(request_id), "registration_id": row.registration_id},
                 )
+            )
+            await save_domain_event(
+                session,
+                EventEnvelope(
+                    event_id=registration_event_id,
+                    source=EventSource.DOMAIN,
+                    source_key=f"request-registered:{request_id}",
+                    name=EventName.REQUEST_REGISTERED,
+                    occurred_at=operation.registered_at,
+                    received_at=self.clock.now(),
+                    correlation_id=operation.operation_id,
+                    house_id=house_id,
+                    entity=EntityEventPayload(
+                        entity_id=request_id,
+                        entity_version=case.version,
+                        case_id=case.id,
+                    ),
+                ),
             )
             rule = await session.get(RuleVersionRow, row.rule_id)
             if rule is not None and rule.duration_seconds is not None:

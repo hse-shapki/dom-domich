@@ -7,7 +7,13 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import delete, select
 
+from dom_domych.agent.continuation import AgentCoordinator, ContextBuilder
 from dom_domych.agent.contracts import RequestPrepare, RequestSubmit, TrustedContext
+from dom_domych.agent.llm import FakeLlmPort, LlmResponse
+from dom_domych.agent.runtime import AgentRuntime
+from dom_domych.application.agent.events import AgentEventHandler, PostgresContinuationCaseResolver
+from dom_domych.application.cases.candidates import CandidateService
+from dom_domych.application.jobs.inbox_worker import EventDispatcher, InboxWorker
 from dom_domych.application.requests.deadline import (
     RequestDeadlineHandler,
     RequestDeadlineRevisionReader,
@@ -16,11 +22,19 @@ from dom_domych.application.requests.service import RequestService
 from dom_domych.contracts.base import ExecutionMode, PrincipalType
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.executor.models import ApprovedDraft, DemoOperation, ExternalStatus
+from dom_domych.infrastructure.postgres.agent_models import AgentRunRow
+from dom_domych.infrastructure.postgres.agent_runs import PostgresRunStore
+from dom_domych.infrastructure.postgres.case_candidates import PostgresCaseReader
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
 from dom_domych.infrastructure.postgres.jobs import DueJob
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
 from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
-from dom_domych.infrastructure.postgres.models import HouseRow, ResidentRow, ScheduledJobRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    InboxEventRow,
+    ResidentRow,
+    ScheduledJobRow,
+)
 from dom_domych.infrastructure.postgres.request_models import RequestOperationRow, RequestRow
 from dom_domych.infrastructure.postgres.requests import PostgresRequestCases, PostgresRequestStore
 from dom_domych.infrastructure.postgres.session import database_lifespan
@@ -224,6 +238,15 @@ async def test_request_lifecycle_requires_reviewed_rule_and_real_registration() 
                 assert job.due_at == NOW + timedelta(seconds=60)
                 assert job.event_name == EventName.REQUEST_DEADLINE_REACHED.value
                 job_id, version = job.id, job.expected_version
+                registered_event = await session.scalar(
+                    select(InboxEventRow).where(
+                        InboxEventRow.source == "domain",
+                        InboxEventRow.source_key == f"request-registered:{prepared.request_id}",
+                    )
+                )
+                assert registered_event is not None
+                assert registered_event.normalized_event is not None
+                assert registered_event.normalized_event["entity"]["case_id"] == str(case_id)
             reader = RequestDeadlineRevisionReader(sessions)
             due = DueJob(
                 job_id,
@@ -235,6 +258,31 @@ async def test_request_lifecycle_requires_reviewed_rule_and_real_registration() 
                 1,
             )
             assert await reader.current_version(due) == version
+            llm = FakeLlmPort([LlmResponse("Проверен статус регистрации")])
+            coordinator = AgentCoordinator(
+                ContextBuilder(
+                    CandidateService(PostgresCaseReader(sessions)), PostgresRunStore(sessions)
+                ),
+                AgentRuntime(llm, []),
+            )
+            registration_handler = AgentEventHandler(
+                PostgresContinuationCaseResolver(sessions), coordinator
+            )
+            inbox = InboxWorker(
+                sessions,
+                EventDispatcher({EventName.REQUEST_REGISTERED: registration_handler}),
+                FixedClock(),
+                "k10-inbox",
+            )
+            assert await inbox.run_once()
+            assert llm.call_count == 1
+            async with sessions() as session:
+                stored_event = await session.scalar(
+                    select(InboxEventRow).where(
+                        InboxEventRow.source_key == f"request-registered:{prepared.request_id}"
+                    )
+                )
+                assert stored_event is not None and stored_event.status == "done"
             event = EventEnvelope(
                 event_id=job_id,
                 source=EventSource.SCHEDULER,
@@ -308,6 +356,13 @@ async def test_request_lifecycle_requires_reviewed_rule_and_real_registration() 
                 )
         finally:
             async with sessions.begin() as session:
+                await session.execute(delete(AgentRunRow).where(AgentRunRow.house_id == house_id))
+                await session.execute(
+                    delete(InboxEventRow).where(
+                        InboxEventRow.source == "domain",
+                        InboxEventRow.source_key == f"request-registered:{prepared.request_id}",
+                    )
+                )
                 await session.execute(
                     delete(ScheduledJobRow).where(ScheduledJobRow.entity_id == prepared.request_id)
                 )

@@ -66,8 +66,10 @@ K12: при доверенной регистрации проверенное �
 K13: bridge принимает poll/evidence/request/resolution/document события только от
 доверенных источников, разрешает case в доме и запускает новый followup run с
 актуальной версией дела. Повтор завершённого события не вызывает inference,
-неуспешный run может повториться. Fake tests проходят. A/Z producers и общий
-production worker ещё не связаны, live inference не проверен.
+неуспешный run может повториться. `request.registered` теперь атомарно пишет
+domain inbox event; A InboxWorker запускает K continuation на PostgreSQL 16 с
+fake LLM. Остальные producers и общий production worker ещё не связаны,
+live inference не проверен.
 K14: сквозная локальная проверка проходит от due job A через K followup draft
 до сохранённого нового agent run на PostgreSQL 16 с fake LLM. Повтор,
 устаревшая версия и чужой дом проверены; полный Z poll/PDF/MAX путь пока
