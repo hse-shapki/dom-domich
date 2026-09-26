@@ -73,7 +73,7 @@
 | K01: eval dataset | Проверен формат и покрытие; модель не запускалась | `evals/k01_cases.jsonl`, `evals/README.md`, `tests/agent/test_k01_dataset.py` |
 | K02: inference | Частично: HTTPX adapter/fake/timeout/retry проверены; 8 GiB Mac не выдержал live probe | `src/dom_domych/agent/llm.py`, `infrastructure/llm/llama_server.py`, `tests/agent/test_k02_llama_server.py`, `docs/engineering/11-track-k-inference-probe.md` |
 | K03: agent runtime | Частично: allowlist/schema/capability/budget и общий ToolResult проверены fake tests; production handlers не подключены | `src/dom_domych/agent/runtime.py`, `tests/agent/test_k03_runtime.py` |
-| K04: continuation | Частично: fresh context и pending questions на fake store; durable persistence отсутствует | `src/dom_domych/agent/continuation.py`, `tests/agent/test_k04_continuation.py` |
+| K04: continuation | Частично: PostgreSQL runs/pending/tool audit и fresh context проверены локально; inbox не подключён | `src/dom_domych/agent/continuation.py`, `infrastructure/postgres/agent_runs.py`, `tests/infrastructure/test_k04_agent_runs.py` |
 | Хранение опросов и production-интеграция агента | Не реализованы | A/Z core и K fake runtime есть; K/Z ORM интеграций ещё нет |
 | Тесты и проверенный стенд | Частично | A/Z tests ранее проходили с PostgreSQL 18; совместные проверки после слияния указаны в `context/current-state.md`; PG17/pgvector, реальный MAX и цельный стенд не проверены |
 
