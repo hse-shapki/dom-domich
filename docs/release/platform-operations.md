@@ -75,7 +75,11 @@ recovery и `/health/ready`. Отсутствующий файл должен д
 успешно выполнил migrate и поднял API. После `restart postgres api` сохранились Alembic head,
 vector 0.8.1 и тестовый файл в named FileStore volume, readiness вернул ожидаемый `degraded`
 при намеренно отсутствующем inference. Smoke-проект и его volumes после проверки удалены.
-Это не проверяет Caddy/HTTPS, live MAX/LLM и совместную работу всех process services.
+Затем полный Compose smoke поднял API, inbox, scheduler, outbox, maintenance и Caddy;
+после общего restart процессы остались активны, migrate повторно завершился с кодом 0,
+а `https://localhost/health/ready` через Caddy вернул ожидаемый `degraded`. В `docker ps`
+порты имел только Caddy, не API или PostgreSQL. Smoke-проект и volumes удалены. Это не
+проверяет публичный DNS/TLS, live MAX/LLM и обработку общего событийного G3 сценария.
 
 ## Перед релизом
 

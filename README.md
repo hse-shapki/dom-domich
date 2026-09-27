@@ -27,4 +27,5 @@ backup/restore описаны в [эксплуатационном runbook](docs
 проверена; миграции, повторный seed, тесты, backup/restore и рестарт БД проверены на
 PostgreSQL 17.8 + pgvector 0.8.1. Production app image, migrate/API startup и сохранность
 PostgreSQL/FileStore volumes после рестарта также проверены локальным изолированным Compose
-smoke; HTTPS/Caddy и live MAX/LLM — нет.
+smoke. Все process services и Caddy поднялись и перезапустились; локальный HTTPS readiness
+доступен только через Caddy. Публичный TLS/DNS и live MAX/LLM не проверены.
