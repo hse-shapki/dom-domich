@@ -14,6 +14,8 @@ from dom_domych.application.initiatives.followup import (
     demo_reminder_policy,
 )
 from dom_domych.application.initiatives.service import InitiativeService
+from dom_domych.application.resolution.production import PostgresResolutionEventHandler
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.polls.models import VoteChoice
 from dom_domych.domain.polls.policy import InitiativeOutcome, demo_initiative_policy
@@ -188,16 +190,25 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once() 
             clock.current = datetime(2026, 9, 27, 12, tzinfo=UTC)
             finalized = await repository.finalize_atomic(poll_id, HOUSE_ONE, clock.now())
             assert finalized.state.outcome == InitiativeOutcome.SUPPORTED
-        decision = await followup.finalize_position(
-            state, finalized.state, operation_key=f"z08:decision:{case_id}"
+        event_id = uuid4()
+        expired = EventEnvelope(
+            event_id=event_id,
+            source=EventSource.DOMAIN,
+            source_key=f"z08:expired:{event_id}",
+            name=EventName.POLL_EXPIRED,
+            occurred_at=clock.now(),
+            received_at=clock.now(),
+            correlation_id=event_id,
+            house_id=HOUSE_ONE,
+            entity=EntityEventPayload(
+                entity_id=poll_id,
+                entity_version=finalized.state.version,
+                case_id=case_id,
+            ),
         )
-        assert decision.outcome == InitiativeOutcome.SUPPORTED
-        assert (
-            await followup.finalize_position(
-                state, finalized.state, operation_key=f"z08:decision:{case_id}"
-            )
-            == decision
-        )
+        handler = PostgresResolutionEventHandler(sessions, clock)
+        assert await handler.handle_poll_expired(expired) is False
+        assert await handler.handle_poll_expired(expired) is False
         async with sessions() as session:
             assert await session.get(InitiativeDecisionRow, poll_id) is not None
             public = await session.scalar(

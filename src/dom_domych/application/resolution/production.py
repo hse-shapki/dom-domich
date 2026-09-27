@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.initiatives.followup import InitiativeFollowupService
 from dom_domych.application.jobs.inbox_worker import EventDispatcher
 from dom_domych.application.jobs.scheduler import RevisionRouter
 from dom_domych.application.resolution.service import ResolutionService
@@ -15,6 +16,11 @@ from dom_domych.domain.polls.policy import demo_resolution_policy
 from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
 from dom_domych.infrastructure.postgres.demo_executor import PostgresDemoExecutor
+from dom_domych.infrastructure.postgres.initiative_followup import (
+    PostgresCurrentDeliveryRights,
+    PostgresInitiativeFollowupRepository,
+)
+from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
 from dom_domych.infrastructure.postgres.polls import (
     PostgresPollRepository,
     PostgresPollRevisionReader,
@@ -124,7 +130,23 @@ class PostgresResolutionEventHandler:
                     ResolutionCheckRow.house_id == event.house_id,
                 )
             )
-        if poll is None or poll.definition.kind is not PollKind.RESOLUTION_CHECK or check is None:
+        if poll is None:
+            return False
+        if poll.definition.kind is PollKind.INITIATIVE_POSITION:
+            state = await PostgresInitiativeRepository(self.sessions).get(
+                poll.definition.case_id, event.house_id
+            )
+            await InitiativeFollowupService(
+                PostgresInitiativeFollowupRepository(self.sessions, self.clock),
+                PostgresCurrentDeliveryRights(self.sessions, self.clock),
+                self.clock,
+            ).finalize_position(
+                state,
+                poll,
+                operation_key=f"initiative:decision:{poll.definition.poll_id}",
+            )
+            return False
+        if poll.definition.kind is not PollKind.RESOLUTION_CHECK or check is None:
             return False
         await ResolutionService(
             PostgresResolutionCasePort(self.sessions),
