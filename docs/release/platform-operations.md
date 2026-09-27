@@ -29,10 +29,9 @@ uv run python -m scripts.max_operations register \
 maintenance корректно закрывают HTTP clients и SQLAlchemy engine при SIGTERM. Maintenance раз в
 час идемпотентно удаляет просроченные файлы и редактирует payload завершённых inbox/outbox по
 `PAYLOAD_RETENTION_DAYS`. Inbox регистрирует onboarding перед K message handler, затем K
-continuation handlers; scheduler использует тот же dispatcher и K revision reader. Пока
-отсутствуют production Z executor/document repositories, соответствующие события явно
-завершаются ошибкой и проходят bounded retry/dead-letter, а не подтверждаются fake-результатом.
-Poll callbacks, PDF jobs и полный G3 runtime остаются открыты.
+continuation handlers; scheduler использует тот же dispatcher и K/Z revision readers.
+Production Z executor/document ports, callbacks, resolution handlers и отдельный PDF worker
+подключены. Автоматический K/Z poll/initiative route и полный live G3 runtime остаются открыты.
 
 Dev polling запускается только с `MAX_INGRESS_MODE=polling` командой
 `dom-domych-process polling`; API factory при этом отказывает в старте, а poller проверяет через
@@ -80,6 +79,12 @@ vector 0.8.1 и тестовый файл в named FileStore volume, readiness �
 а `https://localhost/health/ready` через Caddy вернул ожидаемый `degraded`. В `docker ps`
 порты имел только Caddy, не API или PostgreSQL. Smoke-проект и volumes удалены. Это не
 проверяет публичный DNS/TLS, live MAX/LLM и обработку общего событийного G3 сценария.
+
+После слияния production Z-модулей smoke повторён на head `0a7b6c5d4e3f`: все 242 теста,
+единая миграция/check и двойной seed прошли на PostgreSQL 17.8 + pgvector 0.8.1.
+Полный Compose с новым `documents` process пережил общий restart без циклических ошибок.
+Backup восстановил новый Z head, vector, 40 public tables и пять файлов с теми же SHA-256;
+временные БД, контейнеры и volumes удалены.
 
 ## Перед релизом
 

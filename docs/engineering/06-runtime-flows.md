@@ -91,13 +91,14 @@ K11 `EmergencyService` проверяет доверенный emergency case, �
 отсутствие evidence не задерживает draft. Отдельный idempotent личный outbox
 просит фото/уточнение, не публикуя его в общем чате. Если rule не подтверждена,
 источник срочности остаётся `event:<id>`, но нормативный срок не назначается.
-Это проверено с fake request и PostgreSQL outbox; MAX и общий runtime ещё нужны.
+Это проверено с PostgreSQL request/outbox; production demo executor включён в общий
+process root. Live MAX и полный автоматический маршрут от сообщения всё ещё нужны.
 
 `emergency.handle` включён в K tool registry для `triage/problem`: production
 composition связывает его с `PostgresRequestCases`, проверенными правилами,
 `RequestService` и личным evidence outbox. На PostgreSQL 18 проверено, что при
 неполной локации tool ставит только приватное уточнение и не вызывает executor.
-Полная регистрация по-прежнему ждёт production Z executor.
+Регистрация связана с production demo executor; live MAX-путь ещё не проверен.
 
 Правило срока содержит тип нарушения, условия применимости, источник и точку отсчёта. Для каждой стадии обращения отдельный deadline; не переносим сроки из обзорного текста IDEA на все случаи. Если нет проверенного правила, не выводим выдуманный норматив.
 
@@ -181,9 +182,10 @@ K composition регистрирует обработчик изменения r
 continuation, поэтому новый run читает уже зафиксированную версию. Тот же helper
 подключает revision reader и deadline handler к общим A dispatcher/scheduler и
 собирает coordinator на production K repositories. Это проверено на локальном
-PostgreSQL 18 с fake LLM и fake Z ports. A process root теперь запускает этот K
-контур с настраиваемым llama-server; события, требующие отсутствующих PostgreSQL
-реализаций Z `ExecutorPort` и `DocumentPort`, явно завершаются ошибкой и retry.
+PostgreSQL 17 с fake LLM. A process root запускает K-контур с настраиваемым
+llama-server и production Z `ExecutorPort`/`DocumentPort`, callback, resolution
+handlers и PDF worker. Автоматическое открытие problem/initiative poll из маршрута
+агента и live G3 пока не проверены.
 
 ## 8. Аварии самой системы
 
