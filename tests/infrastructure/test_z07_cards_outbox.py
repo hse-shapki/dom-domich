@@ -5,22 +5,32 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import func, select, update
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.cards.production import PostgresPublicCards
 from dom_domych.application.initiatives.service import InitiativeService
+from dom_domych.application.polls.callback import CallbackStatus
+from dom_domych.application.polls.production import PostgresPollCallbackProcessor
 from dom_domych.application.polls.service import PollService
+from dom_domych.contracts.events import CallbackPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.polls.models import PollKind, VoteChoice
 from dom_domych.domain.polls.policy import demo_initiative_policy, demo_problem_policy
+from dom_domych.infrastructure.max.client import MaxApiClient
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
 from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseRow
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.initiative_cases import PostgresInitiativeCases
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
-from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, PollActionRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    OutboxDeliveryRow,
+    PollActionRow,
+    ResidentRow,
+)
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
@@ -52,6 +62,7 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
     clock = FixedClock()
     case_id = uuid4()
     chat_id = str(uuid4().int)[:18]
+    user_id = str(uuid4().int)[:18]
     async with database_lifespan(database_url) as sessions:
         async with sessions.begin() as session:
             await seed_demo_house(session)
@@ -108,7 +119,42 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
             )
             base.status = "sent"
             base.max_message_id = "test-message"
-        for member in audience.members[:2]:
+            await session.execute(
+                update(ResidentRow)
+                .where(ResidentRow.id == audience.members[0].resident_id)
+                .values(max_user_id=user_id)
+            )
+            yes_token = base.buttons[0]["payload"]
+        received_at = clock.now() + timedelta(minutes=1)
+        callback_id = uuid4()
+        event = EventEnvelope(
+            event_id=uuid4(),
+            source=EventSource.MAX,
+            source_key=f"z07:callback:{callback_id}",
+            name=EventName.CALLBACK_RECEIVED,
+            occurred_at=received_at,
+            received_at=received_at,
+            correlation_id=callback_id,
+            actor_user_id=user_id,
+            callback=CallbackPayload(
+                callback_id=str(callback_id),
+                sender_user_id=user_id,
+                action_token=yes_token,
+                chat_id=chat_id,
+            ),
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, json={"success": True})
+            ),
+            base_url="https://platform-api2.max.ru",
+        ) as http:
+            outcome = await PostgresPollCallbackProcessor(
+                sessions, MaxApiClient(http, "test-token"), clock
+            ).process(event)
+        assert outcome.status is CallbackStatus.RECORDED
+        await cards.publish_problem(poll.definition.poll_id, HOUSE_ONE)
+        for member in audience.members[1:2]:
             async with sessions.begin() as session:
                 await PostgresPollRepository(session).record_answer_atomic(
                     poll.definition.poll_id,
@@ -137,6 +183,11 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
         async with sessions.begin() as session:
             await session.execute(
                 update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id=None)
+            )
+            await session.execute(
+                update(ResidentRow)
+                .where(ResidentRow.id == audience.members[0].resident_id)
+                .values(max_user_id=None)
             )
 
 
