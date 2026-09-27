@@ -24,6 +24,33 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+# Эти pgvector-объекты условно создаются объединёнными K migrations, когда расширение
+# доступно. Репозитории обращаются к ним через проверяемый raw SQL, поэтому ORM metadata
+# намеренно содержит только обязательный JSONB fallback. Не предлагать destructive drop
+# на целевом PG17/pgvector во время общей проверки истории A14.
+_OPTIONAL_VECTOR_COLUMNS = {
+    ("cases", "embedding_vector"),
+    ("knowledge_chunks", "embedding_vector"),
+}
+_OPTIONAL_VECTOR_INDEXES = {"ix_cases_vector", "ix_knowledge_chunks_vector"}
+
+
+def include_object(
+    object_: object,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to: object | None,
+) -> bool:
+    if not reflected or compare_to is not None:
+        return True
+    if type_ == "column":
+        table = getattr(getattr(object_, "table", None), "name", None)
+        return (table, name) not in _OPTIONAL_VECTOR_COLUMNS
+    if type_ == "index":
+        return name not in _OPTIONAL_VECTOR_INDEXES
+    return True
+
 
 def database_url() -> str:
     value = os.environ.get("DATABASE_URL")
@@ -57,7 +84,11 @@ async def run_migrations_online() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=include_object,
+    )
     with context.begin_transaction():
         context.run_migrations()
 

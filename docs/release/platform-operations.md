@@ -65,9 +65,11 @@ uv run alembic current
 recovery и `/health/ready`. Отсутствующий файл должен давать `StoredFileNotFound` или
 `FileIntegrityError`, а не успешную доставку.
 
-25.09.2026 локальный restore smoke выполнен на PostgreSQL 18: восстановлены Alembic head
-`e17d65a0f2c8`, 2 дома, 20 проживаний и PDF из FileStore с исходным SHA-256. Обе временные БД и
-временный каталог после проверки удалены. Это не заменяет container-volume restart на PG17.
+27.09.2026 локальный restore smoke повторён на PostgreSQL 17.8 + pgvector 0.8.1:
+в отдельную пустую БД восстановлены Alembic head `e4a29c371f62`, расширение vector,
+2 дома, 20 проживаний и пять файлов из FileStore с исходными SHA-256. После рестарта
+исходного контейнера БД сохранила head, расширение и строки. Временная restore-БД и каталог
+удалены. Полный restart production Compose с named volumes ещё не проверен.
 
 ## Перед релизом
 

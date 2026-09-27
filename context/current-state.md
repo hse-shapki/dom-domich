@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 26.09.2026 по ветке `kae`. Этот файл меняется после реализации задач; старое значение статуса не является вечной истиной.
+Проверено 27.09.2026 по ветке `al-tasks`. Этот файл меняется после реализации задач; старое значение статуса не является вечной истиной.
 
 ## Факты на дату проверки
 
@@ -121,25 +121,25 @@ K16: четыре вариативных демо-пути, ссылки на п
 | PDF QA Z15 | Частично: локально просмотрены 4 образца | `docs/release/zamira-pdf-qa.md`; mobile/web MAX и outbox ещё не проверены |
 | Материалы Z16 | Частично: локальный handoff и воспроизведение PDF готовы | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; сквозной runbook ждёт A/K интеграции |
 | Python-проект и зависимости A00 | Проверено локально | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; `uv sync --locked`, Ruff, mypy, 227 tests прошли; удалённый CI ещё не запускался |
-| PostgreSQL core A02 | Частично: проверено на локальном PostgreSQL 18 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: migration/check и повторный seed; 26.09.2026 Docker daemon доступен, но pull PG17/pgvector дважды завершился TLS timeout Docker Hub |
+| PostgreSQL core A02 | Проверено локально на PostgreSQL 17.8 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: единая migration/check, повторный seed, 227 тестов и сохранность head/vector/2 домов/20 проживаний после рестарта |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: приглашение, привязка MAX ID, DM `/start`, stopped и выбор дома проверены локально | `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, `tests/infrastructure/test_demo_enrollment.py`; выдача кодов реальным operator и live MAX ещё не подключены |
 | MAX Bot API A03 | Частично: документированные методы проверены через MockTransport | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; upload bytes добавлен в A11, реальный токен/бот не проверены |
 | Webhook/inbox A04 | Частично: text/callback/attachment refs/deletion/lifecycle/membership/admin permissions и unknown Update, dedupe/durable insert проверены на PostgreSQL 18 | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`, `tests/infrastructure/test_max_webhook.py`; HTTPS/MAX smoke отсутствует |
-| Inbox worker A07 | Частично: production loop собирает onboarding → K message/continuation handlers; lease/recovery/retry проверены на PostgreSQL 18 | `entrypoints/processes.py`, `application/agent/messages.py`, inbox/K14 tests; Z handlers ещё не подключены |
-| DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit и недоступный адресат проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`, `tests/infrastructure/test_delivery_outbox.py`; PDF upload добавлен в A11, реальный MAX и production-процесс ещё не подключены |
-| JobPort/scheduler A09 | Частично: дедлайны, idempotency и stale no-op проверены на PostgreSQL 18 | `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`, `tests/infrastructure/test_scheduled_jobs.py`; revision adapter K/Z и production-процесс ещё не подключены |
+| Inbox worker A07 | Частично: production loop собирает onboarding → K message/continuation handlers; lease/recovery/retry проверены на PostgreSQL 17 | `entrypoints/processes.py`, `application/agent/messages.py`, inbox/K14 tests; Z handlers ещё не подключены |
+| DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit, недоступный адресат и отдельный process loop проверены на PostgreSQL 17 + MockTransport | `entrypoints/processes.py`, `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`; PDF upload добавлен в A11, реальный MAX отсутствует |
+| JobPort/scheduler A09 | Частично: дедлайны, idempotency, stale no-op и K revision adapter в production loop проверены на PostgreSQL 17 | `entrypoints/processes.py`, `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`; Z handlers/revisions ещё не подключены |
 | MAX poll callbacks A10 | Частично: actor/дом/токен и ACK проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/poll_actions.py`, `application/polls/max_callback.py`, `tests/infrastructure/test_max_poll_callback.py`; Z PollRepository и live MAX ещё не подключены |
 | MAX files A11 | Частично: PDF upload, token reuse/retry, безопасное фото, process-local rate limits и coalescing edit реализованы | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `infrastructure/max/rate_limit.py`, tests; live MAX mobile/web и K evidence linkage ещё нужны |
 | Deploy/runtime A12 | Частично: Compose включает API/inbox/scheduler/outbox/retention и конфигурацию llama-server endpoint; readiness отвечает `503` без БД и `degraded` при сбое LLM; schema проверена | `Dockerfile`, `deploy/compose.yml`, `entrypoints/api.py`, `entrypoints/processes.py`; модель/образ inference, HTTPS и restart volumes не проверены |
 | Надёжность A13 | Частично: bounded retry/dead-letter/delivery_unknown, rate limits, coalescing и heartbeat outbox/jobs проверены | `infrastructure/max/rate_limit.py`, queue workers/repositories и PostgreSQL tests; live rate-limit и потеря прав MAX не проверены |
 | Composition/polling A14 | Частично: process root запускает K inbox/scheduler, dev polling сохраняет batch до marker; отсутствующие Z ports явно fail | `entrypoints/processes.py`, `application/agent/composition.py`, process/config tests; Z repositories/callback/PDF jobs и G3 отсутствуют |
-| Backup/restore A15 | Проверено локально на PostgreSQL 18 и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Alembic head, 2 дома/20 проживаний и PDF с тем же SHA-256, временные данные удалены |
+| Backup/restore A15 | Проверено локально на PostgreSQL 17.8/pgvector и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены head/vector, 2 дома/20 проживаний и 5 файлов с теми же SHA-256; временные данные удалены, DB restart пройден |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
 | Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены с fake LLM | `src/dom_domych/agent/`, `application/agent/composition.py`, `tests/agent/`, `evals/`; live inference и общий process открыты |
 | Хранение опросов | Не реализовано | Z domain/application и A core есть; PostgreSQL repository/migration и wiring отсутствуют |
-| Рабочий стенд и внешние проверки | Не подтверждены | Production Compose schema валидна; Docker daemon доступен, но целевой PG17/pgvector image не скачался из-за TLS timeout registry; доступ MAX/модели, HTTPS, mobile/web и цельный runtime не проверялись |
+| Рабочий стенд и внешние проверки | Частично | Целевой PG17/pgvector и schema Compose проверены; полная сборка app image 27.09.2026 остановилась на внешнем HTTP 502 от Docker Hub/GHCR; доступ MAX/модели, HTTPS, mobile/web и цельный runtime не проверялись |
 
 Эти строки описывают только осмотр репозитория. Они не доказывают отсутствие внешнего аккаунта или бота у команды. И наоборот, схема в Markdown не доказывает готовность реализации.
 
@@ -148,10 +148,10 @@ K16: четыре вариативных демо-пути, ссылки на п
 K handlers и repositories теперь запускаются из A14 process root для inbox/scheduler.
 Следующий блокирующий шаг — реализовать Z production repositories/producers и заменить явные
 unavailable adapters; без них callback/PDF/result часть runtime не работает. Затем нужны
-реальный MAX/LLM доступ, HTTPS smoke, PostgreSQL 17/pgvector restore test и G1–G3/mobile-web
-прогоны. Все 227 tests, включая PostgreSQL integrations, прошли на локальной
-PostgreSQL 18; целевые PostgreSQL 17/pgvector и Docker Compose не проверялись:
-две попытки pull `pgvector/pgvector:pg17` остановились на TLS timeout Docker Hub.
+реальный MAX/LLM доступ, HTTPS smoke и G1–G3/mobile-web прогоны. Все 227 tests,
+общая migration/check, повторный seed и backup/restore прошли на PostgreSQL 17.8 +
+pgvector 0.8.1. Полная production image build не завершилась из-за внешнего HTTP 502
+при получении metadata базовых образов с Docker Hub/GHCR.
 
 ## Как обновлять после задачи
 

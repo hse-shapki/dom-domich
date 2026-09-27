@@ -24,4 +24,5 @@ MAX ещё не подключены; точное состояние — в [к
 запускается только с тестовым именем БД (`dom_domych_test`):
 `uv run python -m scripts.seed_demo_house`. Production-конфигурация и безопасный порядок
 backup/restore описаны в [эксплуатационном runbook](docs/release/platform-operations.md). Docker Compose schema
-проверена, но daemon и реальный PostgreSQL 17/pgvector в текущей среде не запустились.
+проверена; миграции, повторный seed, тесты, backup/restore и рестарт БД проверены на
+PostgreSQL 17.8 + pgvector 0.8.1. Полная production-сборка остаётся внешней проверкой.
