@@ -2,7 +2,7 @@
 
 [Архитектура](02-architecture.md) · [Агент и tools](04-agent-and-tools.md) · [Данные](05-data-and-state.md) · [Задачи Замиры](../../context/tasks-zamira.md)
 
-**Статус: предложение Z00; общая минимальная граница A01 оформлена, K00 из другой ветки ещё не сверена.** Здесь описана граница модулей и проверяемые инварианты. Реальные DTO/ports и статус их проверки — в [A01](11-shared-contracts.md).
+**Статус: предложение Z00; общая минимальная граница A01/K00 оформлена.** Здесь описана граница модулей и проверяемые инварианты. Реальные DTO/ports и статус их проверки — в [A01](11-shared-contracts.md).
 
 ## Базовые значения на стыке
 
@@ -38,7 +38,7 @@
 
 Z использует [синтетический дом Z02](../../tests/fixtures/zamira_house.py) и fake resident directory; fake `CasePort`, `DeliveryPort`, `JobPort` добавляются с соответствующими use cases. Затем contract tests сравнят их с реализациями A/K. Чистые [правила Z01](../../src/dom_domych/domain/polls/policy.py) уже проверяются без общего пакета. PostgreSQL concurrency/migration tests, настоящий callback и MAX mobile/web относятся к G1–Release и не объявляются пройденными по fake.
 
-Чистый [AudienceService Z03](../../src/dom_domych/application/audiences/service.py) использует предложенный `list_house_residencies` и repository `save_once`; его выборка, дедупликация и ревизии проверены на fake. Контракт станет общим после A01; production repository должен атомарно охранять operation key и единственного successor аудитории.
+Чистый [AudienceService Z03](../../src/dom_domych/application/audiences/service.py) использует общий `list_house_residencies` и repository `save_once`; его выборка, дедупликация и ревизии проверены на fake. [PostgreSQL repository](../../src/dom_domych/infrastructure/postgres/audiences.py) хранит снимок и состав в одной UoW, защищает operation key и единственного successor уникальными ограничениями. Локальные тесты на PostgreSQL 16 проверили повтор, конкуренцию и изоляцию домов; общий K runtime пока не вызывает этот сервис.
 
 [PollService Z04](../../src/dom_domych/application/polls/service.py) открывает опрос из frozen audience/policy и вызывает repository `record_answer_atomic`/`finalize_atomic`; [доменные переходы](../../src/dom_domych/domain/polls/models.py) одинаковы для fake и будущего PostgreSQL repository. В fake проверены уникальные ответы и однократное событие при конкурентном пересечении порога. Финализация требует, чтобы worker сначала обработал все события, надёжно принятые до `closes_at`; это условие должен обеспечить A worker на интеграции, fake его не доказывает.
 
