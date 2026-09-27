@@ -32,15 +32,18 @@ class PostgresEnrollment:
         self, residency_id: UUID, house_id: UUID, expires_at: datetime, now: datetime
     ) -> str:
         residency = await self.session.scalar(
-            select(ResidencyRow).where(
+            select(ResidencyRow)
+            .join(HouseRow, HouseRow.id == ResidencyRow.house_id)
+            .where(
                 ResidencyRow.id == residency_id,
                 ResidencyRow.house_id == house_id,
+                HouseRow.demo.is_(True),
                 ResidencyRow.valid_from <= now,
                 or_(ResidencyRow.valid_until.is_(None), ResidencyRow.valid_until > now),
             )
         )
         if residency is None:
-            raise EnrollmentDenied("residency not active in operator house")
+            raise EnrollmentDenied("residency not active in demo operator house")
         token = secrets.token_urlsafe(24)
         self.session.add(
             DemoInvitationRow(
@@ -162,10 +165,12 @@ class PostgresEnrollment:
 
     async def bind_house_chat(self, house_id: UUID, max_chat_id: str) -> None:
         house = await self.session.scalar(
-            select(HouseRow).where(HouseRow.id == house_id).with_for_update()
+            select(HouseRow)
+            .where(HouseRow.id == house_id, HouseRow.demo.is_(True))
+            .with_for_update()
         )
         if house is None:
-            raise EnrollmentDenied("house not found")
+            raise EnrollmentDenied("demo house not found")
         other = await self.session.scalar(
             select(HouseRow.id).where(HouseRow.max_chat_id == max_chat_id)
         )

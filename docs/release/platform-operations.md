@@ -24,6 +24,19 @@ uv run python -m scripts.max_operations register \
   --update-type message_created --update-type message_callback --update-type bot_started
 ```
 
+После очной проверки demo-жителя оператор выдаёт одноразовый код (это чувствительное значение,
+его единственный раз печатает сама команда) и отдельно может связать заранее известный MAX chat ID:
+
+```bash
+dom-domych-demo-operator issue-invitation \
+  --house-id <uuid> --residency-id <uuid> --adult-verified --ttl-hours 24
+dom-domych-demo-operator bind-house-chat --house-id <uuid> --max-chat-id <digits>
+```
+
+Обе команды берут `DATABASE_URL` из окружения, не принимают пароль аргументом и отказывают для
+домов без `demo=true`. Код нужно передать конкретному проверенному жителю вне общего чата; в БД
+остаётся только SHA-256 digest.
+
 Наружу опубликованы только 80/443 Caddy. PostgreSQL и процессы находятся во внутренней сети,
 данные БД, Caddy и FileStore — в named volumes. API, inbox, scheduler, outbox и retention
 maintenance корректно закрывают HTTP clients и SQLAlchemy engine при SIGTERM. Maintenance раз в
