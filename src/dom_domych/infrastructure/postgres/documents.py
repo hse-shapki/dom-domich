@@ -34,6 +34,14 @@ class PostgresDocuments:
         if not operation_key or len(operation_key) > 250:
             raise ValueError("invalid document operation key")
         async with self.sessions.begin() as session:
+            existing = await session.scalar(
+                select(DocumentRow).where(
+                    DocumentRow.house_id == snapshot.house_id,
+                    DocumentRow.operation_key == operation_key,
+                )
+            )
+            if existing is not None:
+                return self._matching_ref(existing, snapshot, recipient_id)
             await self._validate_sources(session, snapshot, recipient_id)
             document_id = uuid4()
             inserted = await session.scalar(
@@ -76,13 +84,19 @@ class PostgresDocuments:
             )
             if existing is None:
                 raise RuntimeError("conflicting document disappeared")
-            if (
-                existing.snapshot_sha256 != snapshot.sha256
-                or existing.recipient_id != recipient_id
-                or existing.kind != snapshot.kind.value
-            ):
-                raise ValueError("document operation key conflicts with other contents")
-            return self._ref(existing)
+            return self._matching_ref(existing, snapshot, recipient_id)
+
+    @classmethod
+    def _matching_ref(
+        cls, existing: DocumentRow, snapshot: DocumentSnapshot, recipient_id: UUID
+    ) -> DocumentRef:
+        if (
+            existing.snapshot_sha256 != snapshot.sha256
+            or existing.recipient_id != recipient_id
+            or existing.kind != snapshot.kind.value
+        ):
+            raise ValueError("document operation key conflicts with other contents")
+        return cls._ref(existing)
 
     async def get(self, document_id: UUID, house_id: UUID) -> DocumentRef | None:
         async with self.sessions() as session:

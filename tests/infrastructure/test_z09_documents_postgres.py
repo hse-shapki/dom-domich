@@ -3,11 +3,14 @@
 import os
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 
 from dom_domych.application.audiences.service import AudienceService
+from dom_domych.application.documents.worker import DocumentWorker
 from dom_domych.application.polls.service import PollService
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.documents.snapshot import (
@@ -18,10 +21,13 @@ from dom_domych.domain.documents.snapshot import (
 )
 from dom_domych.domain.polls.models import PollKind, VoteChoice
 from dom_domych.domain.polls.policy import demo_initiative_policy
+from dom_domych.infrastructure.documents.renderer import PdfRenderer
+from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.documents import PostgresDocuments, verify_snapshot_bytes
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
+from dom_domych.infrastructure.postgres.models import OutboxDeliveryRow
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
 from dom_domych.infrastructure.postgres.z_document_models import DocumentRow
@@ -40,7 +46,7 @@ class FixedClock:
 
 
 @pytest.mark.asyncio
-async def test_document_snapshot_is_idempotent_scoped_and_frozen() -> None:
+async def test_document_snapshot_is_idempotent_scoped_and_frozen(tmp_path: Path) -> None:
     database_url = os.environ.get("TEST_DATABASE_URL")
     if not database_url:
         pytest.skip("Z09 requires a dedicated migrated PostgreSQL test database")
@@ -132,4 +138,40 @@ async def test_document_snapshot_is_idempotent_scoped_and_frozen() -> None:
             )
         with pytest.raises(ValueError, match="current poll"):
             await documents.prepare(snapshot, recipient_id, operation_key=f"z09:stale:{case_id}")
+        assert (
+            await documents.prepare(snapshot, recipient_id, operation_key=f"z09:document:{case_id}")
+            == prepared
+        )
         assert await documents.get(prepared.document_id, HOUSE_ONE) == prepared
+        async with sessions.begin() as session:
+            row = await session.get(DocumentRow, prepared.document_id)
+            assert row is not None
+            row.status = "rendering"
+            row.lease_owner = "crashed-worker"
+            row.lease_until = clock.now() - timedelta(seconds=1)
+            row.attempts = 1
+        files = LocalFileStore(tmp_path, clock)
+        async with PdfRenderer(max_workers=1) as renderer:
+            worker = DocumentWorker(sessions, files, renderer, clock, "z10-test")
+            assert await worker.run_once() is True
+            async with sessions() as session:
+                row = await session.get(DocumentRow, prepared.document_id)
+                assert row is not None and row.status == "ready", row.error_code if row else None
+            assert await worker.run_once() is False
+        ready = await documents.get(prepared.document_id, HOUSE_ONE)
+        assert ready is not None and ready.status == "ready" and ready.file_key is not None
+        stored, content = await files.get(HOUSE_ONE, ready.file_key)
+        assert content.startswith(b"%PDF-")
+        assert stored.sha256
+        async with sessions() as session:
+            row = await session.get(DocumentRow, ready.document_id)
+            assert row is not None
+            assert row.file_sha256 == stored.sha256 and row.attempts == 2
+            outbox = await session.scalar(
+                select(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.house_id == HOUSE_ONE,
+                    OutboxDeliveryRow.operation_key == f"document:file:{ready.document_id}",
+                )
+            )
+            assert outbox is not None
+            assert outbox.recipient_id == recipient_id and outbox.file_key == ready.file_key
