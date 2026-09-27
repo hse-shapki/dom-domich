@@ -35,6 +35,7 @@ from dom_domych.application.polls.production import (
     PostgresPollCallbackProcessor,
     register_poll_callbacks,
 )
+from dom_domych.application.requests.emergency_runtime import EmergencyAudienceEventHandler
 from dom_domych.application.resolution.production import register_z_poll_events
 from dom_domych.config import AppSettings
 from dom_domych.contracts.events import EventName
@@ -162,6 +163,9 @@ async def run_inbox() -> None:
         dispatcher, revisions = EventDispatcher({}), RevisionRouter()
         register_problem_events(dispatcher, sessions, clock)
         register_initiative_events(dispatcher, sessions, clock)
+        dispatcher.register(
+            EventName.EMERGENCY_DETECTED, EmergencyAudienceEventHandler(sessions, clock)
+        )
         resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
         dispatcher.register(
             EventName.REQUEST_REGISTERED, RequestDocumentEventHandler(sessions, clock)

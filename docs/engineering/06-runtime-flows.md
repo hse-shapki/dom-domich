@@ -191,10 +191,11 @@ card-outbox. Domain threshold/expiry до continuation фиксирует `reque
 аналогично открывает frozen audience/revision/poll/reminders/card из
 `initiative.detected`. Итог атомарно переводит case в `request_ready` или `not_supported`;
 request требует отдельного доверенного actor и проверенного правила. Live G3 пока не проверен.
-После доверенной регистрации обычной проблемы/инициативы отдельный handler собирает
-immutable appeal snapshot из текущих сохранённых ревизий, идемпотентно ставит PDF в
-очередь, а `document.ready` связывает готовый файл с request до continuation. Для
-аварии без исходного poll/audience этот producer пока неприменим.
+После доверенной регистрации отдельный handler собирает immutable appeal snapshot из
+текущих сохранённых ревизий, идемпотентно ставит PDF в очередь, а `document.ready`
+связывает готовый файл с request до continuation. Для аварии `emergency.detected`
+заранее фиксирует исходную аудиторию без подтверждающего poll: обращение остаётся срочным,
+а та же категория доступна последующей проверке результата.
 
 ## 8. Аварии самой системы
 

@@ -176,14 +176,11 @@ class PostgresCaseWriter:
             )
             workflow_event = {
                 CaseKind.PROBLEM: EventName.PROBLEM_DETECTED,
+                CaseKind.EMERGENCY: EventName.EMERGENCY_DETECTED,
                 CaseKind.INITIATIVE: EventName.INITIATIVE_DETECTED,
             }.get(command.kind)
             if self.emit_workflow_events and workflow_event is not None:
-                workflow_source = (
-                    "problem-detected"
-                    if workflow_event is EventName.PROBLEM_DETECTED
-                    else "initiative-detected"
-                )
+                workflow_source = workflow_event.value.replace(".", "-")
                 await save_domain_event(
                     session,
                     EventEnvelope(

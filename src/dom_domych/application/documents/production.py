@@ -3,6 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.requests.emergency_runtime import emergency_audience_key
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
 from dom_domych.domain.documents.snapshot import (
     DocumentFact,
@@ -76,17 +77,30 @@ class RequestDocumentEventHandler:
                 or not request.source_refs
                 or case is None
                 or house is None
-                or origin is None
             ):
+                return False
+            audience_id = origin.audience_id if origin is not None else None
+            if audience_id is None and case.kind == "emergency":
+                audience_id = await session.scalar(
+                    select(AudienceSnapshotRow.id).where(
+                        AudienceSnapshotRow.house_id == event.house_id,
+                        AudienceSnapshotRow.operation_key == emergency_audience_key(case.id),
+                    )
+                )
+            if audience_id is None:
                 return False
             audience = await session.scalar(
                 select(AudienceSnapshotRow).where(
-                    AudienceSnapshotRow.id == origin.audience_id,
+                    AudienceSnapshotRow.id == audience_id,
                     AudienceSnapshotRow.house_id == event.house_id,
                 )
             )
-            poll = await PostgresPollRepository(session).get_state(origin.id, event.house_id)
-            if audience is None or poll is None:
+            poll = (
+                await PostgresPollRepository(session).get_state(origin.id, event.house_id)
+                if origin is not None
+                else None
+            )
+            if audience is None:
                 return False
             location = self._location(case)
             case_ref = f"case:{case.id}:v{case.version}"
@@ -112,15 +126,15 @@ class RequestDocumentEventHandler:
                 case_revision=case.version,
                 audience_id=audience.id,
                 audience_revision=audience.criteria_revision,
-                poll_id=poll.definition.poll_id,
-                poll_revision=poll.version,
-                policy_revision=poll.definition.policy.revision,
+                poll_id=poll.definition.poll_id if poll is not None else None,
+                poll_revision=poll.version if poll is not None else None,
+                policy_revision=poll.definition.policy.revision if poll is not None else None,
                 request_id=request.id,
                 request_revision=request.draft_version,
                 title=f"Обращение: {case.title}",
                 house_address=house.address,
                 facts=tuple(facts),
-                tally=poll.tally,
+                tally=poll.tally if poll is not None else None,
                 notices=(),
                 created_at=self.clock.now(),
             )

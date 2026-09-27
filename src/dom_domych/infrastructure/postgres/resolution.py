@@ -8,6 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.polls.callback import StoredPollAction
+from dom_domych.application.requests.emergency_runtime import emergency_audience_key
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.polls.models import PollKind, PollState, PollStatus, VoteChoice
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
@@ -24,6 +25,7 @@ from dom_domych.infrastructure.postgres.models import HouseRow, ScheduledJobRow
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
+from dom_domych.infrastructure.postgres.z_audience_models import AudienceSnapshotRow
 from dom_domych.infrastructure.postgres.z_executor_models import DemoExecutorRow
 from dom_domych.infrastructure.postgres.z_poll_models import PollRow
 from dom_domych.infrastructure.postgres.z_resolution_models import ResolutionCheckRow
@@ -86,10 +88,19 @@ class PostgresResolutionCasePort:
                 .order_by(PollRow.opens_at, PollRow.id)
                 .limit(1)
             )
-            if case is None or request is None or origin is None:
+            emergency_audience_id = None
+            if case is not None and case.kind == "emergency" and origin is None:
+                emergency_audience_id = await session.scalar(
+                    select(AudienceSnapshotRow.id).where(
+                        AudienceSnapshotRow.house_id == house_id,
+                        AudienceSnapshotRow.operation_key == emergency_audience_key(case_id),
+                    )
+                )
+            audience_id = origin.audience_id if origin is not None else emergency_audience_id
+            if case is None or request is None or audience_id is None:
                 raise ResolutionConflict("case, request or original audience is unavailable")
             return ResolutionCaseView(
-                case.id, house_id, request.id, origin.audience_id, case.version, case.status
+                case.id, house_id, request.id, audience_id, case.version, case.status
             )
 
 

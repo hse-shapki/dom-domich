@@ -28,6 +28,7 @@ class EventName(StrEnum):
     HOUSE_BOT_MEMBERSHIP_CHANGED = "house.bot_membership_changed"
     HOUSE_BOT_PERMISSIONS_CHANGED = "house.bot_permissions_changed"
     PROBLEM_DETECTED = "problem.detected"
+    EMERGENCY_DETECTED = "emergency.detected"
     INITIATIVE_DETECTED = "initiative.detected"
     POLL_THRESHOLD_REACHED = "poll.threshold_reached"
     POLL_EXPIRED = "poll.expired"
