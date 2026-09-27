@@ -61,6 +61,7 @@ def test_snapshot_hash_is_stable_and_changes_with_facts_or_revisions() -> None:
     assert replace(first, case_revision=4).sha256 != first.sha256
     assert replace(first, template_revision="resident-position-v2").sha256 != first.sha256
     assert replace(first, policy_revision="demo-initiative-v2").sha256 != first.sha256
+    assert DocumentSnapshot.from_canonical_bytes(first.canonical_bytes()) == first
 
 
 def test_snapshot_cannot_be_mutated_after_capture() -> None:

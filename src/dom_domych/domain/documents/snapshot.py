@@ -149,6 +149,57 @@ class DocumentSnapshot:
             payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
 
+    @classmethod
+    def from_canonical_bytes(cls, content: bytes) -> "DocumentSnapshot":
+        """Восстанавливает проверенный снимок для фонового PDF без чтения живых фактов."""
+
+        raw = json.loads(content)
+        if not isinstance(raw, dict):
+            raise ValueError("document snapshot must be an object")
+        facts = tuple(DocumentFact(**item) for item in raw["facts"])
+        notices = tuple(
+            NoticeEntry(
+                resident_id=UUID(item["resident_id"]),
+                status=NoticeStatus(item["status"]),
+                attempted_at=(
+                    datetime.fromisoformat(item["attempted_at"])
+                    if item["attempted_at"] is not None
+                    else None
+                ),
+                delivery_operation_id=(
+                    UUID(item["delivery_operation_id"])
+                    if item["delivery_operation_id"] is not None
+                    else None
+                ),
+            )
+            for item in raw["notices"]
+        )
+        tally_data = raw["tally"]
+        snapshot = cls(
+            kind=DocumentKind(raw["kind"]),
+            mode=DocumentMode(raw["mode"]),
+            template_revision=raw["template_revision"],
+            house_id=UUID(raw["house_id"]),
+            case_id=UUID(raw["case_id"]),
+            case_revision=raw["case_revision"],
+            audience_id=UUID(raw["audience_id"]),
+            audience_revision=raw["audience_revision"],
+            poll_id=UUID(raw["poll_id"]) if raw["poll_id"] is not None else None,
+            poll_revision=raw["poll_revision"],
+            policy_revision=raw["policy_revision"],
+            request_id=(UUID(raw["request_id"]) if raw["request_id"] is not None else None),
+            request_revision=raw["request_revision"],
+            title=raw["title"],
+            house_address=raw["house_address"],
+            facts=facts,
+            tally=(VoteTally(**tally_data) if tally_data is not None else None),
+            notices=notices,
+            created_at=datetime.fromisoformat(raw["created_at"]),
+        )
+        if snapshot.canonical_bytes() != content:
+            raise ValueError("document snapshot is not canonical")
+        return snapshot
+
     @property
     def sha256(self) -> str:
         return hashlib.sha256(self.canonical_bytes()).hexdigest()
