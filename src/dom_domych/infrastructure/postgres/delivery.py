@@ -37,6 +37,7 @@ class PendingDelivery:
     file_key: UUID | None
     attachment_token: str | None
     attempts: int
+    buttons: tuple[tuple[str, str], ...] = ()
 
 
 class PostgresDeliveryQueue:
@@ -51,6 +52,10 @@ class PostgresDeliveryQueue:
             raise ValueError("delivery needs operation_key and content")
         if (intent.recipient_id is None) == (intent.chat_id is None):
             raise ValueError("delivery needs exactly one target")
+        if len(intent.buttons) > 7 or any(
+            not label or not token or len(token) > 1024 for label, token in intent.buttons
+        ):
+            raise ValueError("delivery buttons must be valid callback actions")
         if intent.chat_id is not None:
             mapped_house = await self.session.scalar(
                 select(HouseRow.id).where(HouseRow.max_chat_id == intent.chat_id)
@@ -98,6 +103,7 @@ class PostgresDeliveryQueue:
                 chat_id=intent.chat_id,
                 edit_key=intent.edit_key,
                 file_key=intent.file_key,
+                buttons=[{"text": label, "payload": token} for label, token in intent.buttons],
                 status="pending",
                 available_at=self.clock.now(),
             )
@@ -125,12 +131,14 @@ class PostgresDeliveryQueue:
             existing.chat_id,
             existing.edit_key,
             existing.file_key,
+            tuple((item["text"], item["payload"]) for item in existing.buttons),
         ) != (
             intent.text,
             intent.recipient_id,
             intent.chat_id,
             intent.edit_key,
             intent.file_key,
+            intent.buttons,
         ):
             raise DeliveryConflictError("operation_key reused for different delivery")
 
@@ -171,6 +179,7 @@ class PostgresDeliveryQueue:
             row.file_key,
             row.attachment_token,
             row.attempts,
+            tuple((item["text"], item["payload"]) for item in row.buttons),
         )
 
     async def save_attachment_token(

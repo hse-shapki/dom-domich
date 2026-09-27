@@ -188,6 +188,7 @@ class DeliveryIntent:
     chat_id: str | None = None
     edit_key: str | None = None
     file_key: UUID | None = None
+    buttons: tuple[tuple[str, str], ...] = ()
 
 
 class DeliveryPort(Protocol):

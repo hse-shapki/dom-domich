@@ -7,8 +7,9 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.polls.callback import StoredPollAction
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
-from dom_domych.domain.polls.models import PollKind, PollState, PollStatus
+from dom_domych.domain.polls.models import PollKind, PollState, PollStatus, VoteChoice
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.domain.resolution.models import (
     ResolutionConflict,
@@ -20,6 +21,7 @@ from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
 from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
 from dom_domych.infrastructure.postgres.inbox import save_domain_event
 from dom_domych.infrastructure.postgres.models import HouseRow, ScheduledJobRow
+from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
 from dom_domych.infrastructure.postgres.z_executor_models import DemoExecutorRow
@@ -206,6 +208,29 @@ class PostgresResolutionStore:
                 {"poll_id": str(state.poll_id), "done_event_id": str(state.done_event_id)},
             )
             for resident_id in notification_targets:
+                actions = PostgresPollActionStore(session)
+                yes_token = await actions.create(
+                    StoredPollAction(
+                        poll_id=state.poll_id,
+                        house_id=state.house_id,
+                        audience_id=state.original_audience_id,
+                        subject_revision=state.case_version_at_start,
+                        choice=VoteChoice.YES,
+                        expires_at=poll.definition.closes_at,
+                        bound_resident_id=resident_id,
+                    )
+                )
+                no_token = await actions.create(
+                    StoredPollAction(
+                        poll_id=state.poll_id,
+                        house_id=state.house_id,
+                        audience_id=state.original_audience_id,
+                        subject_revision=state.case_version_at_start,
+                        choice=VoteChoice.NO,
+                        expires_at=poll.definition.closes_at,
+                        bound_resident_id=resident_id,
+                    )
+                )
                 await PostgresDeliveryQueue(session, self.clock).enqueue(
                     DeliveryIntent(
                         house_id=state.house_id,
@@ -215,6 +240,7 @@ class PostgresResolutionStore:
                             "Подтвердите фактический результат в опросе дома."
                         ),
                         recipient_id=resident_id,
+                        buttons=(("Подтверждаю", yes_token), ("Не подтверждаю", no_token)),
                     )
                 )
             return state

@@ -125,12 +125,22 @@ class MaxApiClient:
             raise MaxApiError("/messages", 200, "missing_message_id")
         return content["mid"]
 
-    async def edit_text(self, message_id: str, text: str, *, dialog_key: str | None = None) -> None:
+    async def edit_text(
+        self,
+        message_id: str,
+        text: str,
+        *,
+        dialog_key: str | None = None,
+        attachments: list[dict[str, object]] | None = None,
+    ) -> None:
+        body: dict[str, object] = {"text": text}
+        if attachments is not None:
+            body["attachments"] = attachments
         payload = await self._request(
             "PUT",
             "/messages",
             params={"message_id": message_id},
-            body={"text": text},
+            body=body,
             operation="message",
             dialog_key=dialog_key or f"message:{message_id}",
         )

@@ -1,5 +1,6 @@
 """A08: атомарное намерение доставки, MAX send и недоступная личка."""
 
+import json
 import os
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -124,7 +125,13 @@ async def test_public_card_is_sent_then_edited_by_saved_message_id() -> None:
             )
             queue = PostgresDeliveryQueue(session, clock)
             first_id = await queue.enqueue(
-                DeliveryIntent(HOUSE_ONE, initial_key, "Первый", chat_id="333")
+                DeliveryIntent(
+                    HOUSE_ONE,
+                    initial_key,
+                    "Первый",
+                    chat_id="333",
+                    buttons=(("За", "opaque-yes"), ("Против", "opaque-no")),
+                )
             )
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
@@ -139,6 +146,7 @@ async def test_public_card_is_sent_then_edited_by_saved_message_id() -> None:
                         "Обновлён",
                         chat_id="333",
                         edit_key=initial_key,
+                        buttons=(("За", "opaque-yes"), ("Против", "opaque-no")),
                     )
                 )
             assert await worker.run_once()
@@ -154,6 +162,10 @@ async def test_public_card_is_sent_then_edited_by_saved_message_id() -> None:
             )
     assert [request.method for request in updates] == ["POST", "PUT"]
     assert updates[1].url.params["message_id"] == "mid.card"
+    for request in updates:
+        attachments = json.loads(request.content)["attachments"]
+        assert attachments[0]["type"] == "inline_keyboard"
+        assert attachments[0]["payload"]["buttons"][0][0]["payload"] == "opaque-yes"
 
 
 @pytest.mark.asyncio

@@ -48,6 +48,38 @@ async def test_client_rejects_200_without_semantic_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_client_sends_and_edits_inline_callback_keyboard() -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "PUT":
+            return httpx.Response(200, json={"success": True})
+        return httpx.Response(200, json={"message": {"body": {"mid": "mid.poll"}}})
+
+    keyboard: list[dict[str, object]] = [
+        {
+            "type": "inline_keyboard",
+            "payload": {
+                "buttons": [
+                    [
+                        {"type": "callback", "text": "За", "payload": "opaque-yes"},
+                        {"type": "callback", "text": "Против", "payload": "opaque-no"},
+                    ]
+                ]
+            },
+        }
+    ]
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
+    ) as http:
+        api = MaxApiClient(http, "secret-token")
+        assert await api.send_text("Позиция", chat_id=123, attachments=keyboard) == "mid.poll"
+        await api.edit_text("mid.poll", "Позиция обновлена", attachments=keyboard)
+    assert [json.loads(request.content)["attachments"] for request in seen] == [keyboard, keyboard]
+
+
+@pytest.mark.asyncio
 async def test_client_requests_upload_slot_without_leaking_token_to_url() -> None:
     seen: list[httpx.Request] = []
 

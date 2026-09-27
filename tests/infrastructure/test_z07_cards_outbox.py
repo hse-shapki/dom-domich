@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.cards.production import PostgresPublicCards
@@ -20,7 +20,8 @@ from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseR
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.initiative_cases import PostgresInitiativeCases
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
-from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow
+from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, PollActionRow
+from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
 from scripts.seed_demo_house import seed_demo_house
@@ -87,11 +88,24 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
             )
         cards = PostgresPublicCards(sessions, clock)
         base_id = await cards.publish_problem(poll.definition.poll_id, HOUSE_ONE)
+        assert await cards.publish_problem(poll.definition.poll_id, HOUSE_ONE) == base_id
         async with sessions.begin() as session:
             base = await session.get(OutboxDeliveryRow, base_id)
             assert base is not None
             assert "Подтвердили: 0/12" in base.text
             assert "демонстрационная настройка" in base.text
+            assert [item["text"] for item in base.buttons] == ["Подтверждаю", "Не подтверждаю"]
+            action = await PostgresPollActionStore(session).get(base.buttons[0]["payload"])
+            assert action is not None and action.poll_id == poll.definition.poll_id
+            assert action.choice is VoteChoice.YES
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PollActionRow)
+                    .where(PollActionRow.poll_id == poll.definition.poll_id)
+                )
+                == 2
+            )
             base.status = "sent"
             base.max_message_id = "test-message"
         for member in audience.members[:2]:
@@ -119,6 +133,7 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
             latest = next(row for row in rows if row.status == "pending")
             assert "Подтвердили: 2/12" in latest.text
             assert "resident_id" not in latest.text
+            assert latest.buttons == base.buttons
         async with sessions.begin() as session:
             await session.execute(
                 update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id=None)

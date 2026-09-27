@@ -119,6 +119,19 @@ class DeliveryWorker:
                 await self._settle(delivery, "failed", error_code=type(exc).__name__)
                 return
             attachments = [{"type": "file", "payload": {"token": token}}]
+        if delivery.buttons:
+            keyboard: dict[str, object] = {
+                "type": "inline_keyboard",
+                "payload": {
+                    "buttons": [
+                        [
+                            {"type": "callback", "text": label, "payload": token}
+                            for label, token in delivery.buttons
+                        ]
+                    ]
+                },
+            }
+            attachments = [*(attachments or []), keyboard]
         try:
             if edit_message_id is not None:
                 await self.max_client.edit_text(
@@ -129,6 +142,7 @@ class DeliveryWorker:
                         if delivery.chat_id is not None
                         else f"resident:{delivery.recipient_id}"
                     ),
+                    attachments=attachments,
                 )
                 message_id = edit_message_id
             elif user_id is not None:

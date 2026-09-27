@@ -166,6 +166,7 @@ class OutboxDeliveryRow(Base):
     chat_id: Mapped[str | None] = mapped_column(String(40))
     edit_key: Mapped[str | None] = mapped_column(String(250))
     file_key: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    buttons: Mapped[list[dict[str, str]]] = mapped_column(JSONB, nullable=False, default=list)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

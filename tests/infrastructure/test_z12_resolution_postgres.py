@@ -32,6 +32,7 @@ from dom_domych.infrastructure.postgres.models import (
     OutboxDeliveryRow,
     ScheduledJobRow,
 )
+from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
 from dom_domych.infrastructure.postgres.resolution import (
@@ -235,6 +236,15 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
                 )
                 == 12
             )
+            notice = await session.scalar(
+                select(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.operation_key
+                    == f"resolution:check:{state.poll_id}:{audience.members[0].resident_id}"
+                )
+            )
+            assert notice is not None and len(notice.buttons) == 2
+            action = await PostgresPollActionStore(session).get(notice.buttons[0]["payload"])
+            assert action is not None and action.bound_resident_id == notice.recipient_id
         for index, member in enumerate(audience.members[: yes + no]):
             async with sessions.begin() as session:
                 await PostgresPollRepository(session).record_answer_atomic(
