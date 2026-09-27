@@ -11,11 +11,12 @@ from dom_domych.application.jobs.inbox_worker import EventDispatcher
 from dom_domych.application.polls.service import PollService
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
-from dom_domych.domain.polls.models import PollKind
-from dom_domych.domain.polls.policy import demo_problem_policy
-from dom_domych.domain.ports.core import Clock
+from dom_domych.domain.polls.models import PollKind, PollStatus, VoteChoice
+from dom_domych.domain.polls.policy import ProblemOutcome, demo_problem_policy
+from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
+from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.z_poll_models import PollRow
@@ -44,6 +45,8 @@ class PostgresProblemEventHandler:
         self.clock = clock
 
     async def __call__(self, event: EventEnvelope) -> bool:
+        if event.name in {EventName.POLL_THRESHOLD_REACHED, EventName.POLL_EXPIRED}:
+            return await self._handle_poll_result(event)
         if (
             event.name is not EventName.PROBLEM_DETECTED
             or event.source is not EventSource.DOMAIN
@@ -115,6 +118,97 @@ class PostgresProblemEventHandler:
             )
         return True
 
+    async def _handle_poll_result(self, event: EventEnvelope) -> bool:
+        if (
+            event.source is not EventSource.DOMAIN
+            or event.house_id is None
+            or event.entity is None
+            or event.entity.case_id is None
+        ):
+            return False
+        async with self.sessions.begin() as session:
+            poll = await PostgresPollRepository(session).get_state(
+                event.entity.entity_id, event.house_id
+            )
+            if (
+                poll is None
+                or poll.definition.kind is not PollKind.PROBLEM_CONFIRMATION
+                or poll.status is not PollStatus.CLOSED
+                or poll.outcome not in {ProblemOutcome.REQUEST_READY, ProblemOutcome.NEED_EVIDENCE}
+            ):
+                return False
+            case = await session.scalar(
+                select(CaseRow)
+                .where(
+                    CaseRow.id == poll.definition.case_id,
+                    CaseRow.house_id == event.house_id,
+                )
+                .with_for_update()
+            )
+            if case is None or case.kind != "problem":
+                raise ValueError("problem case is missing or belongs to another house")
+            if case.status != "collecting":
+                applied = await session.scalar(
+                    select(CaseEventRow.id).where(
+                        CaseEventRow.house_id == event.house_id,
+                        CaseEventRow.operation_id == event.event_id,
+                    )
+                )
+                if applied is None:
+                    raise ValueError("problem poll result is stale")
+                return False
+            previous_version = case.version
+            case.version += 1
+            case.status = (
+                "request_ready"
+                if poll.outcome is ProblemOutcome.REQUEST_READY
+                else "needs_evidence"
+            )
+            session.add(
+                CaseEventRow(
+                    id=uuid4(),
+                    case_id=case.id,
+                    house_id=case.house_id,
+                    event_type=f"problem.{case.status}",
+                    before_version=previous_version,
+                    after_version=case.version,
+                    actor_id=None,
+                    source_message_id=None,
+                    operation_id=event.event_id,
+                    occurred_at=self.clock.now(),
+                    facts={
+                        "poll_id": str(poll.definition.poll_id),
+                        "poll_version": poll.version,
+                        "outcome": poll.outcome.value,
+                    },
+                )
+            )
+            if poll.outcome is ProblemOutcome.NEED_EVIDENCE:
+                yes_residents = tuple(
+                    answer.resident_id for answer in poll.answers if answer.choice is VoteChoice.YES
+                )
+                queue = PostgresDeliveryQueue(session, self.clock)
+                for resident_id in yes_residents:
+                    await queue.enqueue(
+                        DeliveryIntent(
+                            house_id=case.house_id,
+                            operation_key=(
+                                f"problem:evidence:{case.id}:{poll.definition.poll_id}:"
+                                f"{resident_id}"
+                            ),
+                            text=(
+                                f"По проблеме «{case.title}» пока недостаточно подтверждений. "
+                                "Пришлите фото или другое доступное подтверждение в личный чат."
+                            ),
+                            recipient_id=resident_id,
+                        )
+                    )
+            await PostgresPublicCards(self.sessions, self.clock).enqueue_problem(
+                session, case.title, case.version, poll
+            )
+        # Следующие handlers получают уже зафиксированное состояние и запускают continuation.
+        return False
+
     def _case_event(
         self,
         session: AsyncSession,
@@ -149,4 +243,7 @@ def register_problem_events(
     sessions: async_sessionmaker[AsyncSession],
     clock: Clock,
 ) -> None:
-    dispatcher.register(EventName.PROBLEM_DETECTED, PostgresProblemEventHandler(sessions, clock))
+    handler = PostgresProblemEventHandler(sessions, clock)
+    dispatcher.register(EventName.PROBLEM_DETECTED, handler)
+    dispatcher.register(EventName.POLL_THRESHOLD_REACHED, handler)
+    dispatcher.register(EventName.POLL_EXPIRED, handler)

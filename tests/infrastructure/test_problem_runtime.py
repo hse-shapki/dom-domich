@@ -11,6 +11,8 @@ from dom_domych.agent.contracts import CaseCreate, CaseKind
 from dom_domych.application.cases.production import register_problem_events
 from dom_domych.application.jobs.inbox_worker import EventDispatcher, InboxWorker
 from dom_domych.contracts.base import ExecutionMode, PrincipalType, TrustedContext
+from dom_domych.contracts.events import EventName
+from dom_domych.domain.polls.models import VoteChoice
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
 from dom_domych.infrastructure.postgres.models import (
@@ -19,6 +21,7 @@ from dom_domych.infrastructure.postgres.models import (
     OutboxDeliveryRow,
     ScheduledJobRow,
 )
+from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
 from dom_domych.infrastructure.postgres.z_audience_models import AudienceSnapshotRow
 from dom_domych.infrastructure.postgres.z_poll_models import PollRow
@@ -64,6 +67,10 @@ def command(title: str) -> CaseCreate:
     )
 
 
+async def accept_event(_: object) -> bool:
+    return True
+
+
 @pytest.mark.asyncio
 async def test_problem_created_event_opens_poll_job_and_card_atomically() -> None:
     clock = FixedClock()
@@ -94,6 +101,35 @@ async def test_problem_created_event_opens_poll_job_and_card_atomically() -> Non
                     .where(ScheduledJobRow.entity_id == poll.id)
                 )
                 == 1
+            )
+
+        async with sessions.begin() as session:
+            state = await PostgresPollRepository(session).get_state(poll.id, HOUSE_ONE)
+            assert state is not None
+            residents = tuple(state.definition.eligible_residents)
+        for resident_id in residents[:3]:
+            async with sessions.begin() as session:
+                await PostgresPollRepository(session).record_answer_atomic(
+                    poll.id,
+                    HOUSE_ONE,
+                    resident_id,
+                    VoteChoice.YES,
+                    uuid4(),
+                    clock.now(),
+                )
+        dispatcher.register(EventName.POLL_THRESHOLD_REACHED, accept_event)
+        assert await worker.run_once()
+        async with sessions() as session:
+            updated = await session.get(CaseRow, case.case_id)
+            assert updated is not None
+            assert updated.status == "request_ready" and updated.version == 3
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(OutboxDeliveryRow)
+                    .where(OutboxDeliveryRow.operation_key.like(f"problem:{case.case_id}%"))
+                )
+                == 2
             )
             assert (
                 await session.scalar(

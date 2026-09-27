@@ -186,8 +186,9 @@ PostgreSQL 17 с fake LLM. A process root запускает K-контур с �
 llama-server и production Z `ExecutorPort`/`DocumentPort`, callback, resolution
 handlers и PDF worker. Обычная проблема после production `case.create` выпускает
 durable `problem.detected`: worker атомарно создаёт audience/poll/deadline и
-card-outbox. Итог problem poll, автоматический initiative route и live G3 пока
-не проверены.
+card-outbox. Domain threshold/expiry до continuation фиксирует `request_ready` либо
+`needs_evidence`, обновляет карточку и адресные evidence intents. Автоматический
+initiative route и live G3 пока не проверены.
 
 ## 8. Аварии самой системы
 

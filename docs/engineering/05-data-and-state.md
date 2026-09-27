@@ -99,8 +99,9 @@ K09 `ProblemWorkflow` принимает итог от Z, не пересчит�
 handler получает `problem.detected` из durable inbox и в одной UoW сохраняет
 аудиторию, poll, deadline, переход дела и публичную карточку/outbox. При N=0 poll
 не открывается; без настроенного group chat транзакция откатывается целиком.
-Переход по итоговому poll и приватные evidence intents для ответивших «да» пока
-не подключены. Evidence ref записывается с actor/event/version и сам не публикуется.
+Trusted итог poll в той же orchestration переводит дело в `request_ready` либо
+`needs_evidence`, обновляет карточку и во второй ветке создаёт private evidence intents
+только ответившим «да». Evidence ref записывается с actor/event/version и сам не публикуется.
 
 ### Позиция по инициативе
 

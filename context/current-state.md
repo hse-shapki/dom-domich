@@ -23,7 +23,7 @@ K03: runtime проверяет allowlist, JSON schema, режим, capability �
 production K case/knowledge/request services собираются одним composition helper.
 Runtime связывает ответ с tool call ID, сохраняет краткий audit и не выдаёт ошибку
 handler за успех. Production K handlers и вход из inbox подключены; ordinary problem
-opening собран через durable event, но итог опроса и initiative orchestration ещё открыты.
+opening/outcome собраны через durable events, но initiative orchestration ещё открыта.
 K04: `ContextBuilder` перечитывает текущую версию дела и actor-scoped pending
 question. PostgreSQL хранит runs, pending questions и краткий tool audit;
 миграция, восстановление и composition с inbox проверены на PostgreSQL 18.
@@ -54,8 +54,9 @@ application use case и сквозная связка с A/Z ещё не под�
 K09: ProblemWorkflow проверяет scope дела и доверенный итог Z. Production handler
 после `case.create` теперь одной UoW сохраняет frozen audience, poll, deadline,
 переход case и публичную карточку/outbox; отсутствие group chat откатывает весь переход.
-EvidenceService пишет private ref и versioned event. Обработка итогового poll в
-`request_ready`/`needs_evidence` пока не подключена, поэтому полный маршрут не готов.
+Trusted итог poll до agent continuation переводит дело в `request_ready` либо
+`needs_evidence`; во второй ветке private outbox создаётся только для ответивших «да».
+Следующий request/evidence цикл и live MAX пока не проверены.
 K10: RequestService сверяет актуальную версию дела и проверенное правило,
 хранит draft hash/version и явное согласование. Изменение черновика сбрасывает
 approval, submit в demo идемпотентен через operation key, статус registered
@@ -109,7 +110,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Корневые правила для агентов | Есть | `AGENTS.md` |
 | Постоянный контекст | Есть | `context/README.md`, `decisions.md`, `product.md`, `engineering.md`, `current-state.md` |
 | Чистые доменные правила опросов Z01 | Проверены на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`: 23 теста |
-| Общие контракты A01 / предложения K00/Z00 | Частично: DTO/ports и registry совместимы; problem opening связан, итог problem poll и initiative route ещё нет | `src/dom_domych/contracts/`, `application/cases/production.py`, `application/agent/composition.py`, K/Z tests |
+| Общие контракты A01 / предложения K00/Z00 | Частично: DTO/ports и registry совместимы; problem open/outcome связан, initiative route ещё нет | `src/dom_domych/contracts/`, `application/cases/production.py`, `application/agent/composition.py`, K/Z tests |
 | Синтетический дом Z02 | Проверен как fixture и seed A02 | `tests/fixtures/zamira_house.py`, `tests/fixtures/test_zamira_house.py`, `scripts/seed_demo_house.py`: 4 fixture-теста |
 | AudienceService Z03 | Частично: выбор проверен на fake, PostgreSQL snapshot/revision/idempotency и конкурентный successor — на локальной PostgreSQL 16 | `src/dom_domych/application/audiences/service.py`, `src/dom_domych/infrastructure/postgres/audiences.py`, `migrations/versions/63a9d1e4bc02_z03_audiences.py`, `tests/infrastructure/test_z03_audiences_postgres.py`; K runtime ещё не подключён |
 | PollService Z04 | Частично: PostgreSQL ответы/история, конкурентный голос, deadline job и threshold event проверены на PostgreSQL 16; callback/cards/scheduler подключены | `src/dom_domych/infrastructure/postgres/polls.py`, `z_poll_models.py`, `migrations/versions/9d20b8a6c743_z04_polls.py`, `tests/infrastructure/test_z04_polls_postgres.py`; K route и live MAX не проверены |
@@ -138,7 +139,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | MAX files A11 | Частично: PDF upload, token reuse/retry, безопасное фото, process-local rate limits и coalescing edit реализованы | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `infrastructure/max/rate_limit.py`, tests; live MAX mobile/web и K evidence linkage ещё нужны |
 | Deploy/runtime A12 | Частично: полный Compose с Z document worker локально запускает и перезапускает migrate/API/inbox/scheduler/outbox/documents/maintenance/Caddy; локальный HTTPS readiness различает БД и LLM; наружу опубликован только Caddy | `Dockerfile`, `deploy/compose.yml`, `entrypoints/api.py`, `entrypoints/processes.py`; публичный DNS/TLS, выбранная модель и live MAX/inference не проверены |
 | Надёжность A13 | Частично: bounded retry/dead-letter/delivery_unknown, rate limits, coalescing и heartbeat outbox/jobs проверены | `infrastructure/max/rate_limit.py`, queue workers/repositories и PostgreSQL tests; live rate-limit и потеря прав MAX не проверены |
-| Composition/polling A14 | Частично: обычная проблема автоматически проходит durable event → атомарные audience/poll/deadline/case/card-outbox; K/Z inbox/scheduler, polling, executor/document/callback/PDF подключены | `application/cases/production.py`, `entrypoints/processes.py`, `tests/infrastructure/test_problem_runtime.py`; итог problem poll, initiative route и live G3 не готовы |
+| Composition/polling A14 | Частично: обычная проблема проходит durable open/outcome events → атомарные audience/poll/deadline/case/card-outbox и request_ready/needs_evidence; остальные runtime handlers подключены | `application/cases/production.py`, `entrypoints/processes.py`, `tests/infrastructure/test_problem_runtime.py`; initiative route и live G3 не готовы |
 | Backup/restore A15 | Проверено локально на PostgreSQL 17.8/pgvector и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Z head `0a7b6c5d4e3f`, vector, 40 public tables и 5 файлов с теми же SHA-256; временные данные удалены |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
@@ -151,8 +152,8 @@ K16: четыре вариативных демо-пути, ссылки на п
 ## Следующий шаг по утверждённому плану
 
 K/Z handlers и repositories запускаются из A14 process root; обычная проблема уже
-открывает audience/poll/card атомарно через durable inbox. Следующий блокирующий шаг —
-применить итог problem poll, собрать initiative route и переход поддержанной инициативы
+открывает audience/poll/card атомарно и применяет trusted outcome через durable inbox.
+Следующий блокирующий шаг — собрать initiative route и переход поддержанной инициативы
 к исполнению. Затем нужны реальный MAX/LLM
 доступ, HTTPS smoke и G1–G3/mobile-web прогоны. На отдельной PostgreSQL 17.8 +
 pgvector 0.8.1 с полной миграцией с нуля прошли 247 тестов, Ruff, mypy и Alembic
