@@ -62,8 +62,10 @@ K10: RequestService сверяет актуальную версию дела и
 approval, submit в demo идемпотентен через operation key, статус registered
 появляется только от доверенного DemoOperation. Готовый документ теперь связывается
 с request по `DocumentPort` с проверкой дома/case/hash/file key. Миграции и цикл
-проверены на PostgreSQL 18 с fake Z ports. Production Z Document/Executor repositories
-проверены отдельно; их стык с K процессом частично подключён.
+проверены на PostgreSQL 18 с fake Z ports. Для problem/initiative доверенное domain
+`request.registered` теперь идемпотентно создаёт production appeal snapshot из сохранённых
+case/request/poll/audience фактов; PDF worker и `document.ready` продолжают тот же процесс.
+Emergency без исходной аудитории и live доставка ещё не покрыты.
 K11: EmergencyService готовит draft сразу после проверки места и ответственного,
 не зависит от poll; при пробеле в месте/источнике возвращает точное уточнение,
 не выдумывает срок. Evidence intent идёт только в личный outbox, идемпотентен
@@ -139,7 +141,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | MAX files A11 | Частично: PDF upload, token reuse/retry, безопасное фото, process-local rate limits и coalescing edit реализованы | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `infrastructure/max/rate_limit.py`, tests; live MAX mobile/web и K evidence linkage ещё нужны |
 | Deploy/runtime A12 | Частично: полный Compose с Z document worker локально запускает и перезапускает migrate/API/inbox/scheduler/outbox/documents/maintenance/Caddy; локальный HTTPS readiness различает БД и LLM; наружу опубликован только Caddy | `Dockerfile`, `deploy/compose.yml`, `entrypoints/api.py`, `entrypoints/processes.py`; публичный DNS/TLS, выбранная модель и live MAX/inference не проверены |
 | Надёжность A13 | Частично: bounded retry/dead-letter/delivery_unknown, rate limits, coalescing и heartbeat outbox/jobs проверены | `infrastructure/max/rate_limit.py`, queue workers/repositories и PostgreSQL tests; live rate-limit и потеря прав MAX не проверены |
-| Composition/polling A14 | Частично: problem open/outcome и initiative open/decision проходят через durable events и общие K/Z PostgreSQL UoW | production orchestration modules, `entrypoints/processes.py`, runtime tests; request после поддержки требует actor/rule, live G3 не готов |
+| Composition/polling A14 | Частично: problem open/outcome, initiative open/decision и registered request → appeal queue проходят через durable events и общие K/Z PostgreSQL адаптеры | production orchestration modules, `entrypoints/processes.py`, runtime tests; request после поддержки требует actor/rule, emergency PDF и live G3 не готовы |
 | Backup/restore A15 | Проверено локально на PostgreSQL 17.8/pgvector и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Z head `0a7b6c5d4e3f`, vector, 40 public tables и 5 файлов с теми же SHA-256; временные данные удалены |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
@@ -152,7 +154,8 @@ K16: четыре вариативных демо-пути, ссылки на п
 ## Следующий шаг по утверждённому плану
 
 K/Z handlers и repositories запускаются из A14 process root; обычная проблема уже
-открывает audience/poll/card атомарно и применяет trusted outcome через durable inbox.
+открывает audience/poll/card атомарно, применяет trusted outcome и после доверенной
+регистрации ставит immutable appeal PDF в очередь через durable inbox.
 Следующий внутренний шаг — провести подготовку request от поддержанной инициативы после
 явного действия подтверждённого жителя и найденного проверенного правила. Затем нужны реальный MAX/LLM
 доступ, HTTPS smoke и G1–G3/mobile-web прогоны. На отдельной PostgreSQL 17.8 +
