@@ -54,10 +54,17 @@ class PostgresPublicCards:
             poll = await PostgresPollRepository(session).get_state(poll_id, house_id)
             if poll is None:
                 raise RuntimeError("locked poll disappeared")
-            card = problem_card(case.title, poll)
-            return await self._enqueue(
-                session, replace(card, source_version=f"{case.version}:{poll.version}"), poll
-            )
+            return await self.enqueue_problem(session, case.title, case.version, poll)
+
+    async def enqueue_problem(
+        self, session: AsyncSession, title: str, case_version: int, poll: PollState
+    ) -> UUID:
+        """Сохранить карточку в UoW вызывающего вместе с открытием problem poll."""
+
+        card = problem_card(title, poll)
+        return await self._enqueue(
+            session, replace(card, source_version=f"{case_version}:{poll.version}"), poll
+        )
 
     @staticmethod
     async def _lock_poll(session: AsyncSession, poll_id: UUID, house_id: UUID) -> PollRow:

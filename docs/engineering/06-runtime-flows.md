@@ -184,8 +184,10 @@ continuation, поэтому новый run читает уже зафиксир
 собирает coordinator на production K repositories. Это проверено на локальном
 PostgreSQL 17 с fake LLM. A process root запускает K-контур с настраиваемым
 llama-server и production Z `ExecutorPort`/`DocumentPort`, callback, resolution
-handlers и PDF worker. Автоматическое открытие problem/initiative poll из маршрута
-агента и live G3 пока не проверены.
+handlers и PDF worker. Обычная проблема после production `case.create` выпускает
+durable `problem.detected`: worker атомарно создаёт audience/poll/deadline и
+card-outbox. Итог problem poll, автоматический initiative route и live G3 пока
+не проверены.
 
 ## 8. Аварии самой системы
 

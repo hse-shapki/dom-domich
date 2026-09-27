@@ -161,7 +161,6 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
             worker = InboxWorker(sessions, dispatcher, clock, "k14-message-worker")
 
             assert await worker.run_once()
-            assert not await worker.run_once()
             assert llm.call_count == 3
 
             async with sessions() as session:
@@ -184,6 +183,12 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                 assert delivery.status == "pending"
                 inbox = await session.get(InboxEventRow, event_id)
                 assert inbox is not None and inbox.status == "done"
+                problem_event = await session.scalar(
+                    select(InboxEventRow).where(
+                        InboxEventRow.source_key == f"problem-detected:{case.id}"
+                    )
+                )
+                assert problem_event is not None and problem_event.status == "pending"
 
             async with sessions.begin() as session:
                 assert not await save_inbox_event(session, event.source_key, event, {}, NOW)
@@ -195,6 +200,9 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                 )
                 await session.execute(delete(AgentRunRow).where(AgentRunRow.house_id == house_id))
                 await session.execute(delete(InboxEventRow).where(InboxEventRow.id == event_id))
+                await session.execute(
+                    delete(InboxEventRow).where(InboxEventRow.house_id == house_id)
+                )
                 await session.execute(
                     delete(CaseOperationRow).where(CaseOperationRow.case_id.in_(case_ids))
                 )
