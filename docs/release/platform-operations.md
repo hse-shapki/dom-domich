@@ -100,6 +100,9 @@ Backup восстановил новый Z head, vector, 40 public tables и п�
 временные БД, контейнеры и volumes удалены.
 GitHub Actions run [#26](https://github.com/hse-shapki/dom-domich/actions/runs/36334824300)
 на `c51ec86` затем успешно повторил workflow с целевым PG17/pgvector.
+После подключения ordinary problem runtime run
+[#31](https://github.com/hse-shapki/dom-domich/actions/runs/36337214973) на `6c11ce9`
+успешно выполнил тот же workflow уже с 247 тестами.
 
 ## Перед релизом
 

@@ -126,7 +126,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Сквозная проверка Z14 | Частично: PostgreSQL/MockTransport цепь карточка → callback → голос → edit, отдельные PDF/Executor/result сценарии и retry проверены | `tests/infrastructure/test_z07_cards_outbox.py`, `test_z09_documents_postgres.py`, `test_z11_demo_executor_postgres.py`, `test_z12_resolution_postgres.py`; единый K/Z G3 и live MAX отсутствуют |
 | PDF QA Z15 | Частично: 4 образца, все 7 страниц, hash и локальный PostgreSQL/FileStore/outbox путь проверены | `docs/release/zamira-pdf-qa.md`, `tests/infrastructure/test_z09_documents_postgres.py`; mobile/web MAX не проверены |
 | Материалы Z16 | Частично: handoff, демо-политики, синтетические данные, обе развилки результата и воспроизведение PDF описаны | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; live G3 runbook ждёт K/Z orchestration и MAX |
-| Python-проект и зависимости A00 | Проверено локально; предыдущий набор — GitHub Actions #26 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; локально на целевом PG17/pgvector migration/check, двойной seed, Ruff, mypy и 247 тестов прошли; CI нового набора ожидается |
+| Python-проект и зависимости A00 | Проверено локально и GitHub Actions #31 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; на целевом PG17/pgvector migration/check, двойной seed, Ruff, mypy и 247 тестов прошли |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17.8 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: единая migration/check до `0a7b6c5d4e3f`, повторный seed и 247 тестов |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, привязка MAX ID/чата, DM `/start`, stopped и выбор дома проверены на PostgreSQL 17 | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; CLI допускает только demo-дома, live MAX ещё не проверен |
@@ -160,7 +160,7 @@ pgvector 0.8.1 с полной миграцией с нуля прошли 247 �
 check без новых операций; тот же набор ранее прошёл на PostgreSQL 16. Старое
 предупреждение Alembic о неизвестном типе `vector` сохраняется. A-пул повторно
 проверил полный Compose lifecycle уже с Z document worker и восстановление нового
-Z head. CI workflow поднимает тот же PG17/pgvector; GitHub Actions #26 на `c51ec86`
+Z head. CI workflow поднимает тот же PG17/pgvector; GitHub Actions #31 на `6c11ce9`
 завершился успешно 27.09.2026.
 
 ## Как обновлять после задачи
