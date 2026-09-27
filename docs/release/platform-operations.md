@@ -85,6 +85,8 @@ vector 0.8.1 и тестовый файл в named FileStore volume, readiness �
 Полный Compose с новым `documents` process пережил общий restart без циклических ошибок.
 Backup восстановил новый Z head, vector, 40 public tables и пять файлов с теми же SHA-256;
 временные БД, контейнеры и volumes удалены.
+GitHub Actions run [#26](https://github.com/hse-shapki/dom-domich/actions/runs/36334824300)
+на `c51ec86` затем успешно повторил workflow с целевым PG17/pgvector.
 
 ## Перед релизом
 
