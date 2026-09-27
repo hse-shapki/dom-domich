@@ -88,7 +88,7 @@
 | K15: agent evals | Частично: оценщик и рубрика 24 кейсов проверены unit-тестами; реальные model metrics не измерены из-за нехватки памяти доступного Mac | `scripts/evaluate_agent.py`, `evals/k15-status.md`, `tests/agent/test_k15_evaluator.py` |
 | K16: demo handoff | Частично: четыре вариативных пути и provenance подготовлены; live MAX/G3 evidence ещё отсутствуют | `docs/release/katerina-demo-handoff.md`, `docs/release/max-mobile-web-matrix.md` |
 | Хранение опросов и production-интеграция агента | Частично: Z ORM/callback/cards/jobs есть; K/Z problem/initiative route ещё не связан | `infrastructure/postgres/polls.py`, `application/polls/production.py`, `entrypoints/processes.py`, Z tests |
-| Тесты и проверенный стенд | Частично: 242 теста, Ruff, mypy и Alembic check прошли на чистой локальной PostgreSQL 16; A-пул ранее проверил 227 тестов на PostgreSQL 17.8 + pgvector 0.8.1 | `tests/`, `migrations/`; новый Z runtime, реальный MAX, live LLM и цельный G3 стенд на PG17/Compose не проверены |
+| Тесты и проверенный стенд | Частично: 242 теста, Ruff, mypy и Alembic check прошли на отдельной PostgreSQL 17.8 + pgvector 0.8.1 после полной миграции с нуля; тот же набор проходил на PostgreSQL 16 | `tests/`, `migrations/`; реальный MAX, live LLM и цельный G3/Compose runtime не проверены |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.
 

@@ -64,7 +64,7 @@ uv run python scripts/generate_zamira_demo_pdfs.py --output-dir /tmp/dom-domich-
 
 | Часть | Состояние |
 |---|---|
-| PostgreSQL аудитории, опросы, инициативы, документы, demo executor и проверка результата | Реализованы и проверены локально на PostgreSQL 16; миграции и concurrency/idempotency tests есть |
+| PostgreSQL аудитории, опросы, инициативы, документы, demo executor и проверка результата | Реализованы; 242 теста и полная миграция проверены на PostgreSQL 17.8 + pgvector 0.8.1 и ранее на PostgreSQL 16; concurrency/idempotency tests есть |
 | MAX callback, outbox, кнопки, PDF upload | Подключены к process root, проверены PostgreSQL/MockTransport; живой MAX не проверен |
 | Исполнитель и `DEMO-*` регистрация | Только смоделированный DemoExecutor, без УК/ГИС ЖКХ; операторская capability обязательна |
 | Дело и агент | K case/request/agent существуют; автоматическое открытие Z-опроса из K problem workflow, публикация карточки из K маршрута и перевод поддержанной инициативы в исполнение ещё не связаны |

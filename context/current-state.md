@@ -153,10 +153,11 @@ K/Z handlers и repositories теперь запускаются из A14 proces
 inbox/scheduler, callback, DemoExecutor и PDF worker. Следующий блокирующий шаг —
 собрать K/Z открытие опросов/инициатив, публикацию карточки из маршрута агента
 и переход поддержанной инициативы к исполнению. Затем нужны реальный MAX/LLM
-доступ, HTTPS smoke и G1–G3/mobile-web прогоны. На чистой локальной PostgreSQL 16
-прошли 242 теста, Ruff, mypy, все миграции и Alembic check без новых операций.
-Ранее A-пул отдельно проверил общий Compose lifecycle на PostgreSQL 17.8 +
-pgvector 0.8.1; новый Z runtime этим прогоном ещё не охвачен.
+доступ, HTTPS smoke и G1–G3/mobile-web прогоны. На отдельной PostgreSQL 17.8 +
+pgvector 0.8.1 с полной миграцией с нуля прошли 242 теста, Ruff, mypy и Alembic
+check без новых операций; тот же набор ранее прошёл на PostgreSQL 16. Старое
+предупреждение Alembic о неизвестном типе `vector` сохраняется. A-пул отдельно
+проверил общий Compose lifecycle; новый Z runtime в полном Compose ещё не проверен.
 
 ## Как обновлять после задачи
 
