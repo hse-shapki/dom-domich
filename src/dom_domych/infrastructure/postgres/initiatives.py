@@ -5,6 +5,8 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.initiatives.followup import demo_reminder_policy
+from dom_domych.contracts.events import EventName
 from dom_domych.domain.initiatives.models import (
     InitiativeConflict,
     InitiativeForbidden,
@@ -12,7 +14,9 @@ from dom_domych.domain.initiatives.models import (
     InitiativeState,
 )
 from dom_domych.domain.polls.models import PollState
+from dom_domych.domain.ports.core import JobIntent
 from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseRow
+from dom_domych.infrastructure.postgres.jobs import PostgresJobQueue
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.z_initiative_models import (
     InitiativeOperationRow,
@@ -72,6 +76,7 @@ class PostgresInitiativeRepository:
             await PostgresPollRepository(session).open_once(
                 poll, notification_targets, f"initiative:poll:{operation_key}"
             )
+            await self._schedule_reminders(session, poll)
             self._add_revision(session, state.current, state.case_id, state.house_id)
             self._add_operation(session, state, operation_key)
             await session.flush()
@@ -118,11 +123,34 @@ class PostgresInitiativeRepository:
             await PostgresPollRepository(session).open_once(
                 poll, notification_targets, f"initiative:poll:{operation_key}"
             )
+            await self._schedule_reminders(session, poll)
             self._add_revision(session, updated.current, updated.case_id, updated.house_id)
             row.current_revision = updated.current.revision
             self._add_operation(session, updated, operation_key)
             await session.flush()
             return updated
+
+    @staticmethod
+    async def _schedule_reminders(session: AsyncSession, poll: PollState) -> None:
+        definition = poll.definition
+        if not definition.eligible_residents:
+            return
+        policy = demo_reminder_policy()
+        window = definition.closes_at - definition.opens_at
+        for number in (1, 2):
+            due_at = definition.opens_at + window * number / 3
+            if due_at >= definition.closes_at - policy.stop_before_deadline:
+                continue
+            await PostgresJobQueue(session).enqueue(
+                JobIntent(
+                    house_id=definition.house_id,
+                    operation_key=f"initiative:reminder:{definition.poll_id}:{number}",
+                    event_name=EventName.INITIATIVE_REMINDER_DUE.value,
+                    due_at=due_at,
+                    entity_id=definition.poll_id,
+                    expected_version=definition.subject_revision,
+                )
+            )
 
     @staticmethod
     async def _guard_case(session: AsyncSession, state: InitiativeState) -> None:

@@ -28,7 +28,12 @@ from dom_domych.infrastructure.postgres.initiative_followup import (
     PostgresInitiativeFollowupRepository,
 )
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
-from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, ResidentRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    OutboxDeliveryRow,
+    ResidentRow,
+    ScheduledJobRow,
+)
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
 from dom_domych.infrastructure.postgres.z_followup_models import (
@@ -116,11 +121,25 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once() 
             "Велопарковка у второго подъезда",
             audience,
             demo_initiative_policy(),
-            timedelta(days=2),
+            timedelta(hours=3),
             context,
             operation_key=f"z08:create:{case_id}",
         )
         poll_id = state.current.poll_id
+        async with sessions() as session:
+            reminder_jobs = (
+                await session.scalars(
+                    select(ScheduledJobRow)
+                    .where(
+                        ScheduledJobRow.house_id == HOUSE_ONE,
+                        ScheduledJobRow.event_name == EventName.INITIATIVE_REMINDER_DUE.value,
+                        ScheduledJobRow.entity_id == poll_id,
+                    )
+                    .order_by(ScheduledJobRow.due_at)
+                )
+            ).all()
+            assert len(reminder_jobs) == 2
+            assert reminder_jobs[0].due_at == clock.now() + timedelta(hours=1)
         async with sessions.begin() as session:
             await PostgresPollRepository(session).record_answer_atomic(
                 poll_id,
@@ -136,6 +155,20 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once() 
             clock,
         )
         clock.current += timedelta(hours=1)
+        reminder_event = EventEnvelope(
+            event_id=reminder_jobs[0].id,
+            source=EventSource.SCHEDULER,
+            source_key=f"job:{reminder_jobs[0].id}",
+            name=EventName.INITIATIVE_REMINDER_DUE,
+            occurred_at=reminder_jobs[0].due_at,
+            received_at=clock.now(),
+            correlation_id=reminder_jobs[0].id,
+            house_id=HOUSE_ONE,
+            entity=EntityEventPayload(entity_id=poll_id, entity_version=1),
+        )
+        handler = PostgresResolutionEventHandler(sessions, clock)
+        assert await handler.handle_initiative_reminder(reminder_event)
+        assert await handler.handle_initiative_reminder(reminder_event)
 
         async def plan(key: str) -> tuple[UUID, ...]:
             async with sessions() as session:
@@ -145,8 +178,8 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once() 
                 state, poll, demo_reminder_policy(), operation_key=f"z08:{case_id}:{key}"
             )
 
-        assert await plan("first") == (second.resident_id,)
-        assert await plan("first") == (second.resident_id,)
+        assert await plan("first") == ()
+        assert await plan("first") == ()
         clock.current += timedelta(minutes=10)
         assert await plan("too-soon") == ()
         clock.current += timedelta(minutes=21)

@@ -6,11 +6,15 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from dom_domych.application.initiatives.followup import InitiativeFollowupService
+from dom_domych.application.initiatives.followup import (
+    InitiativeFollowupService,
+    demo_reminder_policy,
+)
 from dom_domych.application.jobs.inbox_worker import EventDispatcher
 from dom_domych.application.jobs.scheduler import RevisionRouter
 from dom_domych.application.resolution.service import ResolutionService
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
+from dom_domych.domain.initiatives.models import InitiativeConflict
 from dom_domych.domain.polls.models import PollKind
 from dom_domych.domain.polls.policy import demo_resolution_policy
 from dom_domych.domain.ports.core import Clock
@@ -160,6 +164,38 @@ class PostgresResolutionEventHandler:
         )
         return False
 
+    async def handle_initiative_reminder(self, event: EventEnvelope) -> bool:
+        if (
+            event.name is not EventName.INITIATIVE_REMINDER_DUE
+            or event.source is not EventSource.SCHEDULER
+            or event.house_id is None
+            or event.entity is None
+        ):
+            return False
+        poll_id = event.entity.entity_id
+        async with self.sessions() as session:
+            poll = await PostgresPollRepository(session).get_state(poll_id, event.house_id)
+        if poll is None or poll.definition.kind is not PollKind.INITIATIVE_POSITION:
+            return True
+        state = await PostgresInitiativeRepository(self.sessions).get(
+            poll.definition.case_id, event.house_id
+        )
+        try:
+            await InitiativeFollowupService(
+                PostgresInitiativeFollowupRepository(self.sessions, self.clock),
+                PostgresCurrentDeliveryRights(self.sessions, self.clock),
+                self.clock,
+            ).plan_reminders(
+                state,
+                poll,
+                demo_reminder_policy(),
+                operation_key=event.source_key,
+            )
+        except InitiativeConflict:
+            # Редакция могла смениться между проверкой версии job и новой UoW.
+            return True
+        return True
+
 
 def register_z_poll_events(
     dispatcher: EventDispatcher,
@@ -170,5 +206,7 @@ def register_z_poll_events(
     handler = PostgresResolutionEventHandler(sessions, clock)
     dispatcher.register(EventName.REQUEST_REGISTERED, handler.handle_registration)
     dispatcher.register(EventName.POLL_EXPIRED, handler.handle_poll_expired)
+    dispatcher.register(EventName.INITIATIVE_REMINDER_DUE, handler.handle_initiative_reminder)
     revisions.register(EventName.POLL_EXPIRED, PostgresPollRevisionReader(sessions))
+    revisions.register(EventName.INITIATIVE_REMINDER_DUE, PostgresPollRevisionReader(sessions))
     return handler
