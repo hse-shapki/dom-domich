@@ -18,12 +18,14 @@ from dom_domych.agent.contracts import (
     CaseView,
     TrustedContext,
 )
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.infrastructure.postgres.case_models import (
     CaseEventRow,
     CaseMessageRow,
     CaseOperationRow,
     CaseRow,
 )
+from dom_domych.infrastructure.postgres.inbox import save_domain_event
 
 
 def _view(row: CaseRow, refs: tuple[str, ...]) -> CaseView:
@@ -49,8 +51,14 @@ def _command_hash(command: BaseModel, context: TrustedContext) -> str:
 class PostgresCaseWriter:
     """Advisory lock только на короткую транзакцию; LLM/HTTP сюда не входят."""
 
-    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        *,
+        emit_workflow_events: bool = False,
+    ) -> None:
         self.sessions = sessions
+        self.emit_workflow_events = emit_workflow_events
 
     @staticmethod
     async def _lock(session: AsyncSession, scope: str) -> None:
@@ -166,6 +174,32 @@ class PostgresCaseWriter:
                     result_view=view.model_dump(mode="json"),
                 )
             )
+            workflow_event = {
+                CaseKind.PROBLEM: EventName.PROBLEM_DETECTED,
+                CaseKind.EMERGENCY: EventName.EMERGENCY_DETECTED,
+                CaseKind.INITIATIVE: EventName.INITIATIVE_DETECTED,
+            }.get(command.kind)
+            if self.emit_workflow_events and workflow_event is not None:
+                workflow_source = workflow_event.value.replace(".", "-")
+                await save_domain_event(
+                    session,
+                    EventEnvelope(
+                        event_id=uuid4(),
+                        source=EventSource.DOMAIN,
+                        source_key=f"{workflow_source}:{row.id}",
+                        name=workflow_event,
+                        occurred_at=now,
+                        received_at=now,
+                        correlation_id=context.correlation_id,
+                        house_id=context.house_id,
+                        entity=EntityEventPayload(
+                            entity_id=row.id,
+                            entity_version=row.version,
+                            case_id=row.id,
+                            causation_id=context.event_id,
+                        ),
+                    ),
+                )
             return view
 
     async def attach_message(

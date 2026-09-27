@@ -91,13 +91,14 @@ K11 `EmergencyService` проверяет доверенный emergency case, �
 отсутствие evidence не задерживает draft. Отдельный idempotent личный outbox
 просит фото/уточнение, не публикуя его в общем чате. Если rule не подтверждена,
 источник срочности остаётся `event:<id>`, но нормативный срок не назначается.
-Это проверено с fake request и PostgreSQL outbox; MAX и общий runtime ещё нужны.
+Это проверено с PostgreSQL request/outbox; production demo executor включён в общий
+process root. Live MAX и полный автоматический маршрут от сообщения всё ещё нужны.
 
 `emergency.handle` включён в K tool registry для `triage/problem`: production
 composition связывает его с `PostgresRequestCases`, проверенными правилами,
 `RequestService` и личным evidence outbox. На PostgreSQL 18 проверено, что при
 неполной локации tool ставит только приватное уточнение и не вызывает executor.
-Полная регистрация по-прежнему ждёт production Z executor.
+Регистрация связана с production demo executor; live MAX-путь ещё не проверен.
 
 Правило срока содержит тип нарушения, условия применимости, источник и точку отсчёта. Для каждой стадии обращения отдельный deadline; не переносим сроки из обзорного текста IDEA на все случаи. Если нет проверенного правила, не выводим выдуманный норматив.
 
@@ -181,9 +182,24 @@ K composition регистрирует обработчик изменения r
 continuation, поэтому новый run читает уже зафиксированную версию. Тот же helper
 подключает revision reader и deadline handler к общим A dispatcher/scheduler и
 собирает coordinator на production K repositories. Это проверено на локальном
-PostgreSQL 18 с fake LLM и fake Z ports. A process root теперь запускает этот K
-контур с настраиваемым llama-server; события, требующие отсутствующих PostgreSQL
-реализаций Z `ExecutorPort` и `DocumentPort`, явно завершаются ошибкой и retry.
+PostgreSQL 17 с fake LLM. A process root запускает K-контур с настраиваемым
+llama-server и production Z `ExecutorPort`/`DocumentPort`, callback, resolution
+handlers и PDF worker. Обычная проблема после production `case.create` выпускает
+durable `problem.detected`: worker атомарно создаёт audience/poll/deadline и
+card-outbox. Domain threshold/expiry до continuation фиксирует `request_ready` либо
+`needs_evidence`, обновляет карточку и адресные evidence intents. Инициатива
+аналогично открывает frozen audience/revision/poll/reminders/card из
+`initiative.detected`. Итог атомарно переводит case в `request_ready` или `not_supported`;
+request требует отдельного доверенного actor и проверенного правила. Live G3 пока не проверен.
+После доверенной регистрации отдельный handler собирает immutable appeal snapshot из
+текущих сохранённых ревизий, идемпотентно ставит PDF в очередь, а `document.ready`
+связывает готовый файл с request до continuation. Для аварии `emergency.detected`
+заранее фиксирует исходную аудиторию без подтверждающего poll: обращение остаётся срочным,
+а та же категория доступна последующей проверке результата.
+Локальный A14 integration test проводит обычную проблему через request approval/submit,
+demo registration/done и resolution poll до `closed` на production PostgreSQL adapters.
+Он также рендерит frozen PDF в FileStore и применяет `document.ready` к request. Без LLM
+и фактического MAX upload/delivery эта локальная проверка всё равно не закрывает G3.
 
 ## 8. Аварии самой системы
 

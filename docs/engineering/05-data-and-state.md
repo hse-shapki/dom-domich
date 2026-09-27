@@ -95,12 +95,13 @@ threshold_reached = N > 0 AND Y >= required_yes
 Период ожидания — пять часов согласно журналу решений. Достигнутый порог завершает ожидание раньше; иначе по deadline запрашиваем доказательства у ответивших «да». Молчание не означает отрицательный ответ.
 
 K09 `ProblemWorkflow` принимает итог от Z, не пересчитывает голоса. Scope
-сверяется с известной локацией дела; стояк не выводится из квартиры. Пустая
-категория не открывает опрос. При недостатке поддержки fake store проверяет
-список «да», которому production store должен создавать приватные outbox intents.
-Пока атомарный store реализован только fake: production PollRepository Z и
-общая UoW с A outbox/job отсутствуют. Evidence ref K09 записывается в дело
-с actor/event/version на PostgreSQL и сам по себе не отправляется в чат.
+сверяется с известной локацией дела; стояк не выводится из квартиры. Production
+handler получает `problem.detected` из durable inbox и в одной UoW сохраняет
+аудиторию, poll, deadline, переход дела и публичную карточку/outbox. При N=0 poll
+не открывается; без настроенного group chat транзакция откатывается целиком.
+Trusted итог poll в той же orchestration переводит дело в `request_ready` либо
+`needs_evidence`, обновляет карточку и во второй ветке создаёт private evidence intents
+только ответившим «да». Evidence ref записывается с actor/event/version и сам не публикуется.
 
 ### Позиция по инициативе
 
@@ -178,11 +179,18 @@ Z13 финализирует этот опрос по сохранённому `
 
 Инициатива использует ветку `proposal → voting → decision_ready|not_supported → preparing_request → ...`. При недостижении поддержки сохраняется понятный результат без выдуманного исполнения. Вся поддержанная инициатива затем использует общий контроль выполнения.
 
-[InitiativeService](../../src/dom_domych/application/initiatives/service.py) Z06 сейчас принимает существующее дело `kind=initiative` через `CasePort`, проверяет автора/дом и атомарно связывает редакцию текста с новым опросом через свой repository contract. При изменении текста старый [PollState](../../src/dom_domych/domain/polls/models.py) переходит в `cancelled`, старые action tokens должны отзывать в той же UoW, а новый опрос начинается с нуля; ответы старой редакции остаются в истории. Fake проверяет переходы и конкурентные правки, но общий K CasePort, production UoW и отзыв токенов A ещё не подключены.
+[InitiativeService](../../src/dom_domych/application/initiatives/service.py) Z06 принимает существующее дело `kind=initiative` через `CasePort`, проверяет автора/дом и атомарно связывает редакцию текста с новым опросом через repository contract. При изменении текста старый [PollState](../../src/dom_domych/domain/polls/models.py) переходит в `cancelled`, старые action tokens отзываются в той же UoW, а новый опрос начинается с нуля; ответы старой редакции остаются в истории. PostgreSQL-конкуренция и production opening проверены локально.
+
+A14 production handler получает `initiative.detected`, читает автора только из origin-связи
+дела и в одной UoW сохраняет frozen audience, первую редакцию, poll, deadline/два reminder job,
+переход case и card-outbox. Окно два дня — технический demo default, не нормативный срок.
+Decision в той же UoW переводит case в `request_ready` при `supported` либо в
+`not_supported`, сохраняет историю и публичный outbox. Черновик request не создаётся без
+подтверждённого actor и применимого проверенного правила/ответственного.
 
 [Публичные карточки](../../src/dom_domych/application/cards/builders.py) Z07 отдают текст и `edit_key/source_version` для A DeliveryPort: три раздельные шкалы инициативы (`answered/eligible`, `yes/eligible`, `yes/answered`), подтверждения проблемы и внешний/внутренний статус без раскрытия персональных ответов. Демо-порог помечен как настройка, `done` исполнителя не называется закрытием дела. MAX edit/coalescing и доставка ещё не проверены.
 
-[InitiativeFollowupService](../../src/dom_domych/application/initiatives/followup.py) Z08 вычисляет неответивших по frozen poll, запрашивает **текущие** права на личную доставку и передаёт кандидатов в repository для атомарной повторной проверки, частотного лимита и outbox. Демо-параметры: 30 минут между напоминаниями, максимум два на жителя, остановка за пять минут до закрытия. Отсутствие ответа и недоставка не меняют `eligible` или tally. После финализации poll отдельное решение `supported/not_supported` сохраняется один раз; только `initiative.supported` передаётся K для общего маршрута исполнения. Fake проверен, production A DeliveryPort/jobs и K RequestService ещё не связаны.
+[InitiativeFollowupService](../../src/dom_domych/application/initiatives/followup.py) Z08 вычисляет неответивших по frozen poll, запрашивает **текущие** права на личную доставку и передаёт кандидатов в repository для атомарной повторной проверки, частотного лимита и outbox. Демо-параметры: 30 минут между напоминаниями, максимум два напоминания на жителя, остановка за пять минут до закрытия. Отсутствие ответа и недоставка не меняют `eligible` или tally. После финализации poll решение сохраняется один раз и меняет case; K RequestService вызывается только отдельным доверенным действием с actor и проверенным правилом.
 
 ## 5. Границы транзакций
 
@@ -213,4 +221,4 @@ Scheduled job содержит case/request/poll ID и ожидаемую рев
 
 Локальный [FileStore](../../src/dom_domych/infrastructure/files/local.py) Z09 сохраняет evidence/PDF под случайным ключом в пространстве дома, проверяет разрешённые MIME, сигнатуру, размер и SHA-256, а при чтении — метаданные и принадлежность дому. Для демо пока установлен технический срок хранения 30 дней; `purge_expired` должна вызываться отдельной durable job. Этот адаптер проверен локальными тестами, но не связан с MAX upload/download и БД метаданных. [DocumentSnapshot](../../src/dom_domych/domain/documents/snapshot.py) фиксирует ссылки на ревизии дела, аудитории, опроса, обращения и шаблона, исходные факты, итог голосов и реестр уведомлений; канонические байты дают воспроизводимый хеш. PDF-рендер обязан использовать этот снимок без повторного чтения живого состояния.
 
-[PDF-рендерер](../../src/dom_domych/infrastructure/documents/renderer.py) Z10 строит четыре шаблона из `DocumentSnapshot` в ограниченном process pool, возвращает hash PDF и hash снимка. Встроены DejaVu Sans с кириллицей и [лицензией](../../src/dom_domych/assets/fonts/LICENSE-DejaVu.txt); [синтетические образцы](../../output/pdf/README.md) визуально проверены. Реестр содержит только служебные ID и требует ограниченной доставки. K13 consumer проверяет `document.ready` через `DocumentPort` и атомарно связывает document/file/snapshot refs с request до запуска agent continuation. Production Z repository/producer, durable PDF job, запись файла в FileStore и скачивание MAX остаются на интеграции G2; локальный рендер не означает отправку документа.
+[PDF-рендерер](../../src/dom_domych/infrastructure/documents/renderer.py) Z10 строит четыре шаблона из `DocumentSnapshot` в ограниченном process pool, возвращает hash PDF и hash снимка. Встроены DejaVu Sans с кириллицей и [лицензией](../../src/dom_domych/assets/fonts/LICENSE-DejaVu.txt); [синтетические образцы](../../output/pdf/README.md) визуально проверены. Реестр содержит только служебные ID и требует ограниченной доставки. Production handler доверенного `request.registered` собирает appeal snapshot только из сохранённых case/request/audience и, если он был, poll-фактов. Авария получает frozen audience из `emergency.detected`, не открывая подтверждающий poll и не задерживая request. K13 consumer проверяет `document.ready` через `DocumentPort` и атомарно связывает document/file/snapshot refs с request до agent continuation. Worker сохраняет PDF в FileStore и outbox; live MAX не проверен, поэтому локальный путь не означает реальную отправку.

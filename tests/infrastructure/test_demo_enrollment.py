@@ -18,6 +18,7 @@ from dom_domych.infrastructure.max.updates import normalize_update
 from dom_domych.infrastructure.postgres.enrollment import PostgresEnrollment
 from dom_domych.infrastructure.postgres.models import (
     DemoInvitationRow,
+    HouseRow,
     ResidencyRow,
     ResidentRow,
 )
@@ -119,3 +120,36 @@ async def test_demo_invitation_onboards_from_max_dm_and_marks_stopped_chat_unrea
                 .values(confirmed=False, source="demo")
             )
     assert len(seen) == 1 and seen[0].url.params["user_id"] == "313"
+
+
+@pytest.mark.asyncio
+async def test_demo_operator_cannot_issue_invitation_or_bind_chat_for_non_demo_house() -> None:
+    clock = FixedClock()
+    resident_id = synthetic_id("resident-13")
+
+    async with database_lifespan(database_url_for_test()) as sessions:
+        async with sessions.begin() as session:
+            await seed_demo_house(session)
+            residency = await session.scalar(
+                select(ResidencyRow).where(
+                    ResidencyRow.resident_id == resident_id,
+                    ResidencyRow.house_id == HOUSE_ONE,
+                )
+            )
+            assert residency is not None
+            await session.execute(
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(demo=False)
+            )
+            service = DemoEnrollmentService(PostgresEnrollment(session), clock)
+            with pytest.raises(EnrollmentDenied, match="demo operator house"):
+                await service.issue_invitation(
+                    residency.id,
+                    TrustedDemoOperator(HOUSE_ONE, frozenset({"demo.residency_confirm"})),
+                    adult_verified=True,
+                )
+            with pytest.raises(EnrollmentDenied, match="demo house"):
+                await service.connect_house_chat(
+                    "100500",
+                    TrustedDemoOperator(HOUSE_ONE, frozenset({"demo.house_chat_bind"})),
+                )
+            await session.rollback()

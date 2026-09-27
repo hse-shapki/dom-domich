@@ -17,9 +17,12 @@ from dom_domych.application.agent.composition import (
     register_k_continuations,
 )
 from dom_domych.application.agent.messages import register_message_agent
+from dom_domych.application.cases.production import register_problem_events
+from dom_domych.application.documents.production import RequestDocumentEventHandler
 from dom_domych.application.documents.worker import DocumentWorker
 from dom_domych.application.executor.production import DemoSubmitAdapter
 from dom_domych.application.executor.service import DemoExecutorService
+from dom_domych.application.initiatives.production import register_initiative_events
 from dom_domych.application.jobs.inbox_worker import (
     EventDispatcher,
     InboxWorker,
@@ -32,6 +35,7 @@ from dom_domych.application.polls.production import (
     PostgresPollCallbackProcessor,
     register_poll_callbacks,
 )
+from dom_domych.application.requests.emergency_runtime import EmergencyAudienceEventHandler
 from dom_domych.application.resolution.production import register_z_poll_events
 from dom_domych.config import AppSettings
 from dom_domych.contracts.events import EventName
@@ -120,7 +124,10 @@ def _k_runtime(
         sessions, llm, clock, DemoSubmitAdapter(DemoExecutorService(executor, clock))
     )
     dispatcher, revisions = EventDispatcher({}), RevisionRouter()
+    register_problem_events(dispatcher, sessions, clock)
+    register_initiative_events(dispatcher, sessions, clock)
     resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
+    dispatcher.register(EventName.REQUEST_REGISTERED, RequestDocumentEventHandler(sessions, clock))
     register_k_continuations(
         dispatcher,
         revisions,
@@ -154,7 +161,15 @@ async def run_inbox() -> None:
             sessions, llm, clock, DemoSubmitAdapter(DemoExecutorService(executor, clock))
         )
         dispatcher, revisions = EventDispatcher({}), RevisionRouter()
+        register_problem_events(dispatcher, sessions, clock)
+        register_initiative_events(dispatcher, sessions, clock)
+        dispatcher.register(
+            EventName.EMERGENCY_DETECTED, EmergencyAudienceEventHandler(sessions, clock)
+        )
         resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
+        dispatcher.register(
+            EventName.REQUEST_REGISTERED, RequestDocumentEventHandler(sessions, clock)
+        )
         max_client = MaxApiClient(max_http, settings.max_bot_token, MaxRateLimits())
         onboarding = MaxOnboardingHandler(
             sessions,

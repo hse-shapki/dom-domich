@@ -24,15 +24,27 @@ uv run python -m scripts.max_operations register \
   --update-type message_created --update-type message_callback --update-type bot_started
 ```
 
+После очной проверки demo-жителя оператор выдаёт одноразовый код (это чувствительное значение,
+его единственный раз печатает сама команда) и отдельно может связать заранее известный MAX chat ID:
+
+```bash
+dom-domych-demo-operator issue-invitation \
+  --house-id <uuid> --residency-id <uuid> --adult-verified --ttl-hours 24
+dom-domych-demo-operator bind-house-chat --house-id <uuid> --max-chat-id <digits>
+```
+
+Обе команды берут `DATABASE_URL` из окружения, не принимают пароль аргументом и отказывают для
+домов без `demo=true`. Код нужно передать конкретному проверенному жителю вне общего чата; в БД
+остаётся только SHA-256 digest.
+
 Наружу опубликованы только 80/443 Caddy. PostgreSQL и процессы находятся во внутренней сети,
 данные БД, Caddy и FileStore — в named volumes. API, inbox, scheduler, outbox и retention
 maintenance корректно закрывают HTTP clients и SQLAlchemy engine при SIGTERM. Maintenance раз в
 час идемпотентно удаляет просроченные файлы и редактирует payload завершённых inbox/outbox по
 `PAYLOAD_RETENTION_DAYS`. Inbox регистрирует onboarding перед K message handler, затем K
-continuation handlers; scheduler использует тот же dispatcher и K revision reader. Пока
-отсутствуют production Z executor/document repositories, соответствующие события явно
-завершаются ошибкой и проходят bounded retry/dead-letter, а не подтверждаются fake-результатом.
-Poll callbacks, PDF jobs и полный G3 runtime остаются открыты.
+continuation handlers; scheduler использует тот же dispatcher и K/Z revision readers.
+Production Z executor/document ports, callbacks, resolution handlers и отдельный PDF worker
+подключены. Автоматический K/Z poll/initiative route и полный live G3 runtime остаются открыты.
 
 Dev polling запускается только с `MAX_INGRESS_MODE=polling` командой
 `dom-domych-process polling`; API factory при этом отказывает в старте, а poller проверяет через
@@ -80,6 +92,17 @@ vector 0.8.1 и тестовый файл в named FileStore volume, readiness �
 а `https://localhost/health/ready` через Caddy вернул ожидаемый `degraded`. В `docker ps`
 порты имел только Caddy, не API или PostgreSQL. Smoke-проект и volumes удалены. Это не
 проверяет публичный DNS/TLS, live MAX/LLM и обработку общего событийного G3 сценария.
+
+После слияния production Z-модулей smoke повторён на head `0a7b6c5d4e3f`: все 242 теста,
+единая миграция/check и двойной seed прошли на PostgreSQL 17.8 + pgvector 0.8.1.
+Полный Compose с новым `documents` process пережил общий restart без циклических ошибок.
+Backup восстановил новый Z head, vector, 40 public tables и пять файлов с теми же SHA-256;
+временные БД, контейнеры и volumes удалены.
+GitHub Actions run [#26](https://github.com/hse-shapki/dom-domich/actions/runs/36334824300)
+на `c51ec86` затем успешно повторил workflow с целевым PG17/pgvector.
+После подключения ordinary problem runtime run
+[#31](https://github.com/hse-shapki/dom-domich/actions/runs/36337214973) на `6c11ce9`
+успешно выполнил тот же workflow уже с 247 тестами.
 
 ## Перед релизом
 

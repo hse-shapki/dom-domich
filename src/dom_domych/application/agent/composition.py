@@ -72,7 +72,7 @@ def build_k_tool_handlers(
     reader = PostgresCaseReader(sessions)
     cases = CaseService(
         CandidateService(reader, embeddings),
-        PostgresCaseWriter(sessions),
+        PostgresCaseWriter(sessions, emit_workflow_events=True),
         clock,
     )
     knowledge_repository = PostgresKnowledgeRepository(sessions)
