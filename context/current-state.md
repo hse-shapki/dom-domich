@@ -100,7 +100,8 @@ Z callback/PDF/result включены отдельно, но полный K/Z p
 и reply outbox; реальный MAX при этом не использовался.
 Дополнительный A14/G3 тест проводит одну обычную проблему через production audience/poll,
 request approval/submit, demo registration/done, resolution poll и подтверждённое `closed`.
-Он использует реальные PostgreSQL repositories и dispatcher, но не LLM, MAX и доставку PDF.
+Он использует реальные PostgreSQL repositories/dispatcher, рендерит frozen PDF в FileStore
+и связывает `document.ready` с request, но не использует LLM и MAX upload/delivery.
 K15: оценщик traces считает маршруты, критические ошибки, источник, задержки
 и tool calls по K01 dataset; unit-тесты проходят. Реальные метрики модели
 не измерены: Qwen3-8B на 8 GiB Mac не дал ответа и вызвал swap. Версии и
@@ -146,7 +147,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | MAX files A11 | Частично: PDF upload, token reuse/retry, безопасное фото, process-local rate limits и coalescing edit реализованы | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `infrastructure/max/rate_limit.py`, tests; live MAX mobile/web и K evidence linkage ещё нужны |
 | Deploy/runtime A12 | Частично: полный Compose с Z document worker локально запускает и перезапускает migrate/API/inbox/scheduler/outbox/documents/maintenance/Caddy; локальный HTTPS readiness различает БД и LLM; наружу опубликован только Caddy | `Dockerfile`, `deploy/compose.yml`, `entrypoints/api.py`, `entrypoints/processes.py`; публичный DNS/TLS, выбранная модель и live MAX/inference не проверены |
 | Надёжность A13 | Частично: bounded retry/dead-letter/delivery_unknown, rate limits, coalescing и heartbeat outbox/jobs проверены | `infrastructure/max/rate_limit.py`, queue workers/repositories и PostgreSQL tests; live rate-limit и потеря прав MAX не проверены |
-| Composition/polling A14 | Частично: локальная production-цепь problem → request → demo executor → resolution → closed проверена; initiative/emergency/document handlers подключены | `tests/infrastructure/test_g3_runtime.py`, production modules; без LLM/MAX/PDF delivery это не live G3 |
+| Composition/polling A14 | Частично: локальная production-цепь problem → request → PDF binding → demo executor → resolution → closed проверена; initiative/emergency handlers подключены | `tests/infrastructure/test_g3_runtime.py`; без LLM/MAX upload это не live G3 |
 | Backup/restore A15 | Проверено локально на PostgreSQL 17.8/pgvector и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Z head `0a7b6c5d4e3f`, vector, 40 public tables и 5 файлов с теми же SHA-256; временные данные удалены |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |

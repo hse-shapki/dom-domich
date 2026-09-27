@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy import or_, select, update
 from dom_domych.agent.contracts import CaseCreate, CaseKind, RequestPrepare, RequestSubmit
 from dom_domych.application.cases.production import register_problem_events
 from dom_domych.application.documents.production import RequestDocumentEventHandler
+from dom_domych.application.documents.worker import DocumentWorker
 from dom_domych.application.executor.production import DemoSubmitAdapter
 from dom_domych.application.executor.service import DemoExecutorService
 from dom_domych.application.jobs.inbox_worker import EventDispatcher, InboxWorker
@@ -22,6 +24,8 @@ from dom_domych.contracts.base import ExecutionMode, PrincipalType, TrustedConte
 from dom_domych.contracts.events import EventName
 from dom_domych.domain.executor.models import ExternalStatus
 from dom_domych.domain.polls.models import PollKind, PollStatus, VoteChoice
+from dom_domych.infrastructure.documents.renderer import PdfRenderer
+from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
 from dom_domych.infrastructure.postgres.demo_executor import (
@@ -68,9 +72,12 @@ def database_url_for_test() -> str:
 
 
 @pytest.mark.asyncio
-async def test_problem_request_executor_resolution_closes_through_runtime() -> None:
+async def test_problem_request_executor_resolution_closes_through_runtime(
+    tmp_path: Path,
+) -> None:
     clock = FixedClock()
     actor_id = synthetic_id("resident-2")
+    topic = f"lighting-{uuid4()}"
     resident_context = TrustedContext(
         run_id=uuid4(),
         event_id=uuid4(),
@@ -89,7 +96,7 @@ async def test_problem_request_executor_resolution_closes_through_runtime() -> N
         description="Не горит свет на пятом этаже второго подъезда",
         entrance=2,
         floor=5,
-        object_name="lighting",
+        object_name=topic,
         source_message_id=uuid4(),
         operation_id=uuid4(),
     )
@@ -145,7 +152,7 @@ async def test_problem_request_executor_resolution_closes_through_runtime() -> N
                     source_id=source_id,
                     source_revision=1,
                     house_id=HOUSE_ONE,
-                    topic="lighting",
+                    topic=topic,
                     responsible_id=responsible_id,
                 )
             )
@@ -205,10 +212,21 @@ async def test_problem_request_executor_resolution_closes_through_runtime() -> N
         )
         dispatcher.register(EventName.REQUEST_STATUS_CHANGED, resolution.handle_status)
         dispatcher.register(EventName.REQUEST_STATUS_CHANGED, accept_event)
+        dispatcher.register(EventName.DOCUMENT_READY, accept_event)
         dispatcher.register(EventName.POLL_EXPIRED, accept_event)
         runtime_worker = InboxWorker(sessions, dispatcher, clock, "g3-runtime")
         assert await runtime_worker.run_once()  # executor request.registered
         assert await runtime_worker.run_once()  # domain request.registered + appeal snapshot
+        async with PdfRenderer(max_workers=1) as renderer:
+            document_worker = DocumentWorker(
+                sessions,
+                LocalFileStore(tmp_path / "files", clock),
+                renderer,
+                clock,
+                "g3-documents",
+            )
+            assert await document_worker.run_once()
+        assert await runtime_worker.run_once()  # document.ready + request binding
 
         done_event_id = uuid4()
         done, emitted = await executor.set_status(
@@ -254,8 +272,9 @@ async def test_problem_request_executor_resolution_closes_through_runtime() -> N
             document = await session.scalar(
                 select(DocumentRow).where(DocumentRow.request_id == prepared.request_id)
             )
-            assert document is not None and document.status == "queued"
-            document.status = "failed"
+            assert document is not None and document.status == "ready"
+            assert request.document_id == document.id
+            assert request.document_file_key == document.file_key
             await session.execute(
                 update(ScheduledJobRow)
                 .where(
@@ -272,6 +291,7 @@ async def test_problem_request_executor_resolution_closes_through_runtime() -> N
                         OutboxDeliveryRow.operation_key.like(f"%{case.case_id}%"),
                         OutboxDeliveryRow.operation_key.like(f"%{executor_operation_id}%"),
                         OutboxDeliveryRow.operation_key.like(f"%{resolution_poll.id}%"),
+                        OutboxDeliveryRow.operation_key.like(f"%{document.id}%"),
                     ),
                 )
                 .values(status="sent")

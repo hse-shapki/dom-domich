@@ -198,7 +198,8 @@ request требует отдельного доверенного actor и пр
 а та же категория доступна последующей проверке результата.
 Локальный A14 integration test проводит обычную проблему через request approval/submit,
 demo registration/done и resolution poll до `closed` на production PostgreSQL adapters.
-Он проверяет state/event spine, но без LLM, MAX и фактической доставки PDF не закрывает G3.
+Он также рендерит frozen PDF в FileStore и применяет `document.ready` к request. Без LLM
+и фактического MAX upload/delivery эта локальная проверка всё равно не закрывает G3.
 
 ## 8. Аварии самой системы
 
