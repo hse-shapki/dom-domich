@@ -15,6 +15,7 @@ from dom_domych.infrastructure.postgres import (
     knowledge_models,  # noqa: F401
     request_models,  # noqa: F401
     z_audience_models,  # noqa: F401
+    z_followup_models,  # noqa: F401
     z_initiative_models,  # noqa: F401
     z_poll_models,  # noqa: F401
 )
