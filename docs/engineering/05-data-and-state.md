@@ -184,11 +184,13 @@ Z13 финализирует этот опрос по сохранённому `
 A14 production handler получает `initiative.detected`, читает автора только из origin-связи
 дела и в одной UoW сохраняет frozen audience, первую редакцию, poll, deadline/два reminder job,
 переход case и card-outbox. Окно два дня — технический demo default, не нормативный срок.
-Переход `initiative.supported` в общий request flow пока не подключён.
+Decision в той же UoW переводит case в `request_ready` при `supported` либо в
+`not_supported`, сохраняет историю и публичный outbox. Черновик request не создаётся без
+подтверждённого actor и применимого проверенного правила/ответственного.
 
 [Публичные карточки](../../src/dom_domych/application/cards/builders.py) Z07 отдают текст и `edit_key/source_version` для A DeliveryPort: три раздельные шкалы инициативы (`answered/eligible`, `yes/eligible`, `yes/answered`), подтверждения проблемы и внешний/внутренний статус без раскрытия персональных ответов. Демо-порог помечен как настройка, `done` исполнителя не называется закрытием дела. MAX edit/coalescing и доставка ещё не проверены.
 
-[InitiativeFollowupService](../../src/dom_domych/application/initiatives/followup.py) Z08 вычисляет неответивших по frozen poll, запрашивает **текущие** права на личную доставку и передаёт кандидатов в repository для атомарной повторной проверки, частотного лимита и outbox. Демо-параметры: 30 минут между напоминаниями, максимум два напоминания на жителя, остановка за пять минут до закрытия. Отсутствие ответа и недоставка не меняют `eligible` или tally. После финализации poll решение `supported/not_supported` сохраняется один раз; production A jobs/outbox подключены, но `initiative.supported` ещё не ведёт в K RequestService.
+[InitiativeFollowupService](../../src/dom_domych/application/initiatives/followup.py) Z08 вычисляет неответивших по frozen poll, запрашивает **текущие** права на личную доставку и передаёт кандидатов в repository для атомарной повторной проверки, частотного лимита и outbox. Демо-параметры: 30 минут между напоминаниями, максимум два напоминания на жителя, остановка за пять минут до закрытия. Отсутствие ответа и недоставка не меняют `eligible` или tally. После финализации poll решение сохраняется один раз и меняет case; K RequestService вызывается только отдельным доверенным действием с actor и проверенным правилом.
 
 ## 5. Границы транзакций
 

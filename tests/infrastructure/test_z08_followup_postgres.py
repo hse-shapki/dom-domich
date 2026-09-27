@@ -244,6 +244,9 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once() 
         assert await handler.handle_poll_expired(expired) is False
         async with sessions() as session:
             assert await session.get(InitiativeDecisionRow, poll_id) is not None
+            decided_case = await session.get(CaseRow, case_id)
+            assert decided_case is not None
+            assert decided_case.status == "request_ready" and decided_case.version == 2
             public = await session.scalar(
                 select(OutboxDeliveryRow).where(
                     OutboxDeliveryRow.operation_key == f"initiative:decision:{poll_id}"

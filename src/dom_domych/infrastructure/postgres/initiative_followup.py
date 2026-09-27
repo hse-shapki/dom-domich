@@ -11,6 +11,7 @@ from dom_domych.domain.initiatives.models import InitiativeConflict
 from dom_domych.domain.polls.models import PollStatus
 from dom_domych.domain.polls.policy import InitiativeOutcome
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
+from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
 from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
 from dom_domych.infrastructure.postgres.models import HouseRow, ResidencyRow, ResidentRow
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
@@ -228,6 +229,18 @@ class PostgresInitiativeFollowupRepository:
                 if existing.outcome != decision.outcome.value:
                     raise InitiativeConflict("initiative decision changed")
                 return self._to_decision(existing)
+            case = await session.scalar(
+                select(CaseRow)
+                .where(CaseRow.id == decision.case_id, CaseRow.house_id == decision.house_id)
+                .with_for_update()
+            )
+            if (
+                case is None
+                or case.kind != "initiative"
+                or case.status != "collecting"
+                or case.version != initiative.case_version
+            ):
+                raise InitiativeConflict("initiative case changed before decision commit")
             session.add(
                 InitiativeDecisionRow(
                     poll_id=decision.poll_id,
@@ -240,6 +253,34 @@ class PostgresInitiativeFollowupRepository:
                     policy_revision=decision.policy_revision,
                     demo=decision.demo,
                     operation_key=operation_key,
+                )
+            )
+            previous_version = case.version
+            case.version += 1
+            case.status = (
+                "request_ready"
+                if decision.outcome is InitiativeOutcome.SUPPORTED
+                else "not_supported"
+            )
+            session.add(
+                CaseEventRow(
+                    id=uuid4(),
+                    case_id=case.id,
+                    house_id=case.house_id,
+                    event_type=f"initiative.{decision.outcome.value}",
+                    before_version=previous_version,
+                    after_version=case.version,
+                    actor_id=None,
+                    source_message_id=None,
+                    operation_id=decision.poll_id,
+                    occurred_at=decision.decided_at,
+                    facts={
+                        "poll_id": str(decision.poll_id),
+                        "poll_version": decision.poll_version,
+                        "initiative_revision": decision.initiative_revision,
+                        "policy_revision": decision.policy_revision,
+                        "demo": decision.demo,
+                    },
                 )
             )
             chat_id = await session.scalar(
