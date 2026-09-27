@@ -196,6 +196,9 @@ request требует отдельного доверенного actor и пр
 связывает готовый файл с request до continuation. Для аварии `emergency.detected`
 заранее фиксирует исходную аудиторию без подтверждающего poll: обращение остаётся срочным,
 а та же категория доступна последующей проверке результата.
+Локальный A14 integration test проводит обычную проблему через request approval/submit,
+demo registration/done и resolution poll до `closed` на production PostgreSQL adapters.
+Он проверяет state/event spine, но без LLM, MAX и фактической доставки PDF не закрывает G3.
 
 ## 8. Аварии самой системы
 
