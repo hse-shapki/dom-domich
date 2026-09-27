@@ -69,7 +69,13 @@ recovery и `/health/ready`. Отсутствующий файл должен д
 в отдельную пустую БД восстановлены Alembic head `e4a29c371f62`, расширение vector,
 2 дома, 20 проживаний и пять файлов из FileStore с исходными SHA-256. После рестарта
 исходного контейнера БД сохранила head, расширение и строки. Временная restore-БД и каталог
-удалены. Полный restart production Compose с named volumes ещё не проверен.
+удалены. Этот standalone restore сам по себе не проверяет production Compose volumes.
+
+В тот же день production app image собран из `Dockerfile`; изолированный Compose-проект
+успешно выполнил migrate и поднял API. После `restart postgres api` сохранились Alembic head,
+vector 0.8.1 и тестовый файл в named FileStore volume, readiness вернул ожидаемый `degraded`
+при намеренно отсутствующем inference. Smoke-проект и его volumes после проверки удалены.
+Это не проверяет Caddy/HTTPS, live MAX/LLM и совместную работу всех process services.
 
 ## Перед релизом
 
