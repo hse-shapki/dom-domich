@@ -1,24 +1,36 @@
 # Передача пула Замиры: опросы, инициативы, PDF и результат
 
-Дата исходного handoff: 25.09.2026. Документ описывает состояние пула Z на ту дату.
-На 26.09.2026 общий Python-проект, A PostgreSQL-слой и часть K-модулей уже есть;
-production Z repositories и рабочий сценарий MAX всё ещё отсутствуют.
-Точная готовность каждого блока — в [`context/current-state.md`](../../context/current-state.md).
+Обновлено 27.09.2026 на ветке `task_zamira`. Точный статус всех модулей — в
+[`context/current-state.md`](../../context/current-state.md). Положительные локальные
+тесты не заменяют приёмку в живом MAX.
 
-## Что можно воспроизвести сейчас
+## Локальное воспроизведение
 
-Рабочие части Z01–Z13 покрыты unit/fake tests. Ниже сохранены исходные команды
-handoff; актуальный проект уже содержит `pyproject.toml` и `uv.lock`, поэтому
-общий прогон выполняется через `uv run pytest -q`, `uv run ruff check` и `uv run mypy`.
+Нужны `uv`, PostgreSQL и пустая отдельная БД с именем, содержащим `test`.
+Команды из корня репозитория (имя БД и URL адаптировать к своему локальному серверу):
 
 ```bash
-PYTHONPATH=src:. uv run --no-project --with reportlab --with pypdf --with pytest --with pytest-asyncio pytest -q -p no:cacheprovider
-uvx ruff check src tests scripts
-uvx ruff format --check src tests scripts
-MYPYPATH=src:. uv run --no-project --with mypy --with reportlab --with types-reportlab --with pypdf --with pytest --with pytest-asyncio mypy --namespace-packages --explicit-package-bases src tests scripts
+createdb dom_domych_test_zamira
+DATABASE_URL=postgresql+asyncpg://localhost/dom_domych_test_zamira uv run alembic upgrade head
+TEST_DATABASE_URL=postgresql+asyncpg://localhost/dom_domych_test_zamira uv run pytest -q
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src
+DATABASE_URL=postgresql+asyncpg://localhost/dom_domych_test_zamira uv run alembic check
 ```
 
-Положительный результат проверки исполнения без ручного изменения БД показывает `test_positive_resident_result_closes_case_and_cancels_future_jobs`, отрицательный — `test_negative_answers_take_priority_and_reopen_case`, нехватку ответов — `test_low_response_does_not_count_as_success` в `tests/domain/test_resolution_service.py`. Эти тесты используют atomic fake и **не доказывают** PostgreSQL-конкуренцию или MAX-доставку.
+Тесты Z03–Z14 создают только синтетические дела/жильцов. Повторный запуск
+отдельных тестов на уже использованной БД может столкнуться с данными других
+тестов outbox; для общего прогона берут чистую БД. Положительный, отрицательный
+и неподтверждённый исходы проверяются параметризованным
+[`test_z12_resolution_postgres.py`](../../tests/infrastructure/test_z12_resolution_postgres.py).
+Регистрация, повтор и запрет жителю менять статус исполнителя — в
+[`test_z11_demo_executor_postgres.py`](../../tests/infrastructure/test_z11_demo_executor_postgres.py).
+Публикация карточки, выпуск кнопок, callback с доверенным actor и обновление
+карточки — в [`test_z07_cards_outbox.py`](../../tests/infrastructure/test_z07_cards_outbox.py).
+Загрузка PDF после durable job в FileStore и приватный outbox — в
+[`test_z09_documents_postgres.py`](../../tests/infrastructure/test_z09_documents_postgres.py).
+Эти тесты позволяют воспроизвести обе развилки результата без изменения БД вручную.
 
 ## Демо-правила и данные
 
@@ -26,34 +38,57 @@ MYPYPATH=src:. uv run --no-project --with mypy --with reportlab --with types-rep
 |---|---|---|
 | `demo-problem-v1` | Пример 20% подтверждений от eligible, ожидание до 5 часов | Не нормативная норма |
 | `demo-initiative-v1` | Участие ≥ 50% eligible, поддержка ≥ 60% ответивших | Не кворум ОСС |
-| `demo-resolution-v1` | Сначала строго более 20% «нет» среди ответивших → возврат; иначе участие ≥ 50% и «да» ≥ 80% ответивших → закрытие | Политика для демо, требует согласования |
+| `demo-resolution-v1` | Сначала строго более 20% «нет» среди ответивших → возврат; иначе участие ≥ 50% и «да» ≥ 80% ответивших → закрытие | Демо-политика, требует согласования |
 | `demo-reminder-v1` | До двух напоминаний не чаще одного раза в 30 минут, стоп за 5 минут до срока | Временные параметры показа |
-| FileStore demo retention | 30 дней, затем отдельная cleanup job | Не утверждённая политика персональных данных |
+| FileStore demo retention | 30 дней, затем cleanup job | Не утверждённая политика персональных данных |
 
-Синтетический дом и крайние случаи — `tests/fixtures/zamira_house.py`: 12 подходящих жителей одного этажа, несколько подъездов/стояков/домов, недоступная личка, повторяющиеся сообщения, неподходящие аккаунты. Тестовый реестр не является проверкой фактического проживания.
+Синтетический дом и крайние случаи —
+[`zamira_house.py`](../../tests/fixtures/zamira_house.py): 12 подходящих жителей
+одного этажа, несколько подъездов/стояков/домов, недоступная личка,
+повторяющиеся сообщения и неподходящие аккаунты. Тестовый реестр не доказывает
+фактическое проживание.
 
 Четыре [образца PDF](../../output/pdf/README.md) воспроизводятся без реальных данных:
 
 ```bash
-PYTHONPATH=src:. uv run --no-project --with reportlab python scripts/generate_zamira_demo_pdfs.py --output-dir /tmp/dom-domich-pdf-demo
+uv run python scripts/generate_zamira_demo_pdfs.py --output-dir /tmp/dom-domich-pdf-demo
 ```
 
-Скрипт использует фиксированные факты и даёт тот же текст/число страниц и hash входного snapshot; байтовый hash PDF может меняться из-за метаданных ReportLab. Записанные образцы и визуальная проверка перечислены в [Z15 QA](zamira-pdf-qa.md). В PDF встроены DejaVu Sans и DejaVu Sans Bold; [лицензия DejaVu](../../src/dom_domych/assets/fonts/LICENSE-DejaVu.txt) приложена, а [ReportLab Toolkit](https://docs.reportlab.com/developerfaqs/) используется в открытой редакции. Версии библиотек будут закреплены A00 lockfile.
+Текст/страницы и hash входного snapshot стабильны; байтовый hash PDF может
+меняться из-за метаданных ReportLab. В PDF встроены DejaVu Sans и DejaVu Sans Bold;
+[лицензия шрифта](../../src/dom_domych/assets/fonts/LICENSE-DejaVu.txt) приложена,
+а ReportLab используется в открытой редакции. Версии зависимостей закреплены в
+[`uv.lock`](../../uv.lock). Результаты просмотра — в [Z15 QA](zamira-pdf-qa.md).
 
-## Реальные и моделируемые части
+## Что реально подключено
 
-| Часть | Сейчас |
+| Часть | Состояние |
 |---|---|
-| Доменные правила, версии, подсчёт и формирование PDF | Реальный код, проверенный локально |
-| Реестр жителей, CasePort, callback/DeliveryPort, outbox/jobs, SQL UoW | Fake/контракт; production-интеграция ещё не сделана |
-| Исполнитель, регистрационный номер `DEMO-*`, статусы | Только смоделированный DemoExecutor, без УК/ГИС ЖКХ |
-| Официальная отправка/юридический протокол ОСС | Не реализованы; образцы являются подготовленными демо-документами |
-| Проверка mobile/web MAX | Не проводилась; строки остаются открытыми в матрице [08](../engineering/08-verification-and-release.md) |
+| PostgreSQL аудитории, опросы, инициативы, документы, demo executor и проверка результата | Реализованы и проверены локально на PostgreSQL 16; миграции и concurrency/idempotency tests есть |
+| MAX callback, outbox, кнопки, PDF upload | Подключены к process root, проверены PostgreSQL/MockTransport; живой MAX не проверен |
+| Исполнитель и `DEMO-*` регистрация | Только смоделированный DemoExecutor, без УК/ГИС ЖКХ; операторская capability обязательна |
+| Дело и агент | K case/request/agent существуют; автоматическое открытие Z-опроса из K problem workflow, публикация карточки из K маршрута и перевод поддержанной инициативы в исполнение ещё не связаны |
+| Официальная отправка и протокол ОСС | Не реализованы; четыре PDF являются демо-документами, протокол назван позицией жителей |
+| MAX mobile/web, публичный HTTPS и live inference | Не проверены; строки [матрицы](max-mobile-web-matrix.md) остаются открытыми |
 
-## Что нужно подключить на G1–G3
+## Демо-порядок и оставшиеся проверки
 
-1. После A00/A01 согласовать типы `TrustedContext`, IDs/UTC/version и порты из [Z00](../engineering/09-z-interfaces.md); обновить фейки и contract tests вместе с реализациями. A предоставляет реестр с явным стояком, actor callback, доставку/jobs, token revocation, FileStore attachment и общий Unit of Work. K предоставляет case/request facts, авторство, исходную аудиторию, версии и безопасные переходы дела.
-2. Создать PostgreSQL-модели/миграции Z для audiences, polls/answers/history, initiatives, documents, executor operations и resolution checks. Уникальные ограничения: житель на poll, operation/event key, одна регистрация на request, одна финализация check; все запросы фильтруются по `house_id`. Атомарно сохранять state + outbox/job; не держать SQL lock во время PDF/HTTP/LLM.
-3. В G1 проверить настоящий MAX callback (actor, дом, stale revision) и конкуренцию ответов на PostgreSQL. В G2 отправить карточки и PDF через A DeliveryPort, проверить ограниченный доступ к реестру и скачивание в mobile/web. В G3 соединить K RequestService → DemoExecutor → `done` → опрос исходной категории → closed/reopened/unconfirmed с crash/retry. Только после этих прогонов закрывать Z14–Z16.
+1. Подтверждённому жителю назначают проживание и MAX ID через demo onboarding.
+   Выбор аудитории фиксирует всех eligible, независимо от доставки личных сообщений.
+2. Опрос открывается с версией demo policy; общая карточка несёт только суммарные
+   шкалы и непрозрачные кнопки. Нажатие проходит MAX actor → action token →
+   PostgreSQL PollRepository. При смене инициативы старый poll и токены отзываются.
+3. После согласования черновика K RequestService вызывает DemoExecutor. Доверенная
+   регистрация создаёт номер `DEMO-*`; только actor с `demo_executor.operator`
+   может поставить `done`. Этот статус запускает личный опрос исходной аудитории
+   и оставляет дело открытым до ответа жителей.
+4. Достаточная поддержка результата закрывает дело; отрицательный порог возвращает
+   его в работу; недостаток ответов оставляет `resolution_unconfirmed`.
+   Все три ветки и повтор события проверены PostgreSQL-тестами.
+5. На G2/G3 проверить весь путь в живом MAX mobile/web: callback, права на личку,
+   открытие четырёх PDF после outbox, поведение при недоставке и восстановление
+   после перезапуска. Для полного цикла нужен K/Z problem/initiative orchestration
+   и работоспособная модель. Лишь после этого можно закрывать Z14–Z16 и release gate.
 
-При сдаче фиксировать commit, versions policy/template/font/model, результаты MAX mobile/web и перечень моделируемых систем. Сейчас такие результаты не заявляются.
+Для сдачи фиксируют commit, версии policy/template/font/model, результаты MAX
+mobile/web и список моделируемых систем. Live результаты сейчас не заявляются.
