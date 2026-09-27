@@ -49,38 +49,52 @@ class PostgresInitiativeRepository:
         operation_key: str,
     ) -> InitiativeState:
         async with self.sessions.begin() as session:
-            await self._guard_case(session, state)
-            repeated = await self._operation_result(session, state.house_id, operation_key)
-            if repeated is not None:
-                if (
-                    repeated.case_id != state.case_id
-                    or repeated.current.wording != state.current.wording
-                    or repeated.current.audience_id != state.current.audience_id
-                    or repeated.current.revision != state.current.revision
-                ):
-                    raise InitiativeConflict("operation key was used for another initiative")
-                return repeated
-            existing = await session.get(InitiativeRow, state.case_id)
-            if existing is not None:
-                raise InitiativeConflict("initiative already exists")
-            session.add(
-                InitiativeRow(
-                    case_id=state.case_id,
-                    house_id=state.house_id,
-                    author_id=state.author_id,
-                    case_version=state.case_version,
-                    current_revision=1,
-                )
+            return await self.create_and_open_in_session(
+                session, state, poll, notification_targets, operation_key
             )
-            await session.flush()
-            await PostgresPollRepository(session).open_once(
-                poll, notification_targets, f"initiative:poll:{operation_key}"
+
+    async def create_and_open_in_session(
+        self,
+        session: AsyncSession,
+        state: InitiativeState,
+        poll: PollState,
+        notification_targets: tuple[UUID, ...],
+        operation_key: str,
+    ) -> InitiativeState:
+        """Вариант для общей A14 UoW вместе с audience, case и card outbox."""
+
+        await self._guard_case(session, state)
+        repeated = await self._operation_result(session, state.house_id, operation_key)
+        if repeated is not None:
+            if (
+                repeated.case_id != state.case_id
+                or repeated.current.wording != state.current.wording
+                or repeated.current.audience_id != state.current.audience_id
+                or repeated.current.revision != state.current.revision
+            ):
+                raise InitiativeConflict("operation key was used for another initiative")
+            return repeated
+        existing = await session.get(InitiativeRow, state.case_id)
+        if existing is not None:
+            raise InitiativeConflict("initiative already exists")
+        session.add(
+            InitiativeRow(
+                case_id=state.case_id,
+                house_id=state.house_id,
+                author_id=state.author_id,
+                case_version=state.case_version,
+                current_revision=1,
             )
-            await self._schedule_reminders(session, poll)
-            self._add_revision(session, state.current, state.case_id, state.house_id)
-            self._add_operation(session, state, operation_key)
-            await session.flush()
-            return state
+        )
+        await session.flush()
+        await PostgresPollRepository(session).open_once(
+            poll, notification_targets, f"initiative:poll:{operation_key}"
+        )
+        await self._schedule_reminders(session, poll)
+        self._add_revision(session, state.current, state.case_id, state.house_id)
+        self._add_operation(session, state, operation_key)
+        await session.flush()
+        return state
 
     async def revise_and_replace_poll_atomic(
         self,

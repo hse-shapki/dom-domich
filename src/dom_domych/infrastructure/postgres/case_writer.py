@@ -174,14 +174,23 @@ class PostgresCaseWriter:
                     result_view=view.model_dump(mode="json"),
                 )
             )
-            if self.emit_workflow_events and command.kind is CaseKind.PROBLEM:
+            workflow_event = {
+                CaseKind.PROBLEM: EventName.PROBLEM_DETECTED,
+                CaseKind.INITIATIVE: EventName.INITIATIVE_DETECTED,
+            }.get(command.kind)
+            if self.emit_workflow_events and workflow_event is not None:
+                workflow_source = (
+                    "problem-detected"
+                    if workflow_event is EventName.PROBLEM_DETECTED
+                    else "initiative-detected"
+                )
                 await save_domain_event(
                     session,
                     EventEnvelope(
                         event_id=uuid4(),
                         source=EventSource.DOMAIN,
-                        source_key=f"problem-detected:{row.id}",
-                        name=EventName.PROBLEM_DETECTED,
+                        source_key=f"{workflow_source}:{row.id}",
+                        name=workflow_event,
                         occurred_at=now,
                         received_at=now,
                         correlation_id=context.correlation_id,

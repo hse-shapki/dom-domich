@@ -21,6 +21,7 @@ from dom_domych.application.cases.production import register_problem_events
 from dom_domych.application.documents.worker import DocumentWorker
 from dom_domych.application.executor.production import DemoSubmitAdapter
 from dom_domych.application.executor.service import DemoExecutorService
+from dom_domych.application.initiatives.production import register_initiative_events
 from dom_domych.application.jobs.inbox_worker import (
     EventDispatcher,
     InboxWorker,
@@ -122,6 +123,7 @@ def _k_runtime(
     )
     dispatcher, revisions = EventDispatcher({}), RevisionRouter()
     register_problem_events(dispatcher, sessions, clock)
+    register_initiative_events(dispatcher, sessions, clock)
     resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
     register_k_continuations(
         dispatcher,
@@ -157,6 +159,7 @@ async def run_inbox() -> None:
         )
         dispatcher, revisions = EventDispatcher({}), RevisionRouter()
         register_problem_events(dispatcher, sessions, clock)
+        register_initiative_events(dispatcher, sessions, clock)
         resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
         max_client = MaxApiClient(max_http, settings.max_bot_token, MaxRateLimits())
         onboarding = MaxOnboardingHandler(

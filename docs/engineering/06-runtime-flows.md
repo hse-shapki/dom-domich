@@ -187,8 +187,10 @@ llama-server и production Z `ExecutorPort`/`DocumentPort`, callback, resolution
 handlers и PDF worker. Обычная проблема после production `case.create` выпускает
 durable `problem.detected`: worker атомарно создаёт audience/poll/deadline и
 card-outbox. Domain threshold/expiry до continuation фиксирует `request_ready` либо
-`needs_evidence`, обновляет карточку и адресные evidence intents. Автоматический
-initiative route и live G3 пока не проверены.
+`needs_evidence`, обновляет карточку и адресные evidence intents. Инициатива
+аналогично открывает frozen audience/revision/poll/reminders/card из
+`initiative.detected`. Переход поддержанной инициативы в общий request flow и live G3
+пока не проверены.
 
 ## 8. Аварии самой системы
 

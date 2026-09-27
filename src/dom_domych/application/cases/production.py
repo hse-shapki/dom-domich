@@ -27,7 +27,7 @@ class _HouseContext:
         self.house_id = house_id
 
 
-def _scope(case: CaseRow) -> AudienceScope:
+def case_audience_scope(case: CaseRow) -> AudienceScope:
     if case.floor is not None:
         if case.entrance is None:
             raise ValueError("floor scope requires a verified entrance")
@@ -85,7 +85,7 @@ class PostgresProblemEventHandler:
                 PostgresAudienceRepository(session),
                 self.clock,
             ).resolve(
-                _scope(case),
+                case_audience_scope(case),
                 context,
                 operation_key=f"problem:audience:{case.id}:{case.version}",
             )

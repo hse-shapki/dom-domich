@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.cards.builders import PublicCard, initiative_card, problem_card
 from dom_domych.application.polls.callback import StoredPollAction
+from dom_domych.domain.initiatives.models import InitiativeState
 from dom_domych.domain.polls.models import PollKind, PollState, PollStatus, VoteChoice
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.infrastructure.postgres.case_models import CaseRow
@@ -41,7 +42,14 @@ class PostgresPublicCards:
             poll = await PostgresPollRepository(session).get_state(state.current.poll_id, house_id)
             if poll is None:
                 raise RuntimeError("current initiative poll is missing")
-            return await self._enqueue(session, initiative_card(state, poll), poll)
+            return await self.enqueue_initiative(session, state, poll)
+
+    async def enqueue_initiative(
+        self, session: AsyncSession, state: InitiativeState, poll: PollState
+    ) -> UUID:
+        """Сохранить карточку инициативы в общей UoW вызывающего."""
+
+        return await self._enqueue(session, initiative_card(state, poll), poll)
 
     async def publish_problem(self, poll_id: UUID, house_id: UUID) -> UUID:
         async with self.sessions.begin() as session:

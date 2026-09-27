@@ -179,11 +179,16 @@ Z13 финализирует этот опрос по сохранённому `
 
 Инициатива использует ветку `proposal → voting → decision_ready|not_supported → preparing_request → ...`. При недостижении поддержки сохраняется понятный результат без выдуманного исполнения. Вся поддержанная инициатива затем использует общий контроль выполнения.
 
-[InitiativeService](../../src/dom_domych/application/initiatives/service.py) Z06 сейчас принимает существующее дело `kind=initiative` через `CasePort`, проверяет автора/дом и атомарно связывает редакцию текста с новым опросом через свой repository contract. При изменении текста старый [PollState](../../src/dom_domych/domain/polls/models.py) переходит в `cancelled`, старые action tokens должны отзывать в той же UoW, а новый опрос начинается с нуля; ответы старой редакции остаются в истории. Fake проверяет переходы и конкурентные правки, но общий K CasePort, production UoW и отзыв токенов A ещё не подключены.
+[InitiativeService](../../src/dom_domych/application/initiatives/service.py) Z06 принимает существующее дело `kind=initiative` через `CasePort`, проверяет автора/дом и атомарно связывает редакцию текста с новым опросом через repository contract. При изменении текста старый [PollState](../../src/dom_domych/domain/polls/models.py) переходит в `cancelled`, старые action tokens отзываются в той же UoW, а новый опрос начинается с нуля; ответы старой редакции остаются в истории. PostgreSQL-конкуренция и production opening проверены локально.
+
+A14 production handler получает `initiative.detected`, читает автора только из origin-связи
+дела и в одной UoW сохраняет frozen audience, первую редакцию, poll, deadline/два reminder job,
+переход case и card-outbox. Окно два дня — технический demo default, не нормативный срок.
+Переход `initiative.supported` в общий request flow пока не подключён.
 
 [Публичные карточки](../../src/dom_domych/application/cards/builders.py) Z07 отдают текст и `edit_key/source_version` для A DeliveryPort: три раздельные шкалы инициативы (`answered/eligible`, `yes/eligible`, `yes/answered`), подтверждения проблемы и внешний/внутренний статус без раскрытия персональных ответов. Демо-порог помечен как настройка, `done` исполнителя не называется закрытием дела. MAX edit/coalescing и доставка ещё не проверены.
 
-[InitiativeFollowupService](../../src/dom_domych/application/initiatives/followup.py) Z08 вычисляет неответивших по frozen poll, запрашивает **текущие** права на личную доставку и передаёт кандидатов в repository для атомарной повторной проверки, частотного лимита и outbox. Демо-параметры: 30 минут между напоминаниями, максимум два на жителя, остановка за пять минут до закрытия. Отсутствие ответа и недоставка не меняют `eligible` или tally. После финализации poll отдельное решение `supported/not_supported` сохраняется один раз; только `initiative.supported` передаётся K для общего маршрута исполнения. Fake проверен, production A DeliveryPort/jobs и K RequestService ещё не связаны.
+[InitiativeFollowupService](../../src/dom_domych/application/initiatives/followup.py) Z08 вычисляет неответивших по frozen poll, запрашивает **текущие** права на личную доставку и передаёт кандидатов в repository для атомарной повторной проверки, частотного лимита и outbox. Демо-параметры: 30 минут между напоминаниями, максимум два напоминания на жителя, остановка за пять минут до закрытия. Отсутствие ответа и недоставка не меняют `eligible` или tally. После финализации poll решение `supported/not_supported` сохраняется один раз; production A jobs/outbox подключены, но `initiative.supported` ещё не ведёт в K RequestService.
 
 ## 5. Границы транзакций
 
