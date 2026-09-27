@@ -194,8 +194,7 @@ class PostgresPollRepository:
             ).all()
         )
         if (
-            not audience_members
-            or audience_members != definition.eligible_residents
+            audience_members != definition.eligible_residents
             or set(notification_targets) != audience_members
             or len(notification_targets) != len(audience_members)
         ):
@@ -249,18 +248,19 @@ class PostgresPollRepository:
             ):
                 raise ValueError("operation key conflicts with another poll")
             return loaded
-        await self.session.execute(
-            insert(PollMemberRow),
-            [
-                {
-                    "poll_id": definition.poll_id,
-                    "house_id": definition.house_id,
-                    "audience_id": definition.audience_id,
-                    "resident_id": resident_id,
-                }
-                for resident_id in audience_members
-            ],
-        )
+        if audience_members:
+            await self.session.execute(
+                insert(PollMemberRow),
+                [
+                    {
+                        "poll_id": definition.poll_id,
+                        "house_id": definition.house_id,
+                        "audience_id": definition.audience_id,
+                        "resident_id": resident_id,
+                    }
+                    for resident_id in audience_members
+                ],
+            )
         await PostgresJobQueue(self.session).enqueue(
             JobIntent(
                 house_id=definition.house_id,

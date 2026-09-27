@@ -20,6 +20,7 @@ from dom_domych.infrastructure.postgres import (
     z_followup_models,  # noqa: F401
     z_initiative_models,  # noqa: F401
     z_poll_models,  # noqa: F401
+    z_resolution_models,  # noqa: F401
 )
 from dom_domych.infrastructure.postgres import models as core_models  # noqa: F401
 from dom_domych.infrastructure.postgres.base import Base
