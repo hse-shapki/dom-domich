@@ -5,7 +5,6 @@ import asyncio
 import signal
 from datetime import timedelta
 from typing import Protocol
-from uuid import UUID
 
 import httpx
 import structlog
@@ -18,6 +17,9 @@ from dom_domych.application.agent.composition import (
     register_k_continuations,
 )
 from dom_domych.application.agent.messages import register_message_agent
+from dom_domych.application.documents.worker import DocumentWorker
+from dom_domych.application.executor.production import DemoSubmitAdapter
+from dom_domych.application.executor.service import DemoExecutorService
 from dom_domych.application.jobs.inbox_worker import (
     EventDispatcher,
     InboxWorker,
@@ -26,10 +28,14 @@ from dom_domych.application.jobs.inbox_worker import (
 from dom_domych.application.jobs.maintenance import RetentionMaintenance
 from dom_domych.application.jobs.scheduler import JobScheduler, RevisionRouter
 from dom_domych.application.notifications.worker import DeliveryWorker
+from dom_domych.application.polls.production import (
+    PostgresPollCallbackProcessor,
+    register_poll_callbacks,
+)
+from dom_domych.application.resolution.production import register_z_poll_events
 from dom_domych.config import AppSettings
 from dom_domych.contracts.events import EventName
-from dom_domych.domain.executor.models import ApprovedDraft, DemoOperation
-from dom_domych.domain.ports.core import DocumentRef, RequestRef
+from dom_domych.infrastructure.documents.renderer import PdfRenderer
 from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.llm.llama_server import LlamaServerPort
 from dom_domych.infrastructure.max.client import MAX_API_BASE_URL, MaxApiClient
@@ -37,6 +43,11 @@ from dom_domych.infrastructure.max.media import MaxMediaTransport
 from dom_domych.infrastructure.max.onboarding import MaxOnboardingHandler
 from dom_domych.infrastructure.max.polling import MaxPollingConsumer
 from dom_domych.infrastructure.max.rate_limit import MaxRateLimits
+from dom_domych.infrastructure.postgres.demo_executor import (
+    PostgresDemoExecutor,
+    PostgresExecutorPort,
+)
+from dom_domych.infrastructure.postgres.documents import PostgresDocuments
 from dom_domych.infrastructure.postgres.session import database_lifespan
 
 logger = structlog.get_logger()
@@ -55,21 +66,6 @@ _RESIDENT_AGENT_CAPABILITIES = frozenset(
 
 class _RunOnce(Protocol):
     async def run_once(self) -> bool: ...
-
-
-class _UnavailableZPorts:
-    """Не подтверждает Z-действие, пока production repository не подключён."""
-
-    async def submit(
-        self, draft: ApprovedDraft, operation_key: str, house_id: UUID
-    ) -> DemoOperation:
-        raise RuntimeError("Z_EXECUTOR_NOT_CONFIGURED")
-
-    async def get_status(self, request_id: UUID, house_id: UUID) -> RequestRef:
-        raise RuntimeError("Z_EXECUTOR_NOT_CONFIGURED")
-
-    async def get(self, document_id: UUID, house_id: UUID) -> DocumentRef | None:
-        raise RuntimeError("Z_DOCUMENT_REPOSITORY_NOT_CONFIGURED")
 
 
 async def _wait_or_stop(stop: asyncio.Event, delay: float) -> None:
@@ -119,17 +115,21 @@ def _llm(settings: AppSettings, client: httpx.AsyncClient) -> LlmPort:
 def _k_runtime(
     sessions: async_sessionmaker[AsyncSession], llm: LlmPort, clock: SystemClock
 ) -> tuple[EventDispatcher, RevisionRouter]:
-    unavailable = _UnavailableZPorts()
-    coordinator = build_k_coordinator(sessions, llm, clock, unavailable)
+    executor = PostgresDemoExecutor(sessions, clock)
+    coordinator = build_k_coordinator(
+        sessions, llm, clock, DemoSubmitAdapter(DemoExecutorService(executor, clock))
+    )
     dispatcher, revisions = EventDispatcher({}), RevisionRouter()
+    resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
     register_k_continuations(
         dispatcher,
         revisions,
         sessions,
         clock,
         coordinator,
-        unavailable,
-        unavailable,
+        PostgresExecutorPort(executor),
+        PostgresDocuments(sessions),
+        status_after_request=resolution.handle_status,
     )
     return dispatcher, revisions
 
@@ -149,12 +149,16 @@ async def run_inbox() -> None:
     ):
         clock = SystemClock()
         llm = _llm(settings, llm_http)
-        unavailable = _UnavailableZPorts()
-        coordinator = build_k_coordinator(sessions, llm, clock, unavailable)
+        executor = PostgresDemoExecutor(sessions, clock)
+        coordinator = build_k_coordinator(
+            sessions, llm, clock, DemoSubmitAdapter(DemoExecutorService(executor, clock))
+        )
         dispatcher, revisions = EventDispatcher({}), RevisionRouter()
+        resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
+        max_client = MaxApiClient(max_http, settings.max_bot_token, MaxRateLimits())
         onboarding = MaxOnboardingHandler(
             sessions,
-            MaxApiClient(max_http, settings.max_bot_token, MaxRateLimits()),
+            max_client,
             clock,
         )
         for event_name in {
@@ -173,14 +177,18 @@ async def run_inbox() -> None:
                 _RESIDENT_AGENT_CAPABILITIES,
             ),
         )
+        register_poll_callbacks(
+            dispatcher, PostgresPollCallbackProcessor(sessions, max_client, clock)
+        )
         register_k_continuations(
             dispatcher,
             revisions,
             sessions,
             clock,
             coordinator,
-            unavailable,
-            unavailable,
+            PostgresExecutorPort(executor),
+            PostgresDocuments(sessions),
+            status_after_request=resolution.handle_status,
         )
         worker = InboxWorker(sessions, dispatcher, clock, f"{settings.worker_id}:inbox")
         await _run_once_loop(stop, worker, "inbox")
@@ -244,6 +252,23 @@ async def run_outbox() -> None:
                 await _wait_or_stop(stop, min(30.0, float(2 ** min(failures, 5))))
 
 
+async def run_documents() -> None:
+    settings = AppSettings.from_env()
+    stop = asyncio.Event()
+    _install_stop_handlers(stop)
+    clock = SystemClock()
+    async with database_lifespan(settings.database_url) as sessions:
+        async with PdfRenderer(max_workers=2) as renderer:
+            worker = DocumentWorker(
+                sessions,
+                LocalFileStore(settings.file_store_dir, clock),
+                renderer,
+                clock,
+                f"{settings.worker_id}:documents",
+            )
+            await _run_once_loop(stop, worker, "documents")
+
+
 async def run_polling() -> None:
     settings = AppSettings.from_env(require_max_token=True)
     if settings.max_ingress_mode != "polling":
@@ -302,7 +327,7 @@ async def run_maintenance() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "process", choices=("inbox", "scheduler", "outbox", "polling", "maintenance")
+        "process", choices=("inbox", "scheduler", "outbox", "documents", "polling", "maintenance")
     )
     process = parser.parse_args().process
     if process == "inbox":
@@ -311,6 +336,8 @@ def main() -> None:
         coroutine = run_scheduler()
     elif process == "outbox":
         coroutine = run_outbox()
+    elif process == "documents":
+        coroutine = run_documents()
     elif process == "polling":
         coroutine = run_polling()
     else:

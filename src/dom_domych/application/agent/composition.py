@@ -19,7 +19,7 @@ from dom_domych.application.agent.events import (
 from dom_domych.application.agent.messages import MessageAgentHandler
 from dom_domych.application.cases.candidates import CandidateService
 from dom_domych.application.cases.service import CaseService
-from dom_domych.application.jobs.inbox_worker import EventDispatcher
+from dom_domych.application.jobs.inbox_worker import EventDispatcher, EventHandler
 from dom_domych.application.jobs.scheduler import RevisionRouter
 from dom_domych.application.knowledge.service import KnowledgeService
 from dom_domych.application.requests.deadline import (
@@ -29,6 +29,7 @@ from dom_domych.application.requests.deadline import (
 from dom_domych.application.requests.emergency import EmergencyService
 from dom_domych.application.requests.events import RequestEventHandler, register_request_events
 from dom_domych.application.requests.service import DemoSubmitPort, RequestService
+from dom_domych.contracts.events import EventName
 from dom_domych.domain.knowledge.ports import EmbeddingPort
 from dom_domych.domain.ports.core import Clock, DocumentPort, ExecutorPort
 from dom_domych.infrastructure.postgres.agent_runs import PostgresRunStore
@@ -150,6 +151,8 @@ def register_k_continuations(
     coordinator: AgentCoordinator,
     executor: ExecutorPort,
     documents: DocumentPort,
+    *,
+    status_after_request: EventHandler | None = None,
 ) -> None:
     """Регистрирует mutation handlers раньше continuation и deadline revision reader."""
 
@@ -157,6 +160,8 @@ def register_k_continuations(
         dispatcher,
         RequestEventHandler(executor, documents, PostgresRequestStore(sessions, clock)),
     )
+    if status_after_request is not None:
+        dispatcher.register(EventName.REQUEST_STATUS_CHANGED, status_after_request)
     register_agent_events(
         dispatcher,
         revisions,

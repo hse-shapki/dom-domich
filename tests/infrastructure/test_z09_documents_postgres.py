@@ -175,3 +175,33 @@ async def test_document_snapshot_is_idempotent_scoped_and_frozen(tmp_path: Path)
             )
             assert outbox is not None
             assert outbox.recipient_id == recipient_id and outbox.file_key == ready.file_key
+        corrupt_id = uuid4()
+        async with sessions.begin() as session:
+            session.add(
+                DocumentRow(
+                    id=corrupt_id,
+                    house_id=HOUSE_ONE,
+                    case_id=case_id,
+                    audience_id=audience.audience_id,
+                    poll_id=poll.definition.poll_id,
+                    recipient_id=recipient_id,
+                    operation_key=f"z10:corrupt:{corrupt_id}",
+                    kind=snapshot.kind.value,
+                    mode=snapshot.mode.value,
+                    template_revision=snapshot.template_revision,
+                    snapshot_bytes=b"corrupt",
+                    snapshot_sha256=snapshot.sha256,
+                    status="queued",
+                    created_at=clock.now(),
+                    attempts=0,
+                )
+            )
+        async with PdfRenderer(max_workers=1) as renderer:
+            worker = DocumentWorker(sessions, files, renderer, clock, "z10-corrupt", max_attempts=2)
+            assert await worker.run_once() is True
+            assert await worker.run_once() is True
+            assert await worker.run_once() is False
+        async with sessions() as session:
+            row = await session.get(DocumentRow, corrupt_id)
+            assert row is not None and row.status == "failed" and row.attempts == 2
+            assert row.file_key is None and row.error_code == "ValueError"

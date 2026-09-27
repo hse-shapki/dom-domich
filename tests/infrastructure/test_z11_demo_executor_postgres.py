@@ -1,6 +1,7 @@
 """Z11: регистрация demo executor, права, конкуренция и достоверный outbox."""
 
 import asyncio
+import json
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -10,6 +11,8 @@ import pytest
 from sqlalchemy import func, select
 
 from dom_domych.application.executor.service import DemoExecutorService
+from dom_domych.application.resolution.production import PostgresResolutionEventHandler
+from dom_domych.contracts.events import EventEnvelope, EventName
 from dom_domych.domain.executor.models import (
     ApprovedDraft,
     ExecutorConflict,
@@ -113,9 +116,10 @@ async def test_postgres_demo_executor_is_idempotent_and_emits_trusted_status() -
         register = Context(HOUSE_ONE, frozenset({"demo_executor.register"}))
         operator = Context(HOUSE_ONE, frozenset({"demo_executor.operator"}))
         resident = Context(HOUSE_ONE, frozenset())
+        submit_key = f"same-submit:{request_id}"
         results = await asyncio.gather(
-            service.submit(draft, "same-submit", submit),
-            service.submit(draft, "same-submit", submit),
+            service.submit(draft, submit_key, submit),
+            service.submit(draft, submit_key, submit),
         )
         assert results[0] == results[1]
         operation = results[0]
@@ -125,9 +129,30 @@ async def test_postgres_demo_executor_is_idempotent_and_emits_trusted_status() -
             await service.set_status(operation.operation_id, ExternalStatus.DONE, uuid4(), resident)
         with pytest.raises(ExecutorNotFound):
             await service.get_status(request_id, Context(HOUSE_TWO, operator.capabilities))
+        async with sessions.begin() as session:
+            request = await session.get(RequestRow, request_id)
+            assert request is not None
+            request.status = "submitted"
+            request.executor_operation_id = operation.operation_id
         registered, emitted = await service.register(operation.operation_id, register)
         assert emitted and registered.registration_number is not None
         assert (await service.register(operation.operation_id, register))[1] is False
+        async with sessions() as session:
+            registration = await session.scalar(
+                select(InboxEventRow).where(
+                    InboxEventRow.source == "executor",
+                    InboxEventRow.event_name == EventName.REQUEST_REGISTERED.value,
+                    InboxEventRow.normalized_event["entity"]["entity_id"].astext == str(request_id),
+                )
+            )
+            assert registration is not None and registration.normalized_event is not None
+            event = EventEnvelope.model_validate_json(json.dumps(registration.normalized_event))
+        assert await PostgresResolutionEventHandler(sessions, clock).handle_registration(event)
+        async with sessions() as session:
+            request = await session.get(RequestRow, request_id)
+            case = await session.get(CaseRow, case_id)
+            assert request is not None and request.status == "registered"
+            assert case is not None and case.status == "in_progress"
         event_id = uuid4()
         done, emitted = await service.set_status(
             operation.operation_id, ExternalStatus.DONE, event_id, operator
@@ -161,6 +186,8 @@ async def test_postgres_demo_executor_is_idempotent_and_emits_trusted_status() -
                         InboxEventRow.house_id == HOUSE_ONE,
                         InboxEventRow.source == "executor",
                         InboxEventRow.source_key.like("executor:%"),
+                        InboxEventRow.normalized_event["entity"]["entity_id"].astext
+                        == str(request_id),
                     )
                 )
                 == 2

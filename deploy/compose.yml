@@ -89,6 +89,13 @@ services:
     tmpfs:
       - /tmp
 
+  documents:
+    <<: *app
+    command: ["dom-domych-process", "documents"]
+    read_only: true
+    tmpfs:
+      - /tmp
+
   maintenance:
     <<: *app
     command: ["dom-domych-process", "maintenance"]

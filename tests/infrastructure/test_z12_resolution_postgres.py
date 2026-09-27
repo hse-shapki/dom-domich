@@ -1,5 +1,6 @@
 """Z12/13: trusted done, исходная аудитория и три результата на PostgreSQL."""
 
+import json
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -10,11 +11,17 @@ from sqlalchemy import func, select
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.polls.service import PollService
+from dom_domych.application.resolution.production import PostgresResolutionEventHandler
 from dom_domych.application.resolution.service import ResolutionService
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.polls.models import PollKind, VoteChoice
 from dom_domych.domain.polls.policy import demo_problem_policy, demo_resolution_policy
-from dom_domych.domain.resolution.models import ResolutionConflict, ResolutionStatus
+from dom_domych.domain.resolution.models import (
+    ResolutionConflict,
+    ResolutionState,
+    ResolutionStatus,
+)
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
 from dom_domych.infrastructure.postgres.demo_executor import PostgresDemoExecutor
@@ -33,6 +40,7 @@ from dom_domych.infrastructure.postgres.resolution import (
 )
 from dom_domych.infrastructure.postgres.session import database_lifespan
 from dom_domych.infrastructure.postgres.z_executor_models import DemoExecutorRow
+from dom_domych.infrastructure.postgres.z_resolution_models import ResolutionCheckRow
 from scripts.seed_demo_house import seed_demo_house
 from tests.fixtures.zamira_house import HOUSE_ONE, HOUSE_TWO
 
@@ -168,16 +176,35 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
             HOUSE_ONE,
             frozenset({"resolution.start_from_executor", "resolution.finalize"}),
         )
-        state = await service.start_check(
-            case_id,
-            operation,
-            done_id,
-            audience,
-            demo_resolution_policy(),
-            timedelta(hours=2),
-            worker,
-            operation_key=f"z12:start:{case_id}",
+        events = PostgresResolutionEventHandler(sessions, clock)
+        done_event = EventEnvelope(
+            event_id=done_id,
+            source=EventSource.EXECUTOR,
+            source_key=f"executor:request.status_changed:{done_id}",
+            name=EventName.REQUEST_STATUS_CHANGED,
+            occurred_at=clock.now(),
+            received_at=clock.now(),
+            correlation_id=executor_id,
+            house_id=HOUSE_ONE,
+            entity=EntityEventPayload(entity_id=request_id, entity_version=2, case_id=case_id),
         )
+        assert await events.handle_status(done_event) is False
+        async with sessions() as session:
+            check = await session.scalar(
+                select(ResolutionCheckRow).where(ResolutionCheckRow.done_event_id == done_id)
+            )
+            assert check is not None
+            state = ResolutionState(
+                check_id=check.id,
+                case_id=check.case_id,
+                house_id=check.house_id,
+                request_id=check.request_id,
+                original_audience_id=check.original_audience_id,
+                poll_id=check.poll_id,
+                case_version_at_start=check.case_version_at_start,
+                done_event_id=check.done_event_id,
+                started_at=check.started_at,
+            )
         assert state.original_audience_id == audience.audience_id
         assert (
             await service.start_check(
@@ -219,12 +246,32 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
                     clock.now() + timedelta(minutes=1),
                 )
         clock.current += timedelta(hours=2)
-        async with sessions.begin() as session:
-            poll = (
-                await PostgresPollRepository(session).finalize_atomic(
-                    state.poll_id, HOUSE_ONE, clock.now()
+        events = PostgresResolutionEventHandler(sessions, clock)
+        scheduled = EventEnvelope(
+            event_id=uuid4(),
+            source=EventSource.SCHEDULER,
+            source_key=f"job:test:{state.poll_id}",
+            name=EventName.POLL_EXPIRED,
+            occurred_at=clock.now(),
+            received_at=clock.now(),
+            correlation_id=state.poll_id,
+            house_id=HOUSE_ONE,
+            entity=EntityEventPayload(entity_id=state.poll_id, entity_version=3),
+        )
+        assert await events.handle_poll_expired(scheduled)
+        async with sessions() as session:
+            poll = await PostgresPollRepository(session).get_state(state.poll_id, HOUSE_ONE)
+            domain_row = await session.scalar(
+                select(InboxEventRow).where(
+                    InboxEventRow.source_key == f"poll:{state.poll_id}:poll.expired"
                 )
-            ).state
+            )
+            assert poll is not None and domain_row is not None
+            assert domain_row.normalized_event is not None
+            domain_event = EventEnvelope.model_validate_json(
+                json.dumps(domain_row.normalized_event)
+            )
+        assert await events.handle_poll_expired(domain_event) is False
         result = await service.finalize(state.check_id, poll, worker, operation_key="finish")
         assert result.status is expected
         repeated = await service.finalize(state.check_id, poll, worker, operation_key="finish")
@@ -245,6 +292,8 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
                 select(ScheduledJobRow).where(ScheduledJobRow.entity_id == state.poll_id)
             )
             assert job is not None and job.status == "skipped_stale"
+            check = await session.get(ResolutionCheckRow, state.check_id)
+            assert check is not None and check.status == expected.value
             if expected is ResolutionStatus.REOPENED:
                 assert (
                     await session.scalar(
