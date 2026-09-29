@@ -123,7 +123,10 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
                 await session.scalar(
                     select(func.count())
                     .select_from(PollActionRow)
-                    .where(PollActionRow.poll_id == poll.definition.poll_id)
+                    .where(
+                        PollActionRow.poll_id == poll.definition.poll_id,
+                        PollActionRow.bound_resident_id.is_(None),
+                    )
                 )
                 == 2
             )
