@@ -78,7 +78,7 @@
 | K05: knowledge | Частично: разрешённый HTTPS ingestion, review, русская FTS и scoped rules проверены на PostgreSQL 18; PG17/pgvector/live embeddings не проверены | `application/knowledge/service.py`, `infrastructure/postgres/knowledge.py`, `infrastructure/llm/embeddings.py`, `tests/infrastructure/test_k05_knowledge.py` |
 | K06: triage | Частично: пять маршрутов, несколько тем и срочный guard подключены к MAX inbox; actor/дом берутся из подтверждённого проживания, ответ ставится в outbox; live eval отсутствует | `agent/triage.py`, `application/agent/messages.py`, `infrastructure/postgres/message_agent.py`, K06/K14 tests |
 | K07: case retrieval | Частично: house/location/object/30-day closed filters и FTS проверены на PostgreSQL 18; PG17/pgvector branch не проверена | `application/cases/candidates.py`, `infrastructure/postgres/case_candidates.py`, `tests/infrastructure/test_k07_candidates.py` |
-| K08: CaseService | Частично: create/attach/recurrence, events, idempotency, конкурентный dedupe и Z06 case/author adapter проверены на PostgreSQL 18; Z transactional repository теперь есть, K route ещё не подключён | `application/cases/service.py`, `infrastructure/postgres/case_writer.py`, `initiative_cases.py`, K08/Z06 tests |
+| K08: CaseService | Частично: create/attach/recurrence, events, idempotency, конкурентный dedupe и Z06 case/author adapter проверены на PostgreSQL 18; Z transactional repository и K problem/initiative route подключены и проверены локально на PostgreSQL 17 | `application/cases/service.py`, `infrastructure/postgres/case_writer.py`, `initiative_cases.py`, K08/Z06 tests |
 | K09: обычная проблема | Частично: production route атомарно сохраняет frozen audience/poll/deadline/case/card-outbox; trusted outcome переводит дело в request_ready либо needs_evidence и адресно просит доказательства у ответивших «да» | `application/cases/production.py`, `infrastructure/postgres/case_evidence.py`, `tests/infrastructure/test_problem_runtime.py`; следующий request/evidence цикл и live MAX не проверены |
 | K10: RequestService | Частично: verified rule, draft/approval/submit/registration и production appeal snapshot/ready binding проверены на PostgreSQL; live delivery отсутствует | request/document production modules, K10/Z09/Z11/problem runtime tests |
 | K11: emergency | Частично: typed agent tool не ждёт poll; durable `emergency.detected` фиксирует исходную аудиторию для PDF/result, evidence остаётся личным | emergency application/runtime modules и tests; live MAX не проверен |
@@ -210,7 +210,7 @@ uv run mypy src/dom_domych
 uv run pytest
 ```
 
-Команды работают локально после A00; GitHub workflow ещё не проверен удалённым прогоном. Для документационных изменений достаточно проверки ссылок, согласованности и `git diff --check`; не создавай тесты приложения ради Markdown-правки.
+Команды работают локально после A00; прежний main проходил GitHub workflow, текущая новая ветка ещё не проверена удалённым прогоном. Для документационных изменений достаточно проверки ссылок, согласованности и `git diff --check`; не создавай тесты приложения ради Markdown-правки.
 
 ## 10. Рабочий процесс и завершение задачи
 
