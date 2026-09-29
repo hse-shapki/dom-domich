@@ -12,6 +12,6 @@ def test_k_runtime_registers_mutation_before_continuation_handlers() -> None:
     dispatcher, _ = _k_runtime(sessions, FakeLlmPort([]), SystemClock())
 
     assert len(dispatcher.handlers[EventName.REQUEST_STATUS_CHANGED]) == 3
-    assert len(dispatcher.handlers[EventName.DOCUMENT_READY]) == 2
+    assert len(dispatcher.handlers[EventName.DOCUMENT_READY]) == 3
     assert EventName.POLL_EXPIRED in dispatcher.handlers
     assert EventName.REQUEST_DEADLINE_REACHED in dispatcher.handlers

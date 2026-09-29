@@ -7,6 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.cards.production import PostgresPublicCards
+from dom_domych.application.documents.cases import CaseDocumentPreparer, PositionWorkerContext
+from dom_domych.application.documents.events import DocumentReadyEventHandler
 from dom_domych.application.initiatives.followup import (
     InitiativeFollowupService,
     demo_reminder_policy,
@@ -15,6 +17,7 @@ from dom_domych.application.jobs.inbox_worker import EventDispatcher
 from dom_domych.application.jobs.scheduler import RevisionRouter
 from dom_domych.application.resolution.service import ResolutionService
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
+from dom_domych.domain.documents.snapshot import DocumentKind
 from dom_domych.domain.initiatives.models import InitiativeConflict
 from dom_domych.domain.polls.models import PollKind
 from dom_domych.domain.polls.policy import demo_resolution_policy
@@ -153,6 +156,12 @@ class PostgresResolutionEventHandler:
                 poll,
                 operation_key=f"initiative:decision:{poll.definition.poll_id}",
             )
+            await CaseDocumentPreparer(self.sessions, self.clock).prepare(
+                DocumentKind.RESIDENT_POSITION,
+                state.case_id,
+                PositionWorkerContext(state.house_id, state.author_id),
+                operation_key=f"initiative:position:{poll.definition.poll_id}",
+            )
             return False
         if poll.definition.kind is not PollKind.RESOLUTION_CHECK or check is None:
             return False
@@ -207,6 +216,7 @@ def register_z_poll_events(
     sessions: async_sessionmaker[AsyncSession],
     clock: Clock,
 ) -> PostgresResolutionEventHandler:
+    dispatcher.register(EventName.DOCUMENT_READY, DocumentReadyEventHandler(sessions))
     handler = PostgresResolutionEventHandler(sessions, clock)
     dispatcher.register(EventName.REQUEST_REGISTERED, handler.handle_registration)
     dispatcher.register(EventName.POLL_EXPIRED, handler.handle_poll_expired)

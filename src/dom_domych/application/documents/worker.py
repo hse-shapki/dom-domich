@@ -14,7 +14,7 @@ from dom_domych.contracts.events import (
     EventName,
     EventSource,
 )
-from dom_domych.domain.documents.snapshot import DocumentSnapshot
+from dom_domych.domain.documents.snapshot import DocumentMode, DocumentSnapshot
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.infrastructure.documents.renderer import RenderedDocument
 from dom_domych.infrastructure.files.local import FileKind, LocalFileStore, StoredFile
@@ -122,32 +122,36 @@ class DocumentWorker:
                     house_id=row.house_id,
                     operation_key=f"document:file:{row.id}",
                     text=(
-                        "Подготовлен документ Дом Домыч. Данные и действия в нём отмечены как демо."
+                        "Подготовлен документ Дом Домыч. "
+                        + (
+                            "Данные и действия в нём отмечены как демо."
+                            if snapshot.mode is DocumentMode.DEMO
+                            else "Это проект документа; официальная отправка не выполнена."
+                        )
                     ),
                     recipient_id=row.recipient_id,
                     file_key=stored.file_key,
                 )
             )
-            if row.request_id is not None:
-                await save_domain_event(
-                    session,
-                    EventEnvelope(
-                        event_id=uuid4(),
-                        source=EventSource.DOMAIN,
-                        source_key=f"document:ready:{row.id}",
-                        name=EventName.DOCUMENT_READY,
-                        occurred_at=self.clock.now(),
-                        received_at=self.clock.now(),
-                        correlation_id=row.id,
-                        house_id=row.house_id,
-                        entity=EntityEventPayload(
-                            entity_id=row.id,
-                            entity_version=snapshot.case_revision,
-                            case_id=row.case_id,
-                            causation_id=row.id,
-                        ),
+            await save_domain_event(
+                session,
+                EventEnvelope(
+                    event_id=uuid4(),
+                    source=EventSource.DOMAIN,
+                    source_key=f"document:ready:{row.id}",
+                    name=EventName.DOCUMENT_READY,
+                    occurred_at=self.clock.now(),
+                    received_at=self.clock.now(),
+                    correlation_id=row.id,
+                    house_id=row.house_id,
+                    entity=EntityEventPayload(
+                        entity_id=row.id,
+                        entity_version=snapshot.case_revision,
+                        case_id=row.case_id,
+                        causation_id=row.id,
                     ),
-                )
+                ),
+            )
 
     async def _fail(self, document_id: UUID, error_code: str) -> None:
         async with self.sessions.begin() as session:
