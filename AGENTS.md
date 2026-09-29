@@ -27,7 +27,7 @@
 
 ## 3. Что уже сделано
 
-**Состояние проверено 27.09.2026: PostgreSQL Z-модули и K/A process root частично связаны; автоматический K/Z маршрут, цельное G3-приложение и live MAX пока не проверены.**
+**Состояние проверено 29.09.2026: PostgreSQL Z-модули и K/A process root частично связаны; live MAX `/me`, polling, исходящая личка и demo-онбординг проверены, но цельный G3 и групповой путь пока не пройдены.**
 
 | Часть | Статус | Подтверждение |
 |---|---|---|
@@ -56,9 +56,9 @@
 | Python-проект, зависимости и CI A00 | Проверено локально; предыдущий набор — GitHub Actions #35 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; локально на целевом PG17/pgvector migration/check, двойной seed, 250 тестов, Ruff и mypy прошли; CI нового набора ожидается |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17.8 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`; общая migration/check до Z head, повторный seed и 250 тестов без дублей |
 | HouseContextPort A05 | Частично: чтение реестра и стык с Z проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
-| Demo onboarding A06 | Частично: operator CLI, приглашение, привязка MAX ID/чата, DM `/start`, stopped и выбор дома проверены на PostgreSQL 17 | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; CLI допускает только demo-дома, live MAX ещё не проверен |
-| MAX Bot API A03 | Частично: HTTPX MockTransport проверен, live-доступа нет | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; загрузка bytes добавлена в A11, smoke в MAX ещё нужен |
-| Webhook/inbox A04 | Частично: text/callback/attachment refs/deletion/lifecycle/membership/admin permissions и unknown Update проверены через ASGITransport + PostgreSQL 18; внешнего HTTPS/MAX нет | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`; обработка через A07 подключается позже |
+| Demo onboarding A06 | Частично: operator CLI, приглашение, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; реальный `/start <код>` в web MAX подтвердил квартиру | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; числовой `dialog` нормализуется как DM, mobile и несколько домов ещё не проверены |
+| MAX Bot API A03 | Частично: HTTPX MockTransport и live `/me`/исходящая личка проверены 29.09.2026 | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; callback/upload/group delivery ещё требуют live smoke |
+| Webhook/inbox A04 | Частично: text/callback/attachment refs/deletion/lifecycle/membership/admin permissions и unknown Update проверены через ASGITransport + PostgreSQL; live polling принял `bot_started` и `message_created` | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`; публичный HTTPS webhook и прочие live-типы ещё не проверены |
 | Inbox worker A07 | Частично: lease/recovery/retry и production loop с K/Z handlers проверены локально | `entrypoints/processes.py`, `application/jobs/inbox_worker.py`, K/Z tests; live MAX не проверен |
 | DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit, недоступный адресат и отдельный process loop проверены на PostgreSQL 17 + MockTransport | `entrypoints/processes.py`, `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`; PDF upload добавлен в A11, реальный MAX не подключён |
 | JobPort/scheduler A09 | Частично: дедлайны, idempotency, stale no-op и K/Z handlers в production loop проверены локально | `entrypoints/processes.py`, `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`; live runtime не проверен |

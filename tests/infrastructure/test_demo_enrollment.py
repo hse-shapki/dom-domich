@@ -76,7 +76,7 @@ async def test_demo_invitation_onboards_from_max_dm_and_marks_stopped_chat_unrea
             "timestamp": int(clock.now().timestamp() * 1000),
             "message": {
                 "sender": {"user_id": 313},
-                "recipient": {"user_id": 900},
+                "recipient": {"chat_id": 12345, "user_id": 900, "chat_type": "dialog"},
                 "timestamp": int(clock.now().timestamp() * 1000),
                 "body": {"mid": "start.1", "text": f"/start {code}"},
             },
