@@ -317,6 +317,7 @@ async def test_problem_request_executor_resolution_closes_through_runtime(
                     OutboxDeliveryRow.status == "pending",
                     or_(
                         OutboxDeliveryRow.operation_key.like(f"%{case.case_id}%"),
+                        OutboxDeliveryRow.operation_key.like(f"poll:invite:{origin.id}:%"),
                         OutboxDeliveryRow.operation_key.like(f"%{executor_operation_id}%"),
                         OutboxDeliveryRow.operation_key.like(f"%{resolution_poll.id}%"),
                         OutboxDeliveryRow.operation_key.like(f"%{document.id}%"),

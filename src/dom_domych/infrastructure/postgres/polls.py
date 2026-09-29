@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -36,8 +36,9 @@ from dom_domych.domain.polls.policy import (
 from dom_domych.domain.ports.core import JobIntent
 from dom_domych.infrastructure.postgres.inbox import save_domain_event
 from dom_domych.infrastructure.postgres.jobs import DueJob, PostgresJobQueue
-from dom_domych.infrastructure.postgres.models import InboxEventRow
+from dom_domych.infrastructure.postgres.models import InboxEventRow, OutboxDeliveryRow
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
+from dom_domych.infrastructure.postgres.poll_notifications import enqueue_poll_invitations
 from dom_domych.infrastructure.postgres.z_audience_models import AudienceMemberRow
 from dom_domych.infrastructure.postgres.z_poll_models import (
     PollAnswerHistoryRow,
@@ -271,6 +272,7 @@ class PostgresPollRepository:
                 expected_version=definition.subject_revision,
             )
         )
+        await enqueue_poll_invitations(self.session, definition)
         return state
 
     async def record_answer_atomic(
@@ -354,6 +356,18 @@ class PostgresPollRepository:
         if mutation.state != current:
             self._update_row(row, mutation.state)
             await PostgresPollActionStore(self.session).revoke_poll(poll_id, house_id)
+            await self.session.execute(
+                update(OutboxDeliveryRow)
+                .where(
+                    OutboxDeliveryRow.house_id == house_id,
+                    OutboxDeliveryRow.status == "pending",
+                    or_(
+                        OutboxDeliveryRow.operation_key.like(f"poll:invite:{poll_id}:%"),
+                        OutboxDeliveryRow.operation_key.like(f"initiative:reminder:{poll_id}:%"),
+                    ),
+                )
+                .values(status="superseded", error_code="poll_revision_cancelled")
+            )
             await self.session.flush()
         return mutation
 

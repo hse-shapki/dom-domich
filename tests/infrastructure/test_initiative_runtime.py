@@ -124,6 +124,9 @@ async def test_initiative_event_opens_audience_poll_reminders_and_card_atomicall
             )
             await session.execute(
                 update(OutboxDeliveryRow)
-                .where(OutboxDeliveryRow.operation_key == f"initiative:{case.case_id}")
+                .where(
+                    OutboxDeliveryRow.operation_key.like(f"poll:invite:{poll.id}:%")
+                    | (OutboxDeliveryRow.operation_key == f"initiative:{case.case_id}")
+                )
                 .values(status="sent")
             )

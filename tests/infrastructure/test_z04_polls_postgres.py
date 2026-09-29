@@ -19,7 +19,12 @@ from dom_domych.infrastructure.postgres.audiences import PostgresAudienceReposit
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.jobs import DueJob
-from dom_domych.infrastructure.postgres.models import InboxEventRow, ScheduledJobRow
+from dom_domych.infrastructure.postgres.models import (
+    InboxEventRow,
+    OutboxDeliveryRow,
+    ScheduledJobRow,
+)
+from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import (
     PostgresPollRepository,
     PostgresPollRevisionReader,
@@ -90,6 +95,20 @@ async def test_concurrent_answers_record_one_vote_and_one_threshold_event() -> N
             persisted = await PostgresPollRepository(session).get_state(poll_id, HOUSE_ONE)
             assert persisted == opened
             assert await PostgresPollRepository(session).get_state(poll_id, HOUSE_TWO) is None
+            notices = (
+                await session.scalars(
+                    select(OutboxDeliveryRow).where(
+                        OutboxDeliveryRow.operation_key.like(f"poll:invite:{poll_id}:%")
+                    )
+                )
+            ).all()
+            assert len(notices) == audience.eligible_count == 12
+            for notice in notices:
+                assert notice.recipient_id in opened.definition.eligible_residents
+                assert notice.chat_id is None and len(notice.buttons) == 2
+                action = await PostgresPollActionStore(session).get(notice.buttons[0]["payload"])
+                assert action is not None and action.bound_resident_id == notice.recipient_id
+                assert action.poll_id == poll_id and action.subject_revision == 1
             job = await session.scalar(
                 select(ScheduledJobRow).where(ScheduledJobRow.entity_id == poll_id)
             )

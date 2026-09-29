@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.initiatives.service import InitiativeService
@@ -20,6 +21,7 @@ from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseR
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.initiative_cases import PostgresInitiativeCases
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
+from dom_domych.infrastructure.postgres.models import OutboxDeliveryRow
 from dom_domych.infrastructure.postgres.original_audience import original_audience_id, original_poll
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
@@ -160,6 +162,17 @@ async def test_initiative_revision_resets_votes_and_revokes_old_token() -> None:
             new_poll = await PostgresPollRepository(session).get_state(
                 revised.current.poll_id, HOUSE_ONE
             )
+            old_notices = (
+                await session.scalars(
+                    select(OutboxDeliveryRow).where(
+                        OutboxDeliveryRow.operation_key.like(
+                            f"poll:invite:{original.current.poll_id}:%"
+                        )
+                    )
+                )
+            ).all()
+            assert len(old_notices) == audience.eligible_count
+            assert all(notice.status == "superseded" for notice in old_notices)
             assert old_poll is not None and old_poll.status == PollStatus.CANCELLED
             assert old_poll.tally.yes == 1
             assert new_poll is not None and new_poll.tally.yes == 0
