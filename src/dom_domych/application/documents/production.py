@@ -3,7 +3,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from dom_domych.application.requests.emergency_runtime import emergency_audience_key
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
 from dom_domych.domain.documents.snapshot import (
     DocumentFact,
@@ -11,16 +10,15 @@ from dom_domych.domain.documents.snapshot import (
     DocumentMode,
     DocumentSnapshot,
 )
-from dom_domych.domain.polls.models import PollKind
 from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.documents import PostgresDocuments
 from dom_domych.infrastructure.postgres.models import HouseRow
+from dom_domych.infrastructure.postgres.original_audience import original_audience_id, original_poll
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
 from dom_domych.infrastructure.postgres.z_audience_models import AudienceSnapshotRow
 from dom_domych.infrastructure.postgres.z_document_models import DocumentRow
-from dom_domych.infrastructure.postgres.z_poll_models import PollRow
 
 
 class RequestDocumentEventHandler:
@@ -68,21 +66,6 @@ class RequestDocumentEventHandler:
                 )
             )
             house = await session.get(HouseRow, event.house_id)
-            origin = await session.scalar(
-                select(PollRow)
-                .where(
-                    PollRow.case_id == event.entity.case_id,
-                    PollRow.house_id == event.house_id,
-                    PollRow.kind.in_(
-                        (
-                            PollKind.PROBLEM_CONFIRMATION.value,
-                            PollKind.INITIATIVE_POSITION.value,
-                        )
-                    ),
-                )
-                .order_by(PollRow.opens_at, PollRow.id)
-                .limit(1)
-            )
             if (
                 request is None
                 or request.status != "registered"
@@ -94,14 +77,8 @@ class RequestDocumentEventHandler:
                 or house is None
             ):
                 return False
-            audience_id = origin.audience_id if origin is not None else None
-            if audience_id is None and case.kind == "emergency":
-                audience_id = await session.scalar(
-                    select(AudienceSnapshotRow.id).where(
-                        AudienceSnapshotRow.house_id == event.house_id,
-                        AudienceSnapshotRow.operation_key == emergency_audience_key(case.id),
-                    )
-                )
+            origin = await original_poll(session, case)
+            audience_id = await original_audience_id(session, case)
             if audience_id is None:
                 return False
             audience = await session.scalar(

@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.polls.service import PollService
+from dom_domych.application.requests.emergency_runtime import emergency_audience_key
 from dom_domych.application.resolution.production import PostgresResolutionEventHandler
 from dom_domych.application.resolution.service import ResolutionService
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
@@ -61,6 +62,7 @@ class Clock:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["problem", "emergency"])
 @pytest.mark.parametrize(
     ("yes", "no", "expected"),
     [
@@ -70,7 +72,7 @@ class Clock:
     ],
 )
 async def test_resolution_outcome_is_atomic_and_uses_original_audience(
-    yes: int, no: int, expected: ResolutionStatus
+    yes: int, no: int, expected: ResolutionStatus, kind: str
 ) -> None:
     database_url = os.environ.get("TEST_DATABASE_URL")
     if not database_url:
@@ -87,7 +89,7 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
                     CaseRow(
                         id=case_id,
                         house_id=HOUSE_ONE,
-                        kind="problem",
+                        kind=kind,
                         title="Проверка результата",
                         description="Синтетическое дело",
                         status="in_progress",
@@ -118,17 +120,22 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
             ).resolve(
                 AudienceScope(ScopeKind.FLOOR, entrance=2, floor=5),
                 Context(HOUSE_ONE),
-                operation_key=f"z12:audience:{case_id}",
+                operation_key=(
+                    emergency_audience_key(case_id)
+                    if kind == "emergency"
+                    else f"z12:audience:{case_id}"
+                ),
             )
-            await PollService(PostgresPollRepository(session), clock).open(
-                case_id,
-                audience,
-                PollKind.PROBLEM_CONFIRMATION,
-                demo_problem_policy(),
-                1,
-                Context(HOUSE_ONE),
-                operation_key=f"z12:original:{case_id}",
-            )
+            if kind == "problem":
+                await PollService(PostgresPollRepository(session), clock).open(
+                    case_id,
+                    audience,
+                    PollKind.PROBLEM_CONFIRMATION,
+                    demo_problem_policy(),
+                    1,
+                    Context(HOUSE_ONE),
+                    operation_key=f"z12:original:{case_id}",
+                )
             await session.flush()
             session.add(
                 RequestRow(

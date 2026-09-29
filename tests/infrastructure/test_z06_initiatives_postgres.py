@@ -20,6 +20,7 @@ from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseR
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.initiative_cases import PostgresInitiativeCases
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
+from dom_domych.infrastructure.postgres.original_audience import original_audience_id, original_poll
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
@@ -162,6 +163,11 @@ async def test_initiative_revision_resets_votes_and_revokes_old_token() -> None:
             assert old_poll is not None and old_poll.status == PollStatus.CANCELLED
             assert old_poll.tally.yes == 1
             assert new_poll is not None and new_poll.tally.yes == 0
+            case = await session.get(CaseRow, case_id)
+            assert case is not None
+            effective = await original_poll(session, case)
+            assert effective is not None and effective.id == revised.current.poll_id
+            assert await original_audience_id(session, case) == revised.current.audience_id
             assert await PostgresInitiativeRepository(sessions).get(case_id, HOUSE_ONE) == revised
 
 
