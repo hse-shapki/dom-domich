@@ -86,3 +86,84 @@ async def test_llama_server_rejects_malformed_success() -> None:
     ) as client:
         with pytest.raises(ValueError, match="пустой"):
             await LlamaServerPort(client, "fixture-model").complete([], [])
+
+
+@pytest.mark.asyncio
+async def test_llama_server_accepts_exact_allowlisted_compat_tool_json() -> None:
+    response = {
+        "choices": [
+            {"message": {"content": '{"name":"case.search","arguments":{"query":"темно"}}'}}
+        ]
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response)),
+        base_url="http://127.0.0.1:8080",
+    ) as client:
+        result = await LlamaServerPort(client, "fixture-model").complete(
+            [{"role": "user", "content": "Темно"}],
+            [
+                {
+                    "name": "case.search",
+                    "description": "Поиск",
+                    "parameters": {"type": "object"},
+                }
+            ],
+        )
+
+    assert result.text == ""
+    assert result.tool_calls[0].name == "case.search"
+    assert result.tool_calls[0].arguments_json == '{"query":"темно"}'
+    assert result.tool_calls[0].call_id == "compat_call_1"
+
+
+@pytest.mark.asyncio
+async def test_llama_server_accepts_single_json_fence_without_surrounding_text() -> None:
+    content = '```json\n{"name":"case.search","arguments":{"query":"темно"}}\n```'
+    response = {"choices": [{"message": {"content": content}}]}
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response)),
+        base_url="http://127.0.0.1:8080",
+    ) as client:
+        result = await LlamaServerPort(client, "fixture-model").complete(
+            [],
+            [
+                {
+                    "name": "case.search",
+                    "description": "Поиск",
+                    "parameters": {"type": "object"},
+                }
+            ],
+        )
+
+    assert result.tool_calls[0].name == "case.search"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"name":"shell.exec","arguments":{}}',
+        '{"name":"case.search","arguments":{},"extra":true}',
+        'Вызову {"name":"case.search","arguments":{}}',
+        'Текст\n```json\n{"name":"case.search","arguments":{}}\n```',
+    ],
+)
+async def test_llama_server_does_not_execute_untrusted_compat_text(content: str) -> None:
+    response = {"choices": [{"message": {"content": content}}]}
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response)),
+        base_url="http://127.0.0.1:8080",
+    ) as client:
+        result = await LlamaServerPort(client, "fixture-model").complete(
+            [],
+            [
+                {
+                    "name": "case.search",
+                    "description": "Поиск",
+                    "parameters": {"type": "object"},
+                }
+            ],
+        )
+
+    assert not result.tool_calls
+    assert result.text == content

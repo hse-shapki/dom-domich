@@ -11,12 +11,13 @@ K initiative workflow пока не вызывает их автоматичес
 production audience/poll/card через durable event.
 K01: подготовлен русский набор из 24 синтетических кейсов и нулевой baseline
 в `evals/`; прогон реальной модели пока не выполнен.
-K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. Модели
-проверены по SHA-256 и удалены из cache; `llama.cpp` доступен локально.
-На 8 GiB Mac текстовая модель не дала
-успешного ответа: полный Metal offload упёрся в память, CPU превысил 120 с,
-частичный offload вызвал swap. Live inference и p50/p95 не подтверждены;
-подробности: `docs/engineering/11-track-k-inference-probe.md`.
+K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. Старый
+Qwen3-8B probe на 8 GiB не удался. Повторная проверка 29.09.2026 на 16 GiB
+через локальный Ollama и `qwen2.5-coder:7b` дала русский ответ и allowlisted
+tool call. Для моделей, сериализующих вызов в content, адаптер принимает только
+точный одиночный JSON (или одиночный JSON fence), сверяет имя с выданным
+allowlist, а schema/capability остаются в backend runtime. Полные K01/K15 evals,
+p50/p95 и выбор модели не выполнены; подробности — в inference probe.
 K03: runtime проверяет allowlist, JSON schema, режим, capability и бюджет;
 единый реестр связывает девять опубликованных K schemas с KToolHandlers,
 включая срочный `emergency.handle` без ожидания опроса;
@@ -155,7 +156,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Backup/restore A15 | Проверено локально на PostgreSQL 17.8/pgvector и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Z head `0a7b6c5d4e3f`, vector, 40 public tables и 5 файлов с теми же SHA-256; временные данные удалены |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
-| Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены с fake LLM | `src/dom_domych/agent/`, `application/agent/composition.py`, `tests/agent/`, `evals/`; live inference и общий process открыты |
+| Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены; локальный Ollama прошёл один validated `case.search` chain | `src/dom_domych/agent/`, `infrastructure/llm/llama_server.py`, `application/agent/composition.py`, tests/evals; полный live MAX/G3 и реальные метрики ещё открыты |
 | Хранение опросов | Частично: PostgreSQL repository/migration, callback и jobs проверены локально | `infrastructure/postgres/polls.py`, `application/polls/production.py`, `tests/infrastructure/test_z04_polls_postgres.py`; K route/live MAX не проверены |
 | Рабочий стенд и внешние проверки | Частично | Целевой PG17/pgvector, production image и полный local Compose lifecycle проверены; live MAX bot identity/polling/DM onboarding пройдены в web-клиенте 29.09.2026, но модель, публичный HTTPS, mobile, group/callback/files и событийный G3 ещё не проверены |
 
