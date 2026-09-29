@@ -11,7 +11,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.agent.contracts import CaseKind, CaseView
-from dom_domych.application.cases.evidence import EvidenceInput
+from dom_domych.application.cases.evidence import EvidenceAssessmentInput, EvidenceInput
 from dom_domych.contracts.base import TrustedContext
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.infrastructure.postgres.case_models import (
@@ -119,6 +119,103 @@ class PostgresEvidenceWriter:
                         causation_id=context.event_id,
                     ),
                 ),
+            )
+            session.add(
+                CaseOperationRow(
+                    house_id=context.house_id,
+                    operation_id=command.operation_id,
+                    case_id=row.id,
+                    command_hash=command_hash,
+                    result_view=view.model_dump(mode="json"),
+                )
+            )
+            return view
+
+    async def assess(
+        self, command: EvidenceAssessmentInput, context: TrustedContext, now: datetime
+    ) -> CaseView:
+        payload = (
+            f"{command.case_id}:{command.evidence_id}:{command.expected_version}:"
+            f"{command.assessment}:{sorted(command.source_refs)}:{context.actor_id}"
+        )
+        command_hash = sha256(payload.encode()).hexdigest()
+        async with self.sessions.begin() as session:
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:scope, 0))"),
+                {"scope": f"operation:{context.house_id}:{command.operation_id}"},
+            )
+            prior = await session.get(CaseOperationRow, (context.house_id, command.operation_id))
+            if prior is not None:
+                if prior.command_hash != command_hash:
+                    raise ValueError("CONFLICT")
+                return CaseView.model_validate_json(json.dumps(prior.result_view))
+            row = await session.scalar(
+                select(CaseRow)
+                .where(CaseRow.id == command.case_id, CaseRow.house_id == context.house_id)
+                .with_for_update()
+            )
+            if row is None:
+                raise ValueError("CASE_NOT_FOUND")
+            if row.version != command.expected_version:
+                raise ValueError("VERSION_CONFLICT")
+            if row.status == "closed":
+                raise ValueError("INVALID_STATE")
+            evidence = await session.scalar(
+                select(CaseEvidenceRow).where(
+                    CaseEvidenceRow.id == command.evidence_id,
+                    CaseEvidenceRow.case_id == row.id,
+                    CaseEvidenceRow.house_id == context.house_id,
+                )
+            )
+            if evidence is None:
+                raise ValueError("EVIDENCE_NOT_FOUND")
+            if evidence.assessment != "pending":
+                raise ValueError("EVIDENCE_ALREADY_ASSESSED")
+            source_refs = set(command.source_refs)
+            verified_refs = set(
+                await session.scalars(
+                    select(CaseEvidenceRow.source_ref).where(
+                        CaseEvidenceRow.case_id == row.id,
+                        CaseEvidenceRow.house_id == context.house_id,
+                        CaseEvidenceRow.source_ref.in_(source_refs),
+                    )
+                )
+            )
+            if (
+                evidence.source_ref not in source_refs
+                or len(source_refs) != len(command.source_refs)
+                or verified_refs != source_refs
+            ):
+                raise ValueError("ASSESSMENT_SOURCE_REQUIRED")
+            evidence.assessment = command.assessment.value
+            before_version = row.version
+            row.version += 1
+            view = CaseView(
+                case_id=row.id,
+                version=row.version,
+                kind=CaseKind(row.kind),
+                title=row.title,
+                status=row.status,
+                source_refs=command.source_refs,
+            )
+            session.add(
+                CaseEventRow(
+                    id=uuid4(),
+                    case_id=row.id,
+                    house_id=context.house_id,
+                    event_type="evidence.assessed",
+                    before_version=before_version,
+                    after_version=row.version,
+                    actor_id=context.actor_id,
+                    source_message_id=None,
+                    operation_id=command.operation_id,
+                    occurred_at=now,
+                    facts={
+                        "evidence_id": str(evidence.id),
+                        "assessment": command.assessment.value,
+                        "source_refs": list(command.source_refs),
+                    },
+                )
             )
             session.add(
                 CaseOperationRow(

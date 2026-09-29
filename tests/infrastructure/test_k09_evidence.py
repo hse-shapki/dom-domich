@@ -8,7 +8,12 @@ import pytest
 from sqlalchemy import delete, func, select
 
 from dom_domych.agent.contracts import CaseCreate, CaseKind, TrustedContext
-from dom_domych.application.cases.evidence import EvidenceInput, EvidenceService
+from dom_domych.application.cases.evidence import (
+    EvidenceAssessment,
+    EvidenceAssessmentInput,
+    EvidenceInput,
+    EvidenceService,
+)
 from dom_domych.contracts.base import ExecutionMode, PrincipalType
 from dom_domych.infrastructure.postgres.case_evidence import PostgresEvidenceWriter
 from dom_domych.infrastructure.postgres.case_models import (
@@ -82,6 +87,8 @@ async def test_evidence_is_versioned_idempotent_and_private() -> None:
                 assert evidence is not None
                 assert evidence.source_ref == f"event:{evidence_context.event_id}"
                 assert evidence.assessment == "pending"
+                evidence_id = evidence.id
+                source_ref = evidence.source_ref
                 domain_event = await session.scalar(
                     select(InboxEventRow).where(
                         InboxEventRow.source == "domain",
@@ -99,6 +106,53 @@ async def test_evidence_is_versioned_idempotent_and_private() -> None:
                     )
                     == 0
                 )
+            reviewer = context.model_copy(
+                update={"capabilities": frozenset({"evidence.assess"}), "event_id": uuid4()}
+            )
+            assessment = EvidenceAssessmentInput(
+                case_id=case.case_id,
+                evidence_id=evidence_id,
+                expected_version=updated.version,
+                assessment=EvidenceAssessment.ACCEPTED,
+                source_refs=(source_ref,),
+                operation_id=uuid4(),
+            )
+            with pytest.raises(PermissionError, match="FORBIDDEN"):
+                await service.assess(assessment, evidence_context)
+            with pytest.raises(ValueError, match="ASSESSMENT_SOURCE_REQUIRED"):
+                await service.assess(
+                    EvidenceAssessmentInput(
+                        case_id=assessment.case_id,
+                        evidence_id=assessment.evidence_id,
+                        expected_version=assessment.expected_version,
+                        assessment=assessment.assessment,
+                        source_refs=("event:unrelated",),
+                        operation_id=uuid4(),
+                    ),
+                    reviewer,
+                )
+            assessed = await service.assess(assessment, reviewer)
+            assert assessed.version == 3 and assessed.status == updated.status
+            assert await service.assess(assessment, reviewer) == assessed
+            with pytest.raises(ValueError, match="VERSION_CONFLICT"):
+                await service.assess(
+                    EvidenceAssessmentInput(
+                        case_id=assessment.case_id,
+                        evidence_id=assessment.evidence_id,
+                        expected_version=updated.version,
+                        assessment=EvidenceAssessment.REJECTED,
+                        source_refs=(source_ref,),
+                        operation_id=uuid4(),
+                    ),
+                    reviewer,
+                )
+            async with sessions() as session:
+                evidence = await session.get(CaseEvidenceRow, evidence_id)
+                assert evidence is not None and evidence.assessment == "accepted"
+                event = await session.scalar(
+                    select(CaseEventRow).where(CaseEventRow.operation_id == assessment.operation_id)
+                )
+                assert event is not None and event.facts["source_refs"] == [source_ref]
         finally:
             async with sessions.begin() as session:
                 await session.execute(

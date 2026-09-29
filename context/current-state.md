@@ -56,7 +56,11 @@ K09: ProblemWorkflow проверяет scope дела и доверенный �
 переход case и публичную карточку/outbox; отсутствие group chat откатывает весь переход.
 Trusted итог poll до agent continuation переводит дело в `request_ready` либо
 `needs_evidence`; во второй ветке private outbox создаётся только для ответивших «да».
-Следующий request/evidence цикл и live MAX пока не проверены.
+K09 evidence assessment теперь требует отдельной capability, текущей версии дела и
+ссылки на сохранённое evidence того же дома. Решение и источники сохраняются в
+versioned case event; повтор команды идемпотентен, статус дела не меняется от одного
+фото или оценки. Проверено на мигрированной PostgreSQL 16; адресная привязка
+входящего MAX-фото к делу, следующий request/evidence цикл и live MAX ещё не проверены.
 K10: RequestService сверяет актуальную версию дела и проверенное правило,
 хранит draft hash/version и явное согласование. Изменение черновика сбрасывает
 approval, submit в demo идемпотентен через operation key, статус registered

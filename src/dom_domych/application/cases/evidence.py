@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
@@ -19,9 +20,28 @@ class EvidenceInput:
     operation_id: UUID
 
 
+class EvidenceAssessment(StrEnum):
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceAssessmentInput:
+    case_id: UUID
+    evidence_id: UUID
+    expected_version: int
+    assessment: EvidenceAssessment
+    source_refs: tuple[str, ...]
+    operation_id: UUID
+
+
 class EvidenceWriter(Protocol):
     async def add(
         self, command: EvidenceInput, context: TrustedContext, now: datetime
+    ) -> CaseView: ...
+
+    async def assess(
+        self, command: EvidenceAssessmentInput, context: TrustedContext, now: datetime
     ) -> CaseView: ...
 
 
@@ -42,3 +62,11 @@ class EvidenceService:
         if command.expected_version < 1:
             raise ValueError("VERSION_CONFLICT")
         return await self.writer.add(command, context, self.clock.now())
+
+    async def assess(self, command: EvidenceAssessmentInput, context: TrustedContext) -> CaseView:
+        """Фиксирует явную оценку с источником; не меняет готовность обращения."""
+        if "evidence.assess" not in context.capabilities or context.actor_id is None:
+            raise PermissionError("FORBIDDEN")
+        if command.expected_version < 1 or not command.source_refs:
+            raise ValueError("ASSESSMENT_SOURCE_REQUIRED")
+        return await self.writer.assess(command, context, self.clock.now())
