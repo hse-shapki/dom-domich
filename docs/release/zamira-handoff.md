@@ -32,6 +32,43 @@ DATABASE_URL=postgresql+asyncpg://localhost/dom_domych_test_zamira uv run alembi
 [`test_z09_documents_postgres.py`](../../tests/infrastructure/test_z09_documents_postgres.py).
 Эти тесты позволяют воспроизвести обе развилки результата без изменения БД вручную.
 
+## Ручной demo executor и приватный реестр
+
+Оператор запускает команды локально на стенде с `DATABASE_URL` в окружении.
+Доступ к процессу и БД является границей служебных полномочий; команды не
+публикуются как tools для LLM или команды жильца. CLI отклоняет дом без `demo=true`.
+Обращение уже должно быть согласовано жителем и submitted через RequestService.
+
+```bash
+uv run python -m dom_domych.entrypoints.zamira_operator show --house-id HOUSE_UUID --request-id REQUEST_UUID
+uv run python -m dom_domych.entrypoints.zamira_operator register --house-id HOUSE_UUID --request-id REQUEST_UUID
+uv run python -m dom_domych.entrypoints.zamira_operator status --house-id HOUSE_UUID --request-id REQUEST_UUID --status done --event-id EVENT_UUID
+```
+
+Вместо `*_UUID` берут идентификаторы синтетического дома/обращения, а `EVENT_UUID`
+выбирают один раз и сохраняют для повторов команды. Ответ содержит demo registration,
+external status и признак нового события. Повтор не создаёт вторую регистрацию или
+событие. Inbox затем запускает личный опрос результата; CLI `done` сам дело не закрывает.
+Жители отвечают через свои кнопки: достаточно «да» → `closed`, отрицательный порог →
+`reopened`, недостаточно ответов → `resolution_unconfirmed`.
+
+После итогового решения инициативы позиция жителей автоматически идёт автору.
+После доверенного deadline K сохраняет review-only текст, а Z ставит PDF черновика
+жалобы в очередь для согласовавшего обращение жителя. Это не официальная отправка.
+
+Приватный реестр начальных личных приглашений готовит только оператор для
+назначенного уполномоченного подтверждённого жителя:
+
+```bash
+uv run python -m dom_domych.entrypoints.zamira_operator document --house-id HOUSE_UUID --case-id CASE_UUID --recipient-id RESIDENT_UUID --kind notification_register --operation-key demo-notice-register-1
+```
+
+Operation key сохраняют для повторов: существующий PDF не переснимает изменившиеся
+delivery states. Для нового снимка задают новый ключ. Отдельная capability
+`document.notice_register` проверяется application service; авторство инициативы
+само по себе не даёт права на реестр. Реестр содержит внутренние ID и идёт только
+лично. Время попыток отсутствует в outbox и в PDF не выдумывается.
+
 ## Демо-правила и данные
 
 | Версия | Техническое правило | Статус |

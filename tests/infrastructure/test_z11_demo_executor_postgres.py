@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from dom_domych.application.executor.service import DemoExecutorService
 from dom_domych.application.resolution.production import PostgresResolutionEventHandler
@@ -20,13 +20,19 @@ from dom_domych.domain.executor.models import (
     ExecutorNotFound,
     ExternalStatus,
 )
+from dom_domych.entrypoints.zamira_operator import build_parser, run_command
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.demo_executor import (
     PostgresDemoExecutor,
     PostgresExecutorPort,
 )
 from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
-from dom_domych.infrastructure.postgres.models import InboxEventRow, OutboxDeliveryRow, ResidencyRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    InboxEventRow,
+    OutboxDeliveryRow,
+    ResidencyRow,
+)
 from dom_domych.infrastructure.postgres.request_models import RequestRow
 from dom_domych.infrastructure.postgres.session import database_lifespan
 from dom_domych.infrastructure.postgres.z_executor_models import DemoExecutorRow
@@ -134,8 +140,14 @@ async def test_postgres_demo_executor_is_idempotent_and_emits_trusted_status() -
             assert request is not None
             request.status = "submitted"
             request.executor_operation_id = operation.operation_id
-        registered, emitted = await service.register(operation.operation_id, register)
-        assert emitted and registered.registration_number is not None
+        registration_args = build_parser().parse_args(
+            ["register", "--house-id", str(HOUSE_ONE), "--request-id", str(request_id)]
+        )
+        registration_result = json.loads(await run_command(registration_args, database_url))
+        assert registration_result["event_emitted"] and registration_result[
+            "registration"
+        ].startswith("DEMO-")
+        assert not json.loads(await run_command(registration_args, database_url))["event_emitted"]
         assert (await service.register(operation.operation_id, register))[1] is False
         async with sessions() as session:
             registration = await session.scalar(
@@ -154,10 +166,34 @@ async def test_postgres_demo_executor_is_idempotent_and_emits_trusted_status() -
             assert request is not None and request.status == "registered"
             assert case is not None and case.status == "in_progress"
         event_id = uuid4()
-        done, emitted = await service.set_status(
-            operation.operation_id, ExternalStatus.DONE, event_id, operator
+        status_args = build_parser().parse_args(
+            [
+                "status",
+                "--house-id",
+                str(HOUSE_ONE),
+                "--request-id",
+                str(request_id),
+                "--status",
+                "done",
+                "--event-id",
+                str(event_id),
+            ]
         )
-        assert emitted and done.status is ExternalStatus.DONE
+        status_result = json.loads(await run_command(status_args, database_url))
+        assert status_result["external_status"] == "done" and status_result["event_emitted"]
+        assert not json.loads(await run_command(status_args, database_url))["event_emitted"]
+        async with sessions.begin() as session:
+            await session.execute(
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(demo=False)
+            )
+        try:
+            with pytest.raises(PermissionError, match="DEMO_HOUSE_REQUIRED"):
+                await run_command(status_args, database_url)
+        finally:
+            async with sessions.begin() as session:
+                await session.execute(
+                    update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(demo=True)
+                )
         repeated = await service.set_status(
             operation.operation_id, ExternalStatus.DONE, event_id, operator
         )

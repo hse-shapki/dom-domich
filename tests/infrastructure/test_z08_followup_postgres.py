@@ -26,6 +26,7 @@ from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.documents.snapshot import DocumentKind, NoticeStatus
 from dom_domych.domain.polls.models import VoteChoice
 from dom_domych.domain.polls.policy import InitiativeOutcome, demo_initiative_policy
+from dom_domych.entrypoints.zamira_operator import build_parser, run_command
 from dom_domych.infrastructure.documents.renderer import PdfRenderer
 from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
@@ -295,6 +296,27 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once(
                     )
                     .values(status=delivery_status)
                 )
+        cli_result = json.loads(
+            await run_command(
+                build_parser().parse_args(
+                    [
+                        "document",
+                        "--house-id",
+                        str(HOUSE_ONE),
+                        "--case-id",
+                        str(case_id),
+                        "--recipient-id",
+                        str(author_id),
+                        "--kind",
+                        "notification_register",
+                        "--operation-key",
+                        f"z08:private:{case_id}",
+                    ]
+                ),
+                database_url,
+            )
+        )
+        assert cli_result["status"] == "queued"
         register = await documents.prepare(
             DocumentKind.NOTIFICATION_REGISTER,
             case_id,
