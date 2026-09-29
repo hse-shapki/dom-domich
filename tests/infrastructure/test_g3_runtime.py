@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -21,7 +21,7 @@ from dom_domych.application.requests.events import RequestEventHandler, register
 from dom_domych.application.requests.service import RequestService
 from dom_domych.application.resolution.production import register_z_poll_events
 from dom_domych.contracts.base import ExecutionMode, PrincipalType, TrustedContext
-from dom_domych.contracts.events import EventName
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.executor.models import ExternalStatus
 from dom_domych.domain.polls.models import PollKind, PollStatus, VoteChoice
 from dom_domych.infrastructure.documents.renderer import PdfRenderer
@@ -217,6 +217,34 @@ async def test_problem_request_executor_resolution_closes_through_runtime(
         runtime_worker = InboxWorker(sessions, dispatcher, clock, "g3-runtime")
         assert await runtime_worker.run_once()  # executor request.registered
         assert await runtime_worker.run_once()  # domain request.registered + appeal snapshot
+        async with sessions() as session:
+            document = await session.scalar(
+                select(DocumentRow).where(DocumentRow.request_id == prepared.request_id)
+            )
+            assert document is not None
+            frozen_bytes = document.snapshot_bytes
+            document_id = document.id
+        clock.current += timedelta(minutes=3)
+        replay = EventEnvelope(
+            event_id=uuid4(),
+            source=EventSource.DOMAIN,
+            source_key=f"replay:{uuid4()}",
+            name=EventName.REQUEST_REGISTERED,
+            occurred_at=clock.now(),
+            received_at=clock.now(),
+            correlation_id=uuid4(),
+            house_id=HOUSE_ONE,
+            entity=EntityEventPayload(
+                entity_id=prepared.request_id, entity_version=1, case_id=case.case_id
+            ),
+        )
+        assert not await RequestDocumentEventHandler(sessions, clock)(replay)
+        async with sessions() as session:
+            document = await session.scalar(
+                select(DocumentRow).where(DocumentRow.request_id == prepared.request_id)
+            )
+            assert document is not None and document.id == document_id
+            assert document.snapshot_bytes == frozen_bytes
         async with PdfRenderer(max_workers=1) as renderer:
             document_worker = DocumentWorker(
                 sessions,

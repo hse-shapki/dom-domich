@@ -19,6 +19,7 @@ from dom_domych.infrastructure.postgres.models import HouseRow
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
 from dom_domych.infrastructure.postgres.z_audience_models import AudienceSnapshotRow
+from dom_domych.infrastructure.postgres.z_document_models import DocumentRow
 from dom_domych.infrastructure.postgres.z_poll_models import PollRow
 
 
@@ -38,14 +39,28 @@ class RequestDocumentEventHandler:
             or event.entity.case_id is None
         ):
             return False
-        async with self.sessions() as session:
+        async with self.sessions.begin() as session:
             request = await session.scalar(
-                select(RequestRow).where(
+                select(RequestRow)
+                .where(
                     RequestRow.id == event.entity.entity_id,
                     RequestRow.house_id == event.house_id,
                     RequestRow.case_id == event.entity.case_id,
                 )
+                .with_for_update()
             )
+            if request is None:
+                return False
+            operation_key = f"request:appeal:{request.id}:v{request.draft_version}"
+            # Повтор события возвращает уже зафиксированные факты, даже если дело изменилось.
+            existing = await session.scalar(
+                select(DocumentRow.id).where(
+                    DocumentRow.house_id == event.house_id,
+                    DocumentRow.operation_key == operation_key,
+                )
+            )
+            if existing is not None:
+                return False
             case = await session.scalar(
                 select(CaseRow).where(
                     CaseRow.id == event.entity.case_id,
@@ -136,14 +151,12 @@ class RequestDocumentEventHandler:
                 facts=tuple(facts),
                 tally=poll.tally if poll is not None else None,
                 notices=(),
-                created_at=self.clock.now(),
+                created_at=request.registered_at or event.occurred_at,
             )
             recipient_id = request.approval_actor
-        await PostgresDocuments(self.sessions).prepare(
-            snapshot,
-            recipient_id,
-            operation_key=f"request:appeal:{request.id}:v{request.draft_version}",
-        )
+            await PostgresDocuments(self.sessions).prepare_in_session(
+                session, snapshot, recipient_id, operation_key=operation_key
+            )
         # Следующий handler запускает continuation уже после постановки документа в очередь.
         return False
 

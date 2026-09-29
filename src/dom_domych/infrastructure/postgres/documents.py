@@ -31,60 +31,73 @@ class PostgresDocuments:
         *,
         operation_key: str,
     ) -> DocumentRef:
+        async with self.sessions.begin() as session:
+            return await self.prepare_in_session(
+                session, snapshot, recipient_id, operation_key=operation_key
+            )
+
+    async def prepare_in_session(
+        self,
+        session: AsyncSession,
+        snapshot: DocumentSnapshot,
+        recipient_id: UUID,
+        *,
+        operation_key: str,
+    ) -> DocumentRef:
+        """Фиксирует снимок в транзакции producer, без отдельного commit."""
         if not operation_key or len(operation_key) > 250:
             raise ValueError("invalid document operation key")
-        async with self.sessions.begin() as session:
-            existing = await session.scalar(
-                select(DocumentRow).where(
-                    DocumentRow.house_id == snapshot.house_id,
-                    DocumentRow.operation_key == operation_key,
-                )
+        existing = await session.scalar(
+            select(DocumentRow).where(
+                DocumentRow.house_id == snapshot.house_id,
+                DocumentRow.operation_key == operation_key,
             )
-            if existing is not None:
-                return self._matching_ref(existing, snapshot, recipient_id)
-            await self._validate_sources(session, snapshot, recipient_id)
-            document_id = uuid4()
-            inserted = await session.scalar(
-                insert(DocumentRow)
-                .values(
-                    id=document_id,
-                    house_id=snapshot.house_id,
-                    case_id=snapshot.case_id,
-                    audience_id=snapshot.audience_id,
-                    poll_id=snapshot.poll_id,
-                    request_id=snapshot.request_id,
-                    recipient_id=recipient_id,
-                    operation_key=operation_key,
-                    kind=snapshot.kind.value,
-                    mode=snapshot.mode.value,
-                    template_revision=snapshot.template_revision,
-                    snapshot_bytes=snapshot.canonical_bytes(),
-                    snapshot_sha256=snapshot.sha256,
-                    status="queued",
-                    created_at=snapshot.created_at,
-                    attempts=0,
-                )
-                .on_conflict_do_nothing(index_elements=["house_id", "operation_key"])
-                .returning(DocumentRow.id)
-            )
-            if inserted is not None:
-                return DocumentRef(
-                    document_id,
-                    snapshot.house_id,
-                    snapshot.case_id,
-                    "queued",
-                    None,
-                    snapshot.sha256,
-                )
-            existing = await session.scalar(
-                select(DocumentRow).where(
-                    DocumentRow.house_id == snapshot.house_id,
-                    DocumentRow.operation_key == operation_key,
-                )
-            )
-            if existing is None:
-                raise RuntimeError("conflicting document disappeared")
+        )
+        if existing is not None:
             return self._matching_ref(existing, snapshot, recipient_id)
+        await self._validate_sources(session, snapshot, recipient_id)
+        document_id = uuid4()
+        inserted = await session.scalar(
+            insert(DocumentRow)
+            .values(
+                id=document_id,
+                house_id=snapshot.house_id,
+                case_id=snapshot.case_id,
+                audience_id=snapshot.audience_id,
+                poll_id=snapshot.poll_id,
+                request_id=snapshot.request_id,
+                recipient_id=recipient_id,
+                operation_key=operation_key,
+                kind=snapshot.kind.value,
+                mode=snapshot.mode.value,
+                template_revision=snapshot.template_revision,
+                snapshot_bytes=snapshot.canonical_bytes(),
+                snapshot_sha256=snapshot.sha256,
+                status="queued",
+                created_at=snapshot.created_at,
+                attempts=0,
+            )
+            .on_conflict_do_nothing(index_elements=["house_id", "operation_key"])
+            .returning(DocumentRow.id)
+        )
+        if inserted is not None:
+            return DocumentRef(
+                document_id,
+                snapshot.house_id,
+                snapshot.case_id,
+                "queued",
+                None,
+                snapshot.sha256,
+            )
+        existing = await session.scalar(
+            select(DocumentRow).where(
+                DocumentRow.house_id == snapshot.house_id,
+                DocumentRow.operation_key == operation_key,
+            )
+        )
+        if existing is None:
+            raise RuntimeError("conflicting document disappeared")
+        return self._matching_ref(existing, snapshot, recipient_id)
 
     @classmethod
     def _matching_ref(
