@@ -1,5 +1,6 @@
 """Создание и изменение инициативы вместе с новой ревизией опроса."""
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -159,7 +160,9 @@ class InitiativeService:
             uuid4(),
             self.clock.now(),
         )
-        updated = previous.revise(revision, expected_revision)
+        updated = replace(
+            previous.revise(revision, expected_revision), case_version=case.version + 1
+        )
         poll = self._new_poll(updated, audience, policy, window)
         return await self.repository.revise_and_replace_poll_atomic(
             previous,

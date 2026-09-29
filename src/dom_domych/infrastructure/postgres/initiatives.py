@@ -1,12 +1,12 @@
 """Атомарная редакция инициативы вместе с заменой опроса."""
 
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.initiatives.followup import demo_reminder_policy
-from dom_domych.contracts.events import EventName
+from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.initiatives.models import (
     InitiativeConflict,
     InitiativeForbidden,
@@ -15,7 +15,8 @@ from dom_domych.domain.initiatives.models import (
 )
 from dom_domych.domain.polls.models import PollState
 from dom_domych.domain.ports.core import JobIntent
-from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseRow
+from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseMessageRow, CaseRow
+from dom_domych.infrastructure.postgres.inbox import save_domain_event
 from dom_domych.infrastructure.postgres.jobs import PostgresJobQueue
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.z_initiative_models import (
@@ -105,7 +106,12 @@ class PostgresInitiativeRepository:
         operation_key: str,
     ) -> InitiativeState:
         async with self.sessions.begin() as session:
-            await self._guard_case(session, updated)
+            # Case lock сериализует повтор key с обновлением версии общей формулировки.
+            await session.scalar(
+                select(CaseRow)
+                .where(CaseRow.id == previous.case_id, CaseRow.house_id == previous.house_id)
+                .with_for_update()
+            )
             row = await session.scalar(
                 select(InitiativeRow)
                 .where(
@@ -126,6 +132,9 @@ class PostgresInitiativeRepository:
                 ):
                     raise InitiativeConflict("operation key was used for another revision")
                 return repeated
+            case = await self._guard_case(session, previous)
+            if case.status != "collecting" or updated.case_version != previous.case_version + 1:
+                raise InitiativeConflict("initiative can only be revised while collecting")
             if row.current_revision != previous.current.revision:
                 raise InitiativeConflict("initiative revision changed concurrently")
             current = await self._load(session, updated.case_id, updated.house_id)
@@ -140,6 +149,46 @@ class PostgresInitiativeRepository:
             await self._schedule_reminders(session, poll)
             self._add_revision(session, updated.current, updated.case_id, updated.house_id)
             row.current_revision = updated.current.revision
+            row.case_version = updated.case_version
+            case.description = updated.current.wording
+            case.version = updated.case_version
+            session.add(
+                CaseEventRow(
+                    id=uuid4(),
+                    case_id=case.id,
+                    house_id=case.house_id,
+                    event_type="initiative.revised",
+                    before_version=previous.case_version,
+                    after_version=case.version,
+                    actor_id=updated.author_id,
+                    source_message_id=None,
+                    operation_id=uuid5(
+                        NAMESPACE_URL, f"initiative:revision:{case.house_id}:{operation_key}"
+                    ),
+                    occurred_at=updated.current.created_at,
+                    facts={
+                        "revision": updated.current.revision,
+                        "poll_id": str(updated.current.poll_id),
+                        "audience_id": str(updated.current.audience_id),
+                    },
+                )
+            )
+            await save_domain_event(
+                session,
+                EventEnvelope(
+                    event_id=uuid4(),
+                    source=EventSource.DOMAIN,
+                    source_key=f"initiative-revised:{case.id}:{updated.current.revision}",
+                    name=EventName.INITIATIVE_DETECTED,
+                    occurred_at=updated.current.created_at,
+                    received_at=updated.current.created_at,
+                    correlation_id=case.id,
+                    house_id=case.house_id,
+                    entity=EntityEventPayload(
+                        entity_id=case.id, entity_version=case.version, case_id=case.id
+                    ),
+                ),
+            )
             self._add_operation(session, updated, operation_key)
             await session.flush()
             return updated
@@ -167,7 +216,7 @@ class PostgresInitiativeRepository:
             )
 
     @staticmethod
-    async def _guard_case(session: AsyncSession, state: InitiativeState) -> None:
+    async def _guard_case(session: AsyncSession, state: InitiativeState) -> CaseRow:
         case = await session.scalar(
             select(CaseRow)
             .where(CaseRow.id == state.case_id, CaseRow.house_id == state.house_id)
@@ -188,6 +237,7 @@ class PostgresInitiativeRepository:
             raise InitiativeForbidden("only initiative author may change wording")
         if case.version != state.case_version:
             raise InitiativeConflict("case version changed")
+        return case
 
     @staticmethod
     def _add_revision(
