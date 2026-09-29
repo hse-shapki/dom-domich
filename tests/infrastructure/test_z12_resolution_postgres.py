@@ -196,6 +196,17 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
             house_id=HOUSE_ONE,
             entity=EntityEventPayload(entity_id=request_id, entity_version=2, case_id=case_id),
         )
+        stale = done_event.model_copy(
+            update={"entity": done_event.entity.model_copy(update={"entity_version": 1})}
+        )
+        assert await events.handle_status(stale) is False
+        async with sessions() as session:
+            assert (
+                await session.scalar(
+                    select(ResolutionCheckRow.id).where(ResolutionCheckRow.done_event_id == done_id)
+                )
+                is None
+            )
         assert await events.handle_status(done_event) is False
         async with sessions() as session:
             check = await session.scalar(
@@ -320,5 +331,19 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
                     )
                     is not None
                 )
+        assert (
+            await events.handle_status(done_event) is False
+        )  # Поздний replay после финального outcome.
+        async with sessions() as session:
+            case = await session.get(CaseRow, case_id)
+            assert case is not None and case.status == expected.value and case.version == 5
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ResolutionCheckRow)
+                    .where(ResolutionCheckRow.done_event_id == done_id)
+                )
+                == 1
+            )
         with pytest.raises(ResolutionConflict):
             await PostgresResolutionCasePort(sessions).get_for_resolution(case_id, HOUSE_TWO)

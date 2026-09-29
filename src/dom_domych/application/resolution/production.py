@@ -88,14 +88,29 @@ class PostgresResolutionEventHandler:
                     RequestRow.house_id == event.house_id,
                 )
             )
-            if request is None or request.external_status != "done":
+            if (
+                request is None
+                or request.external_status != "done"
+                or request.case_id != event.entity.case_id
+                or request.external_version != event.entity.entity_version
+            ):
+                return False
+            prior = await session.scalar(
+                select(ResolutionCheckRow.id).where(
+                    ResolutionCheckRow.house_id == event.house_id,
+                    ResolutionCheckRow.done_event_id == event.event_id,
+                    ResolutionCheckRow.request_id == request.id,
+                    ResolutionCheckRow.case_id == request.case_id,
+                )
+            )
+            if prior is not None:
                 return False
         operation = await PostgresDemoExecutor(self.sessions, self.clock).get(
             event.house_id, event.entity.entity_id
         )
         if event.event_id not in operation.processed_event_ids:
             return False
-        cases = PostgresResolutionCasePort(self.sessions)
+        cases = PostgresResolutionCasePort(self.sessions, request_id=event.entity.entity_id)
         case = await cases.get_for_resolution(event.entity.case_id, event.house_id)
         async with self.sessions() as session:
             audience = await PostgresAudienceRepository(session).get_scoped(

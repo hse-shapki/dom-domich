@@ -60,19 +60,24 @@ def _state(row: ResolutionCheckRow) -> ResolutionState:
 class PostgresResolutionCasePort:
     """Использует исходную проблему, действующую инициативу или frozen emergency scope."""
 
-    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self, sessions: async_sessionmaker[AsyncSession], *, request_id: UUID | None = None
+    ) -> None:
         self.sessions = sessions
+        self.request_id = request_id
 
     async def get_for_resolution(self, case_id: UUID, house_id: UUID) -> ResolutionCaseView:
         async with self.sessions() as session:
             case = await session.scalar(
                 select(CaseRow).where(CaseRow.id == case_id, CaseRow.house_id == house_id)
             )
+            query = select(RequestRow).where(
+                RequestRow.case_id == case_id, RequestRow.house_id == house_id
+            )
+            if self.request_id is not None:
+                query = query.where(RequestRow.id == self.request_id)
             request = await session.scalar(
-                select(RequestRow)
-                .where(RequestRow.case_id == case_id, RequestRow.house_id == house_id)
-                .order_by(RequestRow.id)
-                .limit(1)
+                query.order_by(RequestRow.registered_at.desc().nulls_last(), RequestRow.id).limit(1)
             )
             audience_id = await original_audience_id(session, case) if case is not None else None
             if case is None or request is None or audience_id is None:
