@@ -2,8 +2,13 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.cards.production import PostgresPublicCards
 from dom_domych.application.jobs.inbox_worker import EventDispatcher
-from dom_domych.application.polls.callback import CallbackOutcome, PollCallbackHandler
+from dom_domych.application.polls.callback import (
+    CallbackOutcome,
+    CallbackStatus,
+    PollCallbackHandler,
+)
 from dom_domych.application.polls.max_callback import MaxPollCallbackTransport
 from dom_domych.application.polls.service import PollService
 from dom_domych.contracts.events import EventEnvelope, EventName
@@ -31,9 +36,22 @@ class PostgresPollCallbackProcessor:
             actions = PostgresPollActionStore(session)
             polls = PostgresPollRepository(session)
             processor = PollCallbackHandler(actions, polls, PollService(polls, self.clock))
-            return await MaxPollCallbackTransport(
+            outcome = await MaxPollCallbackTransport(
                 session, actions, processor, self.max_client
             ).handle(event)
+            if outcome.poll_id is not None and outcome.status in {
+                CallbackStatus.RECORDED,
+                CallbackStatus.CHANGED,
+                CallbackStatus.DUPLICATE,
+            }:
+                action = await actions.get(event.callback.action_token) if event.callback else None
+                if action is not None:
+                    poll = await polls.get_state(outcome.poll_id, action.house_id)
+                    if poll is not None:
+                        await PostgresPublicCards(self.sessions, self.clock).refresh_poll(
+                            session, poll
+                        )
+            return outcome
 
     async def handle(self, event: EventEnvelope) -> bool:
         await self.process(event)

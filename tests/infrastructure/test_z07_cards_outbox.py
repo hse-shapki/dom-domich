@@ -15,7 +15,14 @@ from dom_domych.application.initiatives.service import InitiativeService
 from dom_domych.application.polls.callback import CallbackStatus
 from dom_domych.application.polls.production import PostgresPollCallbackProcessor
 from dom_domych.application.polls.service import PollService
-from dom_domych.contracts.events import CallbackPayload, EventEnvelope, EventName, EventSource
+from dom_domych.application.resolution.production import PostgresResolutionEventHandler
+from dom_domych.contracts.events import (
+    CallbackPayload,
+    EntityEventPayload,
+    EventEnvelope,
+    EventName,
+    EventSource,
+)
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.polls.models import PollKind, VoteChoice
 from dom_domych.domain.polls.policy import demo_initiative_policy, demo_problem_policy
@@ -50,8 +57,11 @@ class AuthorContext:
 
 
 class FixedClock:
+    def __init__(self) -> None:
+        self.current = datetime(2026, 9, 25, 12, tzinfo=UTC)
+
     def now(self) -> datetime:
-        return datetime(2026, 9, 25, 12, tzinfo=UTC)
+        return self.current
 
 
 @pytest.mark.asyncio
@@ -153,7 +163,14 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
                 sessions, MaxApiClient(http, "test-token"), clock
             ).process(event)
         assert outcome.status is CallbackStatus.RECORDED
-        await cards.publish_problem(poll.definition.poll_id, HOUSE_ONE)
+        async with sessions() as session:
+            callback_edit = await session.scalar(
+                select(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.edit_key == f"problem:{case_id}",
+                    OutboxDeliveryRow.status == "pending",
+                )
+            )
+            assert callback_edit is not None and "Подтвердили: 1/12" in callback_edit.text
         for member in audience.members[1:2]:
             async with sessions.begin() as session:
                 await PostgresPollRepository(session).record_answer_atomic(
@@ -180,6 +197,28 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
             assert "Подтвердили: 2/12" in latest.text
             assert "resident_id" not in latest.text
             assert latest.buttons == base.buttons
+        clock.current = poll.definition.closes_at
+        expired_id = uuid4()
+        expired = EventEnvelope(
+            event_id=expired_id,
+            source=EventSource.SCHEDULER,
+            source_key=f"job:{expired_id}",
+            name=EventName.POLL_EXPIRED,
+            occurred_at=clock.now(),
+            received_at=clock.now(),
+            correlation_id=expired_id,
+            house_id=HOUSE_ONE,
+            entity=EntityEventPayload(entity_id=poll.definition.poll_id, entity_version=1),
+        )
+        assert await PostgresResolutionEventHandler(sessions, clock).handle_poll_expired(expired)
+        async with sessions() as session:
+            closed_card = await session.scalar(
+                select(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.edit_key == f"problem:{case_id}",
+                    OutboxDeliveryRow.status == "pending",
+                )
+            )
+            assert closed_card is not None and closed_card.buttons == []
         async with sessions.begin() as session:
             await session.execute(
                 update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id=None)

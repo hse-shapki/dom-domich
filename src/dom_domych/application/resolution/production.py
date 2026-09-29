@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.cards.production import PostgresPublicCards
 from dom_domych.application.initiatives.followup import (
     InitiativeFollowupService,
     demo_reminder_policy,
@@ -119,8 +120,11 @@ class PostgresResolutionEventHandler:
         poll_id = event.entity.entity_id
         if event.source is EventSource.SCHEDULER:
             async with self.sessions.begin() as session:
-                await PostgresPollRepository(session).finalize_atomic(
+                mutation = await PostgresPollRepository(session).finalize_atomic(
                     poll_id, event.house_id, self.clock.now()
+                )
+                await PostgresPublicCards(self.sessions, self.clock).refresh_poll(
+                    session, mutation.state
                 )
             # PollRepository записал DOMAIN event; он придёт после commit.
             return True

@@ -74,6 +74,37 @@ class PostgresPublicCards:
             session, replace(card, source_version=f"{case_version}:{poll.version}"), poll
         )
 
+    async def refresh_poll(self, session: AsyncSession, poll: PollState) -> UUID | None:
+        """Обновить опубликованную карточку в UoW голоса/финализации, без новых SQL locks."""
+
+        definition = poll.definition
+        if definition.kind is PollKind.RESOLUTION_CHECK:
+            return None
+        prefix = "problem" if definition.kind is PollKind.PROBLEM_CONFIRMATION else "initiative"
+        base = await session.scalar(
+            select(OutboxDeliveryRow.id).where(
+                OutboxDeliveryRow.house_id == definition.house_id,
+                OutboxDeliveryRow.operation_key == f"{prefix}:{definition.case_id}",
+            )
+        )
+        if base is None:
+            return None
+        if definition.kind is PollKind.INITIATIVE_POSITION:
+            state = await PostgresInitiativeRepository._load(
+                session, definition.case_id, definition.house_id
+            )
+            if state.current.poll_id != definition.poll_id:
+                return None
+            return await self.enqueue_initiative(session, state, poll)
+        case = await session.scalar(
+            select(CaseRow).where(
+                CaseRow.id == definition.case_id, CaseRow.house_id == definition.house_id
+            )
+        )
+        if case is None:
+            raise ValueError("poll case disappeared")
+        return await self.enqueue_problem(session, case.title, case.version, poll)
+
     @staticmethod
     async def _lock_poll(session: AsyncSession, poll_id: UUID, house_id: UUID) -> PollRow:
         row = await session.scalar(
