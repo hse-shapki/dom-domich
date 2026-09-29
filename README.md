@@ -14,8 +14,9 @@
 
 В репозитории есть Python-проект, независимые модули Замиры и локально проверенные части платформы
 Алины: webhook, реестр, inbox/outbox/jobs, callback, онбординг, файлы, rate limits, dev polling,
-retention/release audit и production Compose/Caddy-конфигурация. Сквозной агент, production repositories K/Z и живой стенд
-MAX ещё не подключены; точное состояние — в [контексте](context/current-state.md).
+retention/release audit и production Compose/Caddy-конфигурация. Production repositories и K/Z orchestration подключены; девять локальных циклов
+problem/initiative/emergency до трёх исходов результата проверены на PostgreSQL 17.
+Живой MAX и inference ещё не проверены; точное состояние — в [контексте](context/current-state.md).
 
 Локальная проверка: `uv sync --locked`, затем `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/dom_domych`, `uv run pytest`.
 
