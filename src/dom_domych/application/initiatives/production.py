@@ -19,6 +19,7 @@ from dom_domych.infrastructure.postgres.audiences import PostgresAudienceReposit
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseMessageRow, CaseRow
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
+from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.z_initiative_models import InitiativeRow
 
 _DEMO_WINDOW = timedelta(days=2)
@@ -61,8 +62,20 @@ class PostgresInitiativeEventHandler:
                         InitiativeRow.house_id == event.house_id,
                     )
                 )
-                if case.status == "collecting" and existing is None:
-                    raise RuntimeError("collecting initiative has no state")
+                if case.status == "collecting":
+                    if existing is None:
+                        raise RuntimeError("collecting initiative has no state")
+                    state = await PostgresInitiativeRepository._load(
+                        session, case.id, case.house_id
+                    )
+                    poll = await PostgresPollRepository(session).get_state(
+                        state.current.poll_id, case.house_id
+                    )
+                    if poll is None:
+                        raise RuntimeError("current initiative poll is missing")
+                    await PostgresPublicCards(self.sessions, self.clock).enqueue_initiative(
+                        session, state, poll
+                    )
                 return True
             if case.version != event.entity.entity_version:
                 raise ValueError("initiative event version is stale")

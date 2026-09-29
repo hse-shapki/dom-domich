@@ -8,9 +8,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.polls.callback import StoredPollAction
-from dom_domych.application.requests.emergency_runtime import emergency_audience_key
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
-from dom_domych.domain.polls.models import PollKind, PollState, PollStatus, VoteChoice
+from dom_domych.domain.polls.models import PollState, PollStatus, VoteChoice
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.domain.resolution.models import (
     ResolutionConflict,
@@ -22,12 +21,11 @@ from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
 from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
 from dom_domych.infrastructure.postgres.inbox import save_domain_event
 from dom_domych.infrastructure.postgres.models import HouseRow, ScheduledJobRow
+from dom_domych.infrastructure.postgres.original_audience import original_audience_id
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
-from dom_domych.infrastructure.postgres.z_audience_models import AudienceSnapshotRow
 from dom_domych.infrastructure.postgres.z_executor_models import DemoExecutorRow
-from dom_domych.infrastructure.postgres.z_poll_models import PollRow
 from dom_domych.infrastructure.postgres.z_resolution_models import ResolutionCheckRow
 
 
@@ -60,43 +58,28 @@ def _state(row: ResolutionCheckRow) -> ResolutionState:
 
 
 class PostgresResolutionCasePort:
-    """Исходная аудитория берётся из первого опроса дела, а не из новой категории."""
+    """Использует исходную проблему, действующую инициативу или frozen emergency scope."""
 
-    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self, sessions: async_sessionmaker[AsyncSession], *, request_id: UUID | None = None
+    ) -> None:
         self.sessions = sessions
+        self.request_id = request_id
 
     async def get_for_resolution(self, case_id: UUID, house_id: UUID) -> ResolutionCaseView:
         async with self.sessions() as session:
             case = await session.scalar(
                 select(CaseRow).where(CaseRow.id == case_id, CaseRow.house_id == house_id)
             )
+            query = select(RequestRow).where(
+                RequestRow.case_id == case_id, RequestRow.house_id == house_id
+            )
+            if self.request_id is not None:
+                query = query.where(RequestRow.id == self.request_id)
             request = await session.scalar(
-                select(RequestRow)
-                .where(RequestRow.case_id == case_id, RequestRow.house_id == house_id)
-                .order_by(RequestRow.id)
-                .limit(1)
+                query.order_by(RequestRow.registered_at.desc().nulls_last(), RequestRow.id).limit(1)
             )
-            origin = await session.scalar(
-                select(PollRow)
-                .where(
-                    PollRow.case_id == case_id,
-                    PollRow.house_id == house_id,
-                    PollRow.kind.in_(
-                        (PollKind.PROBLEM_CONFIRMATION.value, PollKind.INITIATIVE_POSITION.value)
-                    ),
-                )
-                .order_by(PollRow.opens_at, PollRow.id)
-                .limit(1)
-            )
-            emergency_audience_id = None
-            if case is not None and case.kind == "emergency" and origin is None:
-                emergency_audience_id = await session.scalar(
-                    select(AudienceSnapshotRow.id).where(
-                        AudienceSnapshotRow.house_id == house_id,
-                        AudienceSnapshotRow.operation_key == emergency_audience_key(case_id),
-                    )
-                )
-            audience_id = origin.audience_id if origin is not None else emergency_audience_id
+            audience_id = await original_audience_id(session, case) if case is not None else None
             if case is None or request is None or audience_id is None:
                 raise ResolutionConflict("case, request or original audience is unavailable")
             return ResolutionCaseView(
@@ -150,18 +133,7 @@ class PostgresResolutionStore:
                     RequestRow.house_id == state.house_id,
                 )
             )
-            origin = await session.scalar(
-                select(PollRow)
-                .where(
-                    PollRow.case_id == state.case_id,
-                    PollRow.house_id == state.house_id,
-                    PollRow.kind.in_(
-                        (PollKind.PROBLEM_CONFIRMATION.value, PollKind.INITIATIVE_POSITION.value)
-                    ),
-                )
-                .order_by(PollRow.opens_at, PollRow.id)
-                .limit(1)
-            )
+            origin_id = await original_audience_id(session, case) if case is not None else None
             external = await session.scalar(
                 select(DemoExecutorRow).where(
                     DemoExecutorRow.request_id == state.request_id,
@@ -176,8 +148,7 @@ class PostgresResolutionStore:
                 or case.version != state.case_version_at_start
                 or case.status != "in_progress"
                 or request is None
-                or origin is None
-                or origin.audience_id != state.original_audience_id
+                or origin_id != state.original_audience_id
                 or external is None
                 or external.status != "done"
                 or str(state.done_event_id) not in external.processed_event_ids

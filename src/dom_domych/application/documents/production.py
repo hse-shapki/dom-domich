@@ -3,7 +3,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from dom_domych.application.requests.emergency_runtime import emergency_audience_key
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
 from dom_domych.domain.documents.snapshot import (
     DocumentFact,
@@ -11,15 +10,15 @@ from dom_domych.domain.documents.snapshot import (
     DocumentMode,
     DocumentSnapshot,
 )
-from dom_domych.domain.polls.models import PollKind
 from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.documents import PostgresDocuments
 from dom_domych.infrastructure.postgres.models import HouseRow
+from dom_domych.infrastructure.postgres.original_audience import original_audience_id, original_poll
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
 from dom_domych.infrastructure.postgres.z_audience_models import AudienceSnapshotRow
-from dom_domych.infrastructure.postgres.z_poll_models import PollRow
+from dom_domych.infrastructure.postgres.z_document_models import DocumentRow
 
 
 class RequestDocumentEventHandler:
@@ -38,14 +37,28 @@ class RequestDocumentEventHandler:
             or event.entity.case_id is None
         ):
             return False
-        async with self.sessions() as session:
+        async with self.sessions.begin() as session:
             request = await session.scalar(
-                select(RequestRow).where(
+                select(RequestRow)
+                .where(
                     RequestRow.id == event.entity.entity_id,
                     RequestRow.house_id == event.house_id,
                     RequestRow.case_id == event.entity.case_id,
                 )
+                .with_for_update()
             )
+            if request is None:
+                return False
+            operation_key = f"request:appeal:{request.id}:v{request.draft_version}"
+            # Повтор события возвращает уже зафиксированные факты, даже если дело изменилось.
+            existing = await session.scalar(
+                select(DocumentRow.id).where(
+                    DocumentRow.house_id == event.house_id,
+                    DocumentRow.operation_key == operation_key,
+                )
+            )
+            if existing is not None:
+                return False
             case = await session.scalar(
                 select(CaseRow).where(
                     CaseRow.id == event.entity.case_id,
@@ -53,21 +66,6 @@ class RequestDocumentEventHandler:
                 )
             )
             house = await session.get(HouseRow, event.house_id)
-            origin = await session.scalar(
-                select(PollRow)
-                .where(
-                    PollRow.case_id == event.entity.case_id,
-                    PollRow.house_id == event.house_id,
-                    PollRow.kind.in_(
-                        (
-                            PollKind.PROBLEM_CONFIRMATION.value,
-                            PollKind.INITIATIVE_POSITION.value,
-                        )
-                    ),
-                )
-                .order_by(PollRow.opens_at, PollRow.id)
-                .limit(1)
-            )
             if (
                 request is None
                 or request.status != "registered"
@@ -79,14 +77,8 @@ class RequestDocumentEventHandler:
                 or house is None
             ):
                 return False
-            audience_id = origin.audience_id if origin is not None else None
-            if audience_id is None and case.kind == "emergency":
-                audience_id = await session.scalar(
-                    select(AudienceSnapshotRow.id).where(
-                        AudienceSnapshotRow.house_id == event.house_id,
-                        AudienceSnapshotRow.operation_key == emergency_audience_key(case.id),
-                    )
-                )
+            origin = await original_poll(session, case)
+            audience_id = await original_audience_id(session, case)
             if audience_id is None:
                 return False
             audience = await session.scalar(
@@ -136,14 +128,12 @@ class RequestDocumentEventHandler:
                 facts=tuple(facts),
                 tally=poll.tally if poll is not None else None,
                 notices=(),
-                created_at=self.clock.now(),
+                created_at=request.registered_at or event.occurred_at,
             )
             recipient_id = request.approval_actor
-        await PostgresDocuments(self.sessions).prepare(
-            snapshot,
-            recipient_id,
-            operation_key=f"request:appeal:{request.id}:v{request.draft_version}",
-        )
+            await PostgresDocuments(self.sessions).prepare_in_session(
+                session, snapshot, recipient_id, operation_key=operation_key
+            )
         # Следующий handler запускает continuation уже после постановки документа в очередь.
         return False
 

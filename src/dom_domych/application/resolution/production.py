@@ -6,6 +6,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.cards.production import PostgresPublicCards
+from dom_domych.application.documents.cases import CaseDocumentPreparer, PositionWorkerContext
+from dom_domych.application.documents.events import DocumentReadyEventHandler
 from dom_domych.application.initiatives.followup import (
     InitiativeFollowupService,
     demo_reminder_policy,
@@ -14,6 +17,7 @@ from dom_domych.application.jobs.inbox_worker import EventDispatcher
 from dom_domych.application.jobs.scheduler import RevisionRouter
 from dom_domych.application.resolution.service import ResolutionService
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
+from dom_domych.domain.documents.snapshot import DocumentKind
 from dom_domych.domain.initiatives.models import InitiativeConflict
 from dom_domych.domain.polls.models import PollKind
 from dom_domych.domain.polls.policy import demo_resolution_policy
@@ -84,14 +88,29 @@ class PostgresResolutionEventHandler:
                     RequestRow.house_id == event.house_id,
                 )
             )
-            if request is None or request.external_status != "done":
+            if (
+                request is None
+                or request.external_status != "done"
+                or request.case_id != event.entity.case_id
+                or request.external_version != event.entity.entity_version
+            ):
+                return False
+            prior = await session.scalar(
+                select(ResolutionCheckRow.id).where(
+                    ResolutionCheckRow.house_id == event.house_id,
+                    ResolutionCheckRow.done_event_id == event.event_id,
+                    ResolutionCheckRow.request_id == request.id,
+                    ResolutionCheckRow.case_id == request.case_id,
+                )
+            )
+            if prior is not None:
                 return False
         operation = await PostgresDemoExecutor(self.sessions, self.clock).get(
             event.house_id, event.entity.entity_id
         )
         if event.event_id not in operation.processed_event_ids:
             return False
-        cases = PostgresResolutionCasePort(self.sessions)
+        cases = PostgresResolutionCasePort(self.sessions, request_id=event.entity.entity_id)
         case = await cases.get_for_resolution(event.entity.case_id, event.house_id)
         async with self.sessions() as session:
             audience = await PostgresAudienceRepository(session).get_scoped(
@@ -119,8 +138,11 @@ class PostgresResolutionEventHandler:
         poll_id = event.entity.entity_id
         if event.source is EventSource.SCHEDULER:
             async with self.sessions.begin() as session:
-                await PostgresPollRepository(session).finalize_atomic(
+                mutation = await PostgresPollRepository(session).finalize_atomic(
                     poll_id, event.house_id, self.clock.now()
+                )
+                await PostgresPublicCards(self.sessions, self.clock).refresh_poll(
+                    session, mutation.state
                 )
             # PollRepository записал DOMAIN event; он придёт после commit.
             return True
@@ -148,6 +170,12 @@ class PostgresResolutionEventHandler:
                 state,
                 poll,
                 operation_key=f"initiative:decision:{poll.definition.poll_id}",
+            )
+            await CaseDocumentPreparer(self.sessions, self.clock).prepare(
+                DocumentKind.RESIDENT_POSITION,
+                state.case_id,
+                PositionWorkerContext(state.house_id, state.author_id),
+                operation_key=f"initiative:position:{poll.definition.poll_id}",
             )
             return False
         if poll.definition.kind is not PollKind.RESOLUTION_CHECK or check is None:
@@ -203,6 +231,7 @@ def register_z_poll_events(
     sessions: async_sessionmaker[AsyncSession],
     clock: Clock,
 ) -> PostgresResolutionEventHandler:
+    dispatcher.register(EventName.DOCUMENT_READY, DocumentReadyEventHandler(sessions))
     handler = PostgresResolutionEventHandler(sessions, clock)
     dispatcher.register(EventName.REQUEST_REGISTERED, handler.handle_registration)
     dispatcher.register(EventName.POLL_EXPIRED, handler.handle_poll_expired)

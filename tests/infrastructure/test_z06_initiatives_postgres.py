@@ -1,16 +1,21 @@
 """Z06: редакция инициативы заменяет poll и отзывает старые действия атомарно."""
 
 import asyncio
+import json
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select, update
 
 from dom_domych.application.audiences.service import AudienceService
+from dom_domych.application.cards.production import PostgresPublicCards
+from dom_domych.application.initiatives.production import PostgresInitiativeEventHandler
 from dom_domych.application.initiatives.service import InitiativeService
 from dom_domych.application.polls.callback import StoredPollAction
+from dom_domych.contracts.events import EventEnvelope
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.initiatives.models import InitiativeConflict
 from dom_domych.domain.polls.models import PollStatus, VoteChoice
@@ -20,6 +25,8 @@ from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseR
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.initiative_cases import PostgresInitiativeCases
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
+from dom_domych.infrastructure.postgres.models import HouseRow, InboxEventRow, OutboxDeliveryRow
+from dom_domych.infrastructure.postgres.original_audience import original_audience_id, original_poll
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
@@ -50,6 +57,11 @@ async def test_initiative_revision_resets_votes_and_revokes_old_token() -> None:
     async with database_lifespan(database_url) as sessions:
         async with sessions.begin() as session:
             await seed_demo_house(session)
+            await session.execute(
+                update(HouseRow)
+                .where(HouseRow.id == HOUSE_ONE)
+                .values(max_chat_id=str(uuid4().int)[:18])
+            )
             session.add(
                 CaseRow(
                     id=case_id,
@@ -104,6 +116,7 @@ async def test_initiative_revision_resets_votes_and_revokes_old_token() -> None:
             )
             == original
         )
+        base_id = await PostgresPublicCards(sessions, clock).publish_initiative(case_id, HOUSE_ONE)
         async with sessions.begin() as session:
             token = await PostgresPollActionStore(session).create(
                 StoredPollAction(
@@ -159,10 +172,57 @@ async def test_initiative_revision_resets_votes_and_revokes_old_token() -> None:
             new_poll = await PostgresPollRepository(session).get_state(
                 revised.current.poll_id, HOUSE_ONE
             )
+            old_notices = (
+                await session.scalars(
+                    select(OutboxDeliveryRow).where(
+                        OutboxDeliveryRow.operation_key.like(
+                            f"poll:invite:{original.current.poll_id}:%"
+                        )
+                    )
+                )
+            ).all()
+            assert len(old_notices) == audience.eligible_count
+            assert all(notice.status == "superseded" for notice in old_notices)
             assert old_poll is not None and old_poll.status == PollStatus.CANCELLED
             assert old_poll.tally.yes == 1
             assert new_poll is not None and new_poll.tally.yes == 0
+            case = await session.get(CaseRow, case_id)
+            assert case is not None
+            assert (
+                case.description == revised.current.wording
+                and case.version == revised.case_version == 2
+            )
+            effective = await original_poll(session, case)
+            assert effective is not None and effective.id == revised.current.poll_id
+            assert await original_audience_id(session, case) == revised.current.audience_id
             assert await PostgresInitiativeRepository(sessions).get(case_id, HOUSE_ONE) == revised
+
+        async with sessions() as session:
+            revised_event = await session.scalar(
+                select(InboxEventRow).where(
+                    InboxEventRow.source_key == f"initiative-revised:{case_id}:2"
+                )
+            )
+            assert revised_event is not None
+            event = EventEnvelope.model_validate_json(json.dumps(revised_event.normalized_event))
+        assert await PostgresInitiativeEventHandler(sessions, clock)(event)
+        assert await PostgresInitiativeEventHandler(sessions, clock)(event)
+        async with sessions() as session:
+            edit = await session.scalar(
+                select(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.edit_key == f"initiative:{case_id}",
+                    OutboxDeliveryRow.status == "pending",
+                )
+            )
+            assert edit is not None and revised.current.wording in edit.text
+            action = await PostgresPollActionStore(session).get(edit.buttons[0]["payload"])
+            assert (
+                action is not None
+                and action.poll_id == revised.current.poll_id
+                and action.subject_revision == 2
+            )
+            base = await session.get(OutboxDeliveryRow, base_id)
+            assert base is not None
 
 
 @pytest.mark.asyncio

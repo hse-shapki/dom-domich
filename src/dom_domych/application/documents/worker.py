@@ -1,5 +1,6 @@
 """Фоновый PDF: lease в PostgreSQL, рендер вне SQL и готовый файл в outbox."""
 
+import asyncio
 from datetime import timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -14,7 +15,7 @@ from dom_domych.contracts.events import (
     EventName,
     EventSource,
 )
-from dom_domych.domain.documents.snapshot import DocumentSnapshot
+from dom_domych.domain.documents.snapshot import DocumentMode, DocumentSnapshot
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.infrastructure.documents.renderer import RenderedDocument
 from dom_domych.infrastructure.files.local import FileKind, LocalFileStore, StoredFile
@@ -75,11 +76,18 @@ class DocumentWorker:
             )
             if row is None:
                 return False
+            if row.attempts >= self.max_attempts:
+                row.status = "failed"
+                row.lease_owner = None
+                row.lease_until = None
+                row.error_code = "render_attempts_exhausted"
+                return True
             row.status = "rendering"
             row.attempts += 1
             row.lease_owner = self.worker_id
             row.lease_until = self.clock.now() + self.lease_for
             document_id = row.id
+        heartbeat = asyncio.create_task(self._heartbeat(document_id))
         try:
             snapshot = verify_snapshot_bytes(row)
             rendered = await self.renderer.render(snapshot)
@@ -87,6 +95,8 @@ class DocumentWorker:
                 raise ValueError("renderer used a different document snapshot")
             if rendered.template_revision != snapshot.template_revision:
                 raise ValueError("renderer used a different template revision")
+            # До записи bytes повторно проверяем владение: старый worker не публикует PDF.
+            await self._renew(document_id)
             stored = await self.files.put(
                 snapshot.house_id, FileKind.DOCUMENT, rendered.mime_type, rendered.content
             )
@@ -98,7 +108,32 @@ class DocumentWorker:
                 "document_render_failed", document_id=str(document_id), error=type(exc).__name__
             )
             await self._fail(document_id, type(exc).__name__)
+        finally:
+            heartbeat.cancel()
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.error(
+                    "document_heartbeat_failed",
+                    document_id=str(document_id),
+                    error=type(exc).__name__,
+                )
         return True
+
+    async def _heartbeat(self, document_id: UUID) -> None:
+        while True:
+            await asyncio.sleep(self.lease_for.total_seconds() / 3)
+            try:
+                await self._renew(document_id)
+            except DocumentLeaseLost:
+                return
+
+    async def _renew(self, document_id: UUID) -> None:
+        async with self.sessions.begin() as session:
+            row = await self._locked_lease(session, document_id)
+            row.lease_until = self.clock.now() + self.lease_for
 
     async def _finish(
         self, document_id: UUID, snapshot: DocumentSnapshot, stored: StoredFile
@@ -122,32 +157,36 @@ class DocumentWorker:
                     house_id=row.house_id,
                     operation_key=f"document:file:{row.id}",
                     text=(
-                        "Подготовлен документ Дом Домыч. Данные и действия в нём отмечены как демо."
+                        "Подготовлен документ Дом Домыч. "
+                        + (
+                            "Данные и действия в нём отмечены как демо."
+                            if snapshot.mode is DocumentMode.DEMO
+                            else "Это проект документа; официальная отправка не выполнена."
+                        )
                     ),
                     recipient_id=row.recipient_id,
                     file_key=stored.file_key,
                 )
             )
-            if row.request_id is not None:
-                await save_domain_event(
-                    session,
-                    EventEnvelope(
-                        event_id=uuid4(),
-                        source=EventSource.DOMAIN,
-                        source_key=f"document:ready:{row.id}",
-                        name=EventName.DOCUMENT_READY,
-                        occurred_at=self.clock.now(),
-                        received_at=self.clock.now(),
-                        correlation_id=row.id,
-                        house_id=row.house_id,
-                        entity=EntityEventPayload(
-                            entity_id=row.id,
-                            entity_version=snapshot.case_revision,
-                            case_id=row.case_id,
-                            causation_id=row.id,
-                        ),
+            await save_domain_event(
+                session,
+                EventEnvelope(
+                    event_id=uuid4(),
+                    source=EventSource.DOMAIN,
+                    source_key=f"document:ready:{row.id}",
+                    name=EventName.DOCUMENT_READY,
+                    occurred_at=self.clock.now(),
+                    received_at=self.clock.now(),
+                    correlation_id=row.id,
+                    house_id=row.house_id,
+                    entity=EntityEventPayload(
+                        entity_id=row.id,
+                        entity_version=snapshot.case_revision,
+                        case_id=row.case_id,
+                        causation_id=row.id,
                     ),
-                )
+                ),
+            )
 
     async def _fail(self, document_id: UUID, error_code: str) -> None:
         async with self.sessions.begin() as session:

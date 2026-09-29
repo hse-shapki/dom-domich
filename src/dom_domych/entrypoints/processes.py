@@ -18,6 +18,7 @@ from dom_domych.application.agent.composition import (
 )
 from dom_domych.application.agent.messages import register_message_agent
 from dom_domych.application.cases.production import register_problem_events
+from dom_domych.application.documents.followup import RequestComplaintEventHandler
 from dom_domych.application.documents.production import RequestDocumentEventHandler
 from dom_domych.application.documents.worker import DocumentWorker
 from dom_domych.application.executor.production import DemoSubmitAdapter
@@ -128,6 +129,9 @@ def _k_runtime(
     register_initiative_events(dispatcher, sessions, clock)
     resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
     dispatcher.register(EventName.REQUEST_REGISTERED, RequestDocumentEventHandler(sessions, clock))
+    dispatcher.register(
+        EventName.REQUEST_DEADLINE_REACHED, RequestComplaintEventHandler(sessions, clock)
+    )
     register_k_continuations(
         dispatcher,
         revisions,
@@ -194,6 +198,9 @@ async def run_inbox() -> None:
         )
         register_poll_callbacks(
             dispatcher, PostgresPollCallbackProcessor(sessions, max_client, clock)
+        )
+        dispatcher.register(
+            EventName.REQUEST_DEADLINE_REACHED, RequestComplaintEventHandler(sessions, clock)
         )
         register_k_continuations(
             dispatcher,

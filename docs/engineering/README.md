@@ -2,7 +2,7 @@
 
 Для реализации отдельных задач команды см. [персональный план Алины, Катерины и Замиры](../../context/implementation-plan.md); этот раздел содержит технические основания и сквозные процессы.
 
-Дата проверки: 27.09.2026. Статус: A/K/Z модули частично реализованы. A process root запускает K/Z inbox/scheduler, callback, DemoExecutor и PDF worker поверх durable queues; локальные Z repositories и часть связок проверены. Автоматический K/Z маршрут опросов, единый G3, A16 и цельное приложение/live MAX ещё не готовы. [Проверенное состояние](../../context/current-state.md).
+Дата проверки: 29.09.2026. Статус: A/K/Z модули связаны в process root; локальные production цепи problem/initiative/emergency → request/PDF → DemoExecutor → closed/reopened/resolution_unconfirmed проверены (9 сценариев). Начальные личные приглашения, callback/card refresh, четыре вида frozen PDF и operator CLI реализованы. Полный набор — 261 тест на PostgreSQL 17.8/pgvector 0.8.1. Реальный MAX/LLM, mobile/web и live G3 не проверены. [Проверенное состояние](../../context/current-state.md).
 
 Это рабочая спецификация для разработки через AI и проверки командой из трёх человек. Она описывает целевой продукт, а не уже существующий код. Этапы определяются зависимостями и готовностью результатов, без разбивки по дням.
 

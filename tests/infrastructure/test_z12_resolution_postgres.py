@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.polls.service import PollService
+from dom_domych.application.requests.emergency_runtime import emergency_audience_key
 from dom_domych.application.resolution.production import PostgresResolutionEventHandler
 from dom_domych.application.resolution.service import ResolutionService
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
@@ -61,6 +62,7 @@ class Clock:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["problem", "emergency"])
 @pytest.mark.parametrize(
     ("yes", "no", "expected"),
     [
@@ -70,7 +72,7 @@ class Clock:
     ],
 )
 async def test_resolution_outcome_is_atomic_and_uses_original_audience(
-    yes: int, no: int, expected: ResolutionStatus
+    yes: int, no: int, expected: ResolutionStatus, kind: str
 ) -> None:
     database_url = os.environ.get("TEST_DATABASE_URL")
     if not database_url:
@@ -87,7 +89,7 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
                     CaseRow(
                         id=case_id,
                         house_id=HOUSE_ONE,
-                        kind="problem",
+                        kind=kind,
                         title="Проверка результата",
                         description="Синтетическое дело",
                         status="in_progress",
@@ -118,17 +120,22 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
             ).resolve(
                 AudienceScope(ScopeKind.FLOOR, entrance=2, floor=5),
                 Context(HOUSE_ONE),
-                operation_key=f"z12:audience:{case_id}",
+                operation_key=(
+                    emergency_audience_key(case_id)
+                    if kind == "emergency"
+                    else f"z12:audience:{case_id}"
+                ),
             )
-            await PollService(PostgresPollRepository(session), clock).open(
-                case_id,
-                audience,
-                PollKind.PROBLEM_CONFIRMATION,
-                demo_problem_policy(),
-                1,
-                Context(HOUSE_ONE),
-                operation_key=f"z12:original:{case_id}",
-            )
+            if kind == "problem":
+                await PollService(PostgresPollRepository(session), clock).open(
+                    case_id,
+                    audience,
+                    PollKind.PROBLEM_CONFIRMATION,
+                    demo_problem_policy(),
+                    1,
+                    Context(HOUSE_ONE),
+                    operation_key=f"z12:original:{case_id}",
+                )
             await session.flush()
             session.add(
                 RequestRow(
@@ -189,6 +196,17 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
             house_id=HOUSE_ONE,
             entity=EntityEventPayload(entity_id=request_id, entity_version=2, case_id=case_id),
         )
+        stale = done_event.model_copy(
+            update={"entity": done_event.entity.model_copy(update={"entity_version": 1})}
+        )
+        assert await events.handle_status(stale) is False
+        async with sessions() as session:
+            assert (
+                await session.scalar(
+                    select(ResolutionCheckRow.id).where(ResolutionCheckRow.done_event_id == done_id)
+                )
+                is None
+            )
         assert await events.handle_status(done_event) is False
         async with sessions() as session:
             check = await session.scalar(
@@ -313,5 +331,19 @@ async def test_resolution_outcome_is_atomic_and_uses_original_audience(
                     )
                     is not None
                 )
+        assert (
+            await events.handle_status(done_event) is False
+        )  # Поздний replay после финального outcome.
+        async with sessions() as session:
+            case = await session.get(CaseRow, case_id)
+            assert case is not None and case.status == expected.value and case.version == 5
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ResolutionCheckRow)
+                    .where(ResolutionCheckRow.done_event_id == done_id)
+                )
+                == 1
+            )
         with pytest.raises(ResolutionConflict):
             await PostgresResolutionCasePort(sessions).get_for_resolution(case_id, HOUSE_TWO)
