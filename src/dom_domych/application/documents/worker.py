@@ -1,5 +1,6 @@
 """Фоновый PDF: lease в PostgreSQL, рендер вне SQL и готовый файл в outbox."""
 
+import asyncio
 from datetime import timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -75,11 +76,18 @@ class DocumentWorker:
             )
             if row is None:
                 return False
+            if row.attempts >= self.max_attempts:
+                row.status = "failed"
+                row.lease_owner = None
+                row.lease_until = None
+                row.error_code = "render_attempts_exhausted"
+                return True
             row.status = "rendering"
             row.attempts += 1
             row.lease_owner = self.worker_id
             row.lease_until = self.clock.now() + self.lease_for
             document_id = row.id
+        heartbeat = asyncio.create_task(self._heartbeat(document_id))
         try:
             snapshot = verify_snapshot_bytes(row)
             rendered = await self.renderer.render(snapshot)
@@ -87,6 +95,8 @@ class DocumentWorker:
                 raise ValueError("renderer used a different document snapshot")
             if rendered.template_revision != snapshot.template_revision:
                 raise ValueError("renderer used a different template revision")
+            # До записи bytes повторно проверяем владение: старый worker не публикует PDF.
+            await self._renew(document_id)
             stored = await self.files.put(
                 snapshot.house_id, FileKind.DOCUMENT, rendered.mime_type, rendered.content
             )
@@ -98,7 +108,32 @@ class DocumentWorker:
                 "document_render_failed", document_id=str(document_id), error=type(exc).__name__
             )
             await self._fail(document_id, type(exc).__name__)
+        finally:
+            heartbeat.cancel()
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.error(
+                    "document_heartbeat_failed",
+                    document_id=str(document_id),
+                    error=type(exc).__name__,
+                )
         return True
+
+    async def _heartbeat(self, document_id: UUID) -> None:
+        while True:
+            await asyncio.sleep(self.lease_for.total_seconds() / 3)
+            try:
+                await self._renew(document_id)
+            except DocumentLeaseLost:
+                return
+
+    async def _renew(self, document_id: UUID) -> None:
+        async with self.sessions.begin() as session:
+            row = await self._locked_lease(session, document_id)
+            row.lease_until = self.clock.now() + self.lease_for
 
     async def _finish(
         self, document_id: UUID, snapshot: DocumentSnapshot, stored: StoredFile

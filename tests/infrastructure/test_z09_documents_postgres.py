@@ -1,5 +1,6 @@
 """Z09: immutable snapshot и house-scoped метаданные документа."""
 
+import asyncio
 import os
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -11,6 +12,7 @@ from sqlalchemy import select
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.documents.worker import DocumentWorker
+from dom_domych.application.jobs.inbox_worker import SystemClock
 from dom_domych.application.polls.service import PollService
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.documents.snapshot import (
@@ -21,7 +23,7 @@ from dom_domych.domain.documents.snapshot import (
 )
 from dom_domych.domain.polls.models import PollKind, VoteChoice
 from dom_domych.domain.polls.policy import demo_initiative_policy
-from dom_domych.infrastructure.documents.renderer import PdfRenderer
+from dom_domych.infrastructure.documents.renderer import PdfRenderer, RenderedDocument
 from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
 from dom_domych.infrastructure.postgres.case_models import CaseRow
@@ -152,8 +154,35 @@ async def test_document_snapshot_is_idempotent_scoped_and_frozen(tmp_path: Path)
             row.attempts = 1
         files = LocalFileStore(tmp_path, clock)
         async with PdfRenderer(max_workers=1) as renderer:
-            worker = DocumentWorker(sessions, files, renderer, clock, "z10-test")
-            assert await worker.run_once() is True
+            started = asyncio.Event()
+
+            class SlowRenderer:
+                async def render(self, frozen: DocumentSnapshot) -> RenderedDocument:
+                    started.set()
+                    await asyncio.sleep(0.4)
+                    return await renderer.render(frozen)
+
+            live_clock = SystemClock()
+            worker = DocumentWorker(
+                sessions,
+                files,
+                SlowRenderer(),
+                live_clock,
+                "z10-test",
+                lease_for=timedelta(milliseconds=150),
+            )
+            rendering = asyncio.create_task(worker.run_once())
+            try:
+                await asyncio.wait_for(started.wait(), timeout=5)
+                await asyncio.sleep(0.25)
+                competitor = DocumentWorker(sessions, files, renderer, live_clock, "z10-competitor")
+                assert not await competitor.run_once()
+                assert await rendering
+            finally:
+                if not rendering.done():
+                    rendering.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await rendering
             async with sessions() as session:
                 row = await session.get(DocumentRow, prepared.document_id)
                 assert row is not None and row.status == "ready", row.error_code if row else None
@@ -205,3 +234,21 @@ async def test_document_snapshot_is_idempotent_scoped_and_frozen(tmp_path: Path)
             row = await session.get(DocumentRow, corrupt_id)
             assert row is not None and row.status == "failed" and row.attempts == 2
             assert row.file_key is None and row.error_code == "ValueError"
+
+        # Crash на последней попытке не даёт бесконечно перезахватывать PDF.
+        async with sessions.begin() as session:
+            row = await session.get(DocumentRow, corrupt_id)
+            assert row is not None
+            row.status = "rendering"
+            row.lease_owner = "last-crashed-worker"
+            row.lease_until = clock.now() - timedelta(seconds=1)
+        async with PdfRenderer(max_workers=1) as renderer:
+            worker = DocumentWorker(
+                sessions, files, renderer, clock, "z10-exhausted", max_attempts=2
+            )
+            assert await worker.run_once()
+            assert not await worker.run_once()
+        async with sessions() as session:
+            row = await session.get(DocumentRow, corrupt_id)
+            assert row is not None and row.status == "failed" and row.attempts == 2
+            assert row.error_code == "render_attempts_exhausted" and row.file_key is None
