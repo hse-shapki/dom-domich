@@ -1,0 +1,36 @@
+{
+  "checked_at": "2026-09-29",
+  "renderer_commit": "4e30a8b",
+  "synthetic_only": true,
+  "max_mobile_web_verified": false,
+  "documents": [
+    {
+      "file": "demo-appeal.pdf",
+      "pages": 1,
+      "sha256": "61524a138ed951a2c610f2269d096ab713b6745162972be7f83c24fd991bdf0f",
+      "snapshot_sha256": "057e5697f17d81c276b293da01cc5c53fe0fc14c9a9515d9bdb0628595a761b2",
+      "template": "appeal-v1"
+    },
+    {
+      "file": "demo-resident_position.pdf",
+      "pages": 1,
+      "sha256": "ad08905b2217e95b71b8cc385c0f2be118c1a942a242be3f0ebed9d5b23320ea",
+      "snapshot_sha256": "9936bd3999b2a204ce3584538f5dc1f38417c19eb8e43a2b0eccf2070eef2c70",
+      "template": "resident-position-v1"
+    },
+    {
+      "file": "demo-notification_register.pdf",
+      "pages": 4,
+      "sha256": "09b4dc203b314d7188ee83c4b16d2a4b99c0528281e6c02dc96c912db4bbd941",
+      "snapshot_sha256": "15127329551c72ecb74df1c8a61db529d833bf03261fa4805d9b666a5df02632",
+      "template": "notification-register-v1"
+    },
+    {
+      "file": "demo-complaint_draft.pdf",
+      "pages": 1,
+      "sha256": "0833996bf7bcb3dca41fb17e062ac16c99123fadea14b47463bd77cd4cedd294",
+      "snapshot_sha256": "c8449f782a17eb6ba8b8866567b50e633bf465b113392f7a07dda75b95a56320",
+      "template": "complaint-draft-v1"
+    }
+  ]
+}
