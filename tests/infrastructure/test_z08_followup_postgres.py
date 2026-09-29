@@ -1,5 +1,6 @@
 """Z08: ограниченные напоминания и итог позиции в PostgreSQL/outbox."""
 
+import json
 import os
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -436,7 +437,7 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once(
             assert len(ready_events) == 3
         for ready_event in ready_events:
             assert await DocumentReadyEventHandler(sessions)(
-                EventEnvelope.model_validate(ready_event.normalized_event)
+                EventEnvelope.model_validate_json(json.dumps(ready_event.normalized_event))
             )
         async with sessions.begin() as session:
             await session.execute(
