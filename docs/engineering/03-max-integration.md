@@ -48,7 +48,7 @@ Dev polling допускается только без активного webhoo
 | `message_created` | `message.received` | Сохранение, контекст, агент |
 | `message_callback` | `callback.received` | Проверка действия и участника, запись ответа без LLM |
 | `message_edited` | `message.edited` | Новая ревизия, при необходимости пересмотр фактов |
-| `message_removed` | `message.removed` | Отметка удаления и политика хранения; не считать старый текст новым подтверждением |
+| `message_removed` | `message.removed` | В MVP сохраняется во входном аудите и явно завершается без business mutation; старый текст не считается новым подтверждением |
 | `bot_added` / `bot_removed` | `house.bot_membership_changed` | Связь с разрешённым тестовым домом, остановка недоступных доставок |
 | `bot_stopped` | `bot.stopped` | Транспортное событие; A06/A13 приостанавливают ЛС |
 | `bot_admin_permissions_changed` | `house.bot_permissions_changed` | Проверка доступа к групповым событиям |

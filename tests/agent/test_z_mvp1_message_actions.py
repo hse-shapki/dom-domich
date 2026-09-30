@@ -15,7 +15,9 @@ from dom_domych.contracts.events import EventEnvelope, EventName, EventSource, M
 NOW = datetime(2026, 9, 30, 12, tzinfo=UTC)
 
 
-def _event(text: str, *, chat_id: str = "dm:42") -> EventEnvelope:
+def _event(
+    text: str, *, chat_id: str = "dm:42", attachment_refs: tuple[str, ...] = ()
+) -> EventEnvelope:
     event_id = uuid4()
     return EventEnvelope(
         event_id=event_id,
@@ -31,6 +33,7 @@ def _event(text: str, *, chat_id: str = "dm:42") -> EventEnvelope:
             message_id=str(event_id),
             sender_user_id="42",
             text=text,
+            attachment_refs=attachment_refs,
         ),
     )
 
@@ -145,6 +148,27 @@ async def test_private_greeting_gets_reply_without_mutating_agent() -> None:
     assert replies.messages and "Расскажите о проблеме" in replies.messages[0]
     assert await handler(_event("Привет", chat_id="group"))
     assert len(replies.messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_attachment_without_command_gets_actionable_reply() -> None:
+    replies = Replies()
+    handler = MessageAgentHandler(
+        Principals(),
+        Triage(
+            RouteResult(
+                kind=MessageKind.CONVERSATION,
+                text="unused",
+                next_action="none",
+            )
+        ),
+        ForbiddenCoordinator(),
+        replies,
+    )
+    event = _event("", attachment_refs=("image",))
+
+    assert await handler(event)
+    assert replies.messages and "/evidence ID_ДЕЛА" in replies.messages[0]
 
 
 @pytest.mark.asyncio

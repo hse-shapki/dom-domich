@@ -58,7 +58,17 @@ class MessageAgentHandler:
             raise ValueError("MESSAGE_ACTOR_MISMATCH")
         text = (event.message.text or "").strip()
         if not text:
-            return False
+            principal = await self.principals.resolve(event)
+            if principal is None:
+                return False
+            reply = (
+                "Вложение без команды не обработано. Для фото по делу отправьте в личном "
+                "чате /evidence ID_ДЕЛА и прикрепите ровно одно фото."
+                if event.message.attachment_refs
+                else "Сообщение без текста не обработано. Опишите проблему словами."
+            )
+            await self.replies.enqueue(event, principal, reply)
+            return True
         principal = await self.principals.resolve(event)
         if principal is None:
             return False
