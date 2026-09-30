@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import or_, select, update
 
@@ -17,15 +18,23 @@ from dom_domych.application.executor.production import DemoSubmitAdapter
 from dom_domych.application.executor.service import DemoExecutorService
 from dom_domych.application.jobs.inbox_worker import EventDispatcher, InboxWorker
 from dom_domych.application.jobs.scheduler import RevisionRouter
+from dom_domych.application.polls.callback import CallbackStatus
+from dom_domych.application.polls.production import PostgresPollCallbackProcessor
 from dom_domych.application.requests.events import RequestEventHandler, register_request_events
 from dom_domych.application.requests.service import RequestService
 from dom_domych.application.resolution.production import register_z_poll_events
 from dom_domych.contracts.base import ExecutionMode, PrincipalType, TrustedContext
-from dom_domych.contracts.events import EventName
+from dom_domych.contracts.events import (
+    CallbackPayload,
+    EventEnvelope,
+    EventName,
+    EventSource,
+)
 from dom_domych.domain.executor.models import ExternalStatus
 from dom_domych.domain.polls.models import PollKind, PollStatus, VoteChoice
 from dom_domych.infrastructure.documents.renderer import PdfRenderer
 from dom_domych.infrastructure.files.local import LocalFileStore
+from dom_domych.infrastructure.max.client import MaxApiClient
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
 from dom_domych.infrastructure.postgres.demo_executor import (
@@ -35,7 +44,12 @@ from dom_domych.infrastructure.postgres.demo_executor import (
 from dom_domych.infrastructure.postgres.documents import PostgresDocuments
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
 from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
-from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, ScheduledJobRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    OutboxDeliveryRow,
+    ResidentRow,
+    ScheduledJobRow,
+)
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
 from dom_domych.infrastructure.postgres.requests import PostgresRequestCases, PostgresRequestStore
@@ -72,8 +86,12 @@ def database_url_for_test() -> str:
 
 
 @pytest.mark.asyncio
-async def test_problem_request_executor_resolution_closes_through_runtime(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("resolution_choice", "expected_status"),
+    [(VoteChoice.YES, "closed"), (VoteChoice.NO, "reopened")],
+)
+async def test_problem_callback_card_request_pdf_and_resolution_through_runtime(
+    tmp_path: Path, resolution_choice: VoteChoice, expected_status: str
 ) -> None:
     clock = FixedClock()
     actor_id = synthetic_id("resident-2")
@@ -104,7 +122,7 @@ async def test_problem_request_executor_resolution_closes_through_runtime(
         async with sessions.begin() as session:
             await seed_demo_house(session)
             await session.execute(
-                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id="8800999")
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id="-8800999")
             )
         case = await PostgresCaseWriter(sessions, emit_workflow_events=True).create_case(
             command, resident_context, clock.now()
@@ -120,16 +138,68 @@ async def test_problem_request_executor_resolution_closes_through_runtime(
             state = await PostgresPollRepository(session).get_state(origin.id, HOUSE_ONE)
             assert state is not None and state.definition.eligible_residents
             eligible_residents = tuple(state.definition.eligible_residents)
-        threshold_emitted = False
-        for resident_id in eligible_residents:
-            async with sessions.begin() as session:
-                mutation = await PostgresPollRepository(session).record_answer_atomic(
-                    origin.id, HOUSE_ONE, resident_id, VoteChoice.YES, uuid4(), clock.now()
+        async with sessions.begin() as session:
+            card = await session.scalar(
+                select(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.house_id == HOUSE_ONE,
+                    OutboxDeliveryRow.operation_key == f"problem:{case.case_id}",
                 )
-            if "poll.threshold_reached" in mutation.events:
-                threshold_emitted = True
-                break
-        assert threshold_emitted
+            )
+            assert card is not None and len(card.buttons) == 2
+            yes_token = card.buttons[0]["payload"]
+            max_actors = {}
+            for index, resident_id in enumerate(eligible_residents[:3], start=1):
+                max_user_id = str(900000000 + index)
+                max_actors[resident_id] = max_user_id
+                await session.execute(
+                    update(ResidentRow)
+                    .where(ResidentRow.id == resident_id)
+                    .values(max_user_id=max_user_id)
+                )
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, json={"success": True})
+            ),
+            base_url="https://platform-api2.max.ru",
+        ) as http:
+            callback_processor = PostgresPollCallbackProcessor(
+                sessions, MaxApiClient(http, "synthetic-token"), clock
+            )
+            for max_user_id in max_actors.values():
+                event_id = uuid4()
+                callback = EventEnvelope(
+                    event_id=event_id,
+                    source=EventSource.MAX,
+                    source_key=f"g3:callback:{event_id}",
+                    name=EventName.CALLBACK_RECEIVED,
+                    occurred_at=clock.now(),
+                    received_at=clock.now(),
+                    correlation_id=event_id,
+                    actor_user_id=max_user_id,
+                    callback=CallbackPayload(
+                        callback_id=str(event_id),
+                        sender_user_id=max_user_id,
+                        action_token=yes_token,
+                        chat_id="-8800999",
+                    ),
+                )
+                assert (
+                    await callback_processor.process(callback)
+                ).status is CallbackStatus.RECORDED
+        async with sessions() as session:
+            state = await PostgresPollRepository(session).get_state(origin.id, HOUSE_ONE)
+            assert state is not None and state.tally.yes == 3
+            edits = (
+                await session.scalars(
+                    select(OutboxDeliveryRow).where(
+                        OutboxDeliveryRow.edit_key == f"problem:{case.case_id}"
+                    )
+                )
+            ).all()
+            assert len(edits) == 3
+            latest = next(item for item in edits if item.status == "pending")
+            assert "Подтвердили: 3/12" in latest.text
+            assert all(str(resident_id) not in latest.text for resident_id in eligible_residents)
         assert await worker.run_once()
 
         source_id, rule_id, responsible_id = uuid4(), uuid4(), uuid4()
@@ -253,7 +323,7 @@ async def test_problem_request_executor_resolution_closes_through_runtime(
                     resolution_poll.id,
                     HOUSE_ONE,
                     resident_id,
-                    VoteChoice.YES,
+                    resolution_choice,
                     uuid4(),
                     clock.now(),
                 )
@@ -265,8 +335,8 @@ async def test_problem_request_executor_resolution_closes_through_runtime(
         assert await runtime_worker.run_once()
 
         async with sessions.begin() as session:
-            closed = await session.get(CaseRow, case.case_id)
-            assert closed is not None and closed.status == "closed"
+            settled = await session.get(CaseRow, case.case_id)
+            assert settled is not None and settled.status == expected_status
             request = await session.get(RequestRow, prepared.request_id)
             assert request is not None and request.external_status == "done"
             document = await session.scalar(
@@ -295,4 +365,9 @@ async def test_problem_request_executor_resolution_closes_through_runtime(
                     ),
                 )
                 .values(status="sent")
+            )
+            await session.execute(
+                update(ResidentRow)
+                .where(ResidentRow.id.in_(tuple(max_actors)))
+                .values(max_user_id=None)
             )

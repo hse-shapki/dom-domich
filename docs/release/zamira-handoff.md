@@ -1,6 +1,6 @@
 # Передача пула Замиры: опросы, инициативы, PDF и результат
 
-Обновлено 27.09.2026 на ветке `task_zamira`. Точный статус всех модулей — в
+Обновлено 30.09.2026 на ветке `z-live-feedback`. Точный статус всех модулей — в
 [`context/current-state.md`](../../context/current-state.md). Положительные локальные
 тесты не заменяют приёмку в живом MAX.
 
@@ -26,10 +26,15 @@ DATABASE_URL=postgresql+asyncpg://localhost/dom_domych_test_zamira uv run alembi
 [`test_z12_resolution_postgres.py`](../../tests/infrastructure/test_z12_resolution_postgres.py).
 Регистрация, повтор и запрет жителю менять статус исполнителя — в
 [`test_z11_demo_executor_postgres.py`](../../tests/infrastructure/test_z11_demo_executor_postgres.py).
-Публикация карточки, выпуск кнопок, callback с доверенным actor и обновление
-карточки — в [`test_z07_cards_outbox.py`](../../tests/infrastructure/test_z07_cards_outbox.py).
-Загрузка PDF после durable job в FileStore и приватный outbox — в
-[`test_z09_documents_postgres.py`](../../tests/infrastructure/test_z09_documents_postgres.py).
+Публикация карточки, выпуск кнопок, callback с доверенным actor, приватное
+подтверждение и автоматический edit — в
+[`test_z05_poll_callback_postgres.py`](../../tests/infrastructure/test_z05_poll_callback_postgres.py)
+и [`test_z07_cards_outbox.py`](../../tests/infrastructure/test_z07_cards_outbox.py).
+Четыре PDF через worker/FileStore/MAX MockTransport — в
+[`test_z10_max_pdf_pipeline.py`](../../tests/infrastructure/test_z10_max_pdf_pipeline.py);
+lease/recovery — в [`test_z09_documents_postgres.py`](../../tests/infrastructure/test_z09_documents_postgres.py).
+Единый problem → callback/card → request/PDF → demo executor → closed/reopened — в
+[`test_g3_runtime.py`](../../tests/infrastructure/test_g3_runtime.py).
 Эти тесты позволяют воспроизвести обе развилки результата без изменения БД вручную.
 
 ## Демо-правила и данные
@@ -64,14 +69,22 @@ uv run python scripts/generate_zamira_demo_pdfs.py --output-dir /tmp/dom-domich-
 
 | Часть | Состояние |
 |---|---|
-| PostgreSQL аудитории, опросы, инициативы, документы, demo executor и проверка результата | Реализованы; 242 теста и полная миграция проверены на PostgreSQL 17.8 + pgvector 0.8.1 и ранее на PostgreSQL 16; concurrency/idempotency tests есть |
-| MAX callback, outbox, кнопки, PDF upload | Подключены к process root, проверены PostgreSQL/MockTransport; живой MAX не проверен |
+| PostgreSQL аудитории, опросы, инициативы, документы, demo executor и проверка результата | Реализованы частично; локальные PostgreSQL concurrency/idempotency и G3-пути проверены; актуальное число полного набора — в `context/current-state.md` |
+| MAX callback, outbox, кнопки, PDF upload | Подключены к process root; callback голос/личный ответ/edit и четыре PDF upload проверены PostgreSQL/MockTransport. Ранее live callback вне аудитории отклонён; допустимый live голос/edit/PDF не проверены |
 | Исполнитель и `DEMO-*` регистрация | Только смоделированный DemoExecutor, без УК/ГИС ЖКХ; операторская capability обязательна |
-| Дело и агент | K case/request/agent существуют; автоматическое открытие Z-опроса из K problem workflow, публикация карточки из K маршрута и перевод поддержанной инициативы в исполнение ещё не связаны |
+| Дело и агент | Ordinary problem → audience/poll/card и K request связаны локально; полный live MAX/LLM G3 и инициативный маршрут с моделью требуют отдельной проверки |
 | Официальная отправка и протокол ОСС | Не реализованы; четыре PDF являются демо-документами, протокол назван позицией жителей |
-| MAX mobile/web, публичный HTTPS и live inference | Не проверены; строки [матрицы](max-mobile-web-matrix.md) остаются открытыми |
+| MAX mobile/web, публичный HTTPS и цельный live inference/G3 | Не проверены; прежний live callback вне frozen audience и доставка групповой карточки отмечены отдельно в `context/current-state.md` |
 
-## Демо-порядок и оставшиеся проверки
+## Точный ручной сценарий и оставшиеся проверки
+
+Пошаговый сценарий двух дел с порогами `3/12`, позитивным `12/12`, негативным
+`3/12` и безопасными командами operator CLI — в
+[`zamira-manual-demo.md`](zamira-manual-demo.md). CLI
+[`zamira_operator.py`](../../src/dom_domych/entrypoints/zamira_operator.py)
+допускает только `demo=true` дом, повтор `register` и `done` с тем же event ID не
+создаёт второго события. Проверка четырёх файлов в MAX описана отдельно в
+[`zamira-live-pdf-smoke.md`](zamira-live-pdf-smoke.md).
 
 1. Подтверждённому жителю назначают проживание и MAX ID через demo onboarding.
    Выбор аудитории фиксирует всех eligible, независимо от доставки личных сообщений.
@@ -85,10 +98,11 @@ uv run python scripts/generate_zamira_demo_pdfs.py --output-dir /tmp/dom-domich-
 4. Достаточная поддержка результата закрывает дело; отрицательный порог возвращает
    его в работу; недостаток ответов оставляет `resolution_unconfirmed`.
    Все три ветки и повтор события проверены PostgreSQL-тестами.
-5. На G2/G3 проверить весь путь в живом MAX mobile/web: callback, права на личку,
-   открытие четырёх PDF после outbox, поведение при недоставке и восстановление
-   после перезапуска. Для полного цикла нужен K/Z problem/initiative orchestration
-   и работоспособная модель. Лишь после этого можно закрывать Z14–Z16 и release gate.
+5. На G2/G3 проверить весь путь в живом MAX mobile/web: допустимый callback и
+   видимое ЛС, edit карточки, открытие четырёх PDF, недоставку и восстановление.
+   Для полного цикла нужна проверенная live модель, reviewed правило, два часа
+   ожидания финализации result poll и фактические screenshots; локальный G3 не
+   закрывает Z14–Z16 или release gate.
 
 Для сдачи фиксируют commit, версии policy/template/font/model, результаты MAX
 mobile/web и список моделируемых систем. Live результаты сейчас не заявляются.

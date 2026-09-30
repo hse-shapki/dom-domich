@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.cards.production import PostgresPublicCards
@@ -26,7 +26,7 @@ from dom_domych.infrastructure.postgres.audiences import PostgresAudienceReposit
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, ResidentRow
-from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
+from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore, token_digest
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
 from dom_domych.infrastructure.postgres.z_poll_models import PollAnswerHistoryRow, PollAnswerRow
@@ -242,7 +242,17 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
                 feedback = (
                     await session.scalars(
                         select(OutboxDeliveryRow).where(
-                            OutboxDeliveryRow.operation_key.like("poll:feedback:%")
+                            or_(
+                                OutboxDeliveryRow.operation_key.like(
+                                    f"poll:feedback:{poll.definition.poll_id}:%"
+                                ),
+                                OutboxDeliveryRow.operation_key.like(
+                                    f"poll:feedback:{token_digest('unknown-token')[:16]}:%"
+                                ),
+                                OutboxDeliveryRow.operation_key.like(
+                                    f"poll:feedback:{token_digest(token)[:16]}:%"
+                                ),
+                            )
                         )
                     )
                 ).all()

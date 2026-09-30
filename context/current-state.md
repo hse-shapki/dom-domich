@@ -107,10 +107,11 @@ Z callback/PDF/result включены отдельно, но полный K/Z p
 Отдельно проверен путь нормализованного MAX message через durable inbox,
 подтверждённое проживание, typed triage и production `case.create` до agent run
 и reply outbox; реальный MAX при этом не использовался.
-Дополнительный A14/G3 тест проводит одну обычную проблему через production audience/poll,
-request approval/submit, demo registration/done, resolution poll и подтверждённое `closed`.
-Он использует реальные PostgreSQL repositories/dispatcher, рендерит frozen PDF в FileStore
-и связывает `document.ready` с request, но не использует LLM и MAX upload/delivery.
+Дополнительный A14/G3 тест проводит обычную проблему через production audience/poll,
+MAX callback/личный feedback/card edit, request approval/submit, demo registration/done,
+resolution poll и оба исхода `closed`/`reopened`. Он использует реальные PostgreSQL
+repositories/dispatcher и MockTransport ACK, рендерит frozen PDF в FileStore и связывает
+`document.ready` с request; цельный live LLM/MAX upload/delivery он не проверяет.
 K15: оценщик traces считает маршруты, критические ошибки, источник, задержки
 и tool calls по K01 dataset; unit-тесты проходят. Реальные метрики модели
 не измерены: Qwen3-8B на 8 GiB Mac не дал ответа и вызвал swap. Версии и
@@ -137,12 +138,12 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Напоминания и итог инициативы Z08 | Частично: два durable job при открытии, частотный лимит, текущие права, outbox и supported/not_supported проверены на PostgreSQL 16; DOMAIN poll expiry и reminder handler подключены к process root | `src/dom_domych/infrastructure/postgres/initiatives.py`, `initiative_followup.py`, `application/resolution/production.py`, `tests/infrastructure/test_z08_followup_postgres.py`; K переход в исполнение отсутствует |
 | FileStore и immutable snapshot Z09 | Частично: локальный FileStore и PostgreSQL snapshot/metadata/idempotency проверены на локальной PostgreSQL 16; worker читает только frozen bytes | `src/dom_domych/infrastructure/files/local.py`, `src/dom_domych/infrastructure/postgres/documents.py`, `z_document_models.py`, `migrations/versions/c9ad4420e123_z09_documents.py`, `tests/infrastructure/test_z09_documents_postgres.py` |
 | PDF-рендер Z10 | Частично: 30.09.2026 четыре шаблона прошли единый локальный PostgreSQL/process pool → FileStore → приватный outbox → MAX upload/личный `POST /messages` MockTransport; lease/recovery покрыты прежними тестами. Live MAX download не проверен | `src/dom_domych/application/documents/worker.py`, `tests/infrastructure/test_z10_max_pdf_pipeline.py`, `test_z09_documents_postgres.py`; `docs/release/zamira-live-pdf-smoke.md` |
-| DemoExecutor Z11 | Частично: PostgreSQL idempotency/конкуренция, approved draft, права, события/outbox и K регистрацию проверены на локальной PostgreSQL 16; K/A process root подключён | `src/dom_domych/infrastructure/postgres/demo_executor.py`, `application/executor/production.py`, `application/resolution/production.py`, `entrypoints/processes.py`, `tests/infrastructure/test_z11_demo_executor_postgres.py`; live MAX ещё не проверен |
+| DemoExecutor Z11 | Частично: PostgreSQL idempotency/конкуренция, права и события/outbox проверены; 30.09.2026 добавлен demo-only operator CLI register/done/list с replay и запретом live-дома, PostgreSQL-тест пройден. Live G3 не проверен | `src/dom_domych/infrastructure/postgres/demo_executor.py`, `entrypoints/zamira_operator.py`, `tests/infrastructure/test_z11_demo_executor_postgres.py`, `tests/entrypoints/test_zamira_operator.py` |
 | Старт проверки результата Z12 | Частично: trusted done → исходная аудитория/poll/jobs/outbox с личными кнопками и `checking_resolution` проверены на PostgreSQL 16; inbox handler подключён | `src/dom_domych/infrastructure/postgres/resolution.py`, `application/resolution/production.py`, `tests/infrastructure/test_z12_resolution_postgres.py`; live MAX ещё не проверен |
 | Итоги проверки результата Z13 | Частично: три исхода, case event, pending jobs и `resolution.rejected` проверены на локальной PostgreSQL 16; scheduler/DOMAIN handler подключён | Те же файлы resolution; полный G3/live MAX ещё не проверены |
-| Сквозная проверка Z14 | Частично: PostgreSQL/MockTransport цепь карточка → callback → голос → edit, отдельные PDF/Executor/result сценарии и retry проверены | `tests/infrastructure/test_z07_cards_outbox.py`, `test_z09_documents_postgres.py`, `test_z11_demo_executor_postgres.py`, `test_z12_resolution_postgres.py`; единый K/Z G3 и live MAX отсутствуют |
+| Сквозная проверка Z14 | Частично: 30.09.2026 единый локальный PostgreSQL/MockTransport problem → MAX callback → голос/card edit → request/PDF/FileStore/binding → demo executor → result poll → closed/reopened пройден; полный live MAX/LLM G3 остаётся открытым | `tests/infrastructure/test_g3_runtime.py`, `test_z10_max_pdf_pipeline.py` |
 | PDF QA Z15 | Частично: 4 образца/7 страниц ранее визуально просмотрены; 30.09.2026 локально проверены hash, PDF text, версия/демо-маркировка и приватная доставка четырёх файлов в MockTransport. Реальные файлы в MAX mobile/web не открывались | `docs/release/zamira-pdf-qa.md`, `zamira-live-pdf-smoke.md`, `tests/infrastructure/test_z10_max_pdf_pipeline.py` |
-| Материалы Z16 | Частично: handoff, демо-политики, синтетические данные, обе развилки результата и воспроизведение PDF описаны | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; live G3 runbook ждёт K/Z orchestration и MAX |
+| Материалы Z16 | Частично: handoff, безопасный live PDF smoke и точный ручной demo-сценарий `closed`/`reopened` с demo-only CLI подготовлены 30.09.2026. Двухчасовая live-финализация, MAX mobile/web и полный G3 не проверены | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`, `src/dom_domych/entrypoints/zamira_operator.py` |
 | Python-проект и зависимости A00 | Проверено локально; предыдущий набор — GitHub Actions #35 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; локально на целевом PG17/pgvector migration/check, Ruff, mypy по `src` и 274 теста прошли; CI нового набора ожидается |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17.8 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: единая migration/check до `0a7b6c5d4e3f` и 274 теста на чистой БД |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
@@ -174,8 +175,9 @@ K/Z handlers и repositories запускаются из A14 process root; об�
 Следующий внутренний шаг — провести подготовку request от поддержанной инициативы после
 явного действия подтверждённого жителя и найденного проверенного правила. Затем нужны реальный MAX/LLM
 доступ, HTTPS smoke и G1–G3/mobile-web прогоны. На отдельной PostgreSQL 17.8 +
-pgvector 0.8.1 с полной миграцией с нуля прошли 274 теста, Ruff, mypy по `src` и Alembic
-check без новых операций; тот же набор ранее прошёл на PostgreSQL 16. Старое
+pgvector 0.8.1 с полной миграцией с нуля ранее прошли 274 теста, Ruff, mypy по `src` и Alembic
+check без новых операций. На чистой PostgreSQL 16.13 30.09.2026 после Z05/Z07/Z10/Z14/Z16
+прошли 277 тестов, Ruff и mypy по `src`; PG17 для этого нового набора ещё не повторён. Старое
 предупреждение Alembic о неизвестном типе `vector` сохраняется. A-пул повторно
 проверил полный Compose lifecycle уже с Z document worker и восстановление нового
 Z head. CI workflow поднимает тот же PG17/pgvector; GitHub Actions #31 на `6c11ce9`
