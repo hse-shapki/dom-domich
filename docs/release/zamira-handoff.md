@@ -120,7 +120,7 @@ uv run python scripts/generate_zamira_demo_pdfs.py --output-dir /tmp/dom-domich-
 | Часть | Состояние |
 |---|---|
 | PostgreSQL аудитории, опросы, инициативы, документы, demo executor и проверка результата | Частично: 9 G3 комбинаций проверены на PostgreSQL 17.8/pgvector; новый callback/PDF/CLI набор проходил на PG16.13 до объединения; текущий прогон указан в `context/current-state.md` |
-| MAX callback, outbox, кнопки, PDF upload | Callback → приватный feedback/edit и четыре PDF через MAX upload проверены PostgreSQL/MockTransport; live MAX подтвердил доставку групповой карточки, отказ callback вне аудитории и синтетический PDF transport, но допустимый голос и Z файлы в mobile/web открытыми не проверены |
+| MAX callback, outbox, кнопки, PDF upload | Callback → приватный feedback/edit и четыре PDF через MAX upload проверены PostgreSQL/MockTransport; Z-MVP-2 дополнительно провёл реальные producer-события четырёх PDF до приватной отправки. Live MAX подтвердил доставку групповой карточки, отказ callback вне аудитории и синтетический PDF transport, но допустимый голос, доменный edit и Z файлы в mobile/web открытыми не проверены. Ручной порядок — [Z-MVP-2](z-mvp-2-manual-check.md) |
 | Исполнитель и `DEMO-*` регистрация | Только смоделированный DemoExecutor, без УК/ГИС ЖКХ; операторская capability обязательна |
 | Дело и агент | K problem/initiative/emergency opening, request approval/submit/PDF binding и результат связаны; 9 локальных production сценариев прошли. Ollama провёл отдельный problem path; цельный live MAX/LLM G3 не проверен |
 | Официальная отправка и протокол ОСС | Не реализованы; четыре PDF являются демо-документами, протокол назван позицией жителей |

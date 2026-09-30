@@ -1,13 +1,17 @@
 """Z08: ограниченные напоминания и итог позиции в PostgreSQL/outbox."""
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
+from pypdf import PdfReader
 from sqlalchemy import func, select, update
 
 from dom_domych.application.audiences.service import AudienceService
@@ -20,6 +24,7 @@ from dom_domych.application.initiatives.followup import (
     demo_reminder_policy,
 )
 from dom_domych.application.initiatives.service import InitiativeService
+from dom_domych.application.notifications.worker import DeliveryWorker
 from dom_domych.application.resolution.production import PostgresResolutionEventHandler
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
@@ -29,6 +34,8 @@ from dom_domych.domain.polls.policy import InitiativeOutcome, demo_initiative_po
 from dom_domych.entrypoints.zamira_operator import build_parser, run_command
 from dom_domych.infrastructure.documents.renderer import PdfRenderer
 from dom_domych.infrastructure.files.local import LocalFileStore
+from dom_domych.infrastructure.max.client import MaxApiClient
+from dom_domych.infrastructure.max.media import MaxMediaTransport
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
 from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseRow
 from dom_domych.infrastructure.postgres.documents import verify_snapshot_bytes
@@ -426,10 +433,9 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once(
             assert any(
                 "не отправлен" in fact.value for fact in verify_snapshot_bytes(complaint).facts
             )
+        files = LocalFileStore(tmp_path, clock)
         async with PdfRenderer(max_workers=1) as renderer:
-            worker = DocumentWorker(
-                sessions, LocalFileStore(tmp_path, clock), renderer, clock, "z08-pdf"
-            )
+            worker = DocumentWorker(sessions, files, renderer, clock, "z08-pdf")
             for _ in range(3):
                 assert await worker.run_once()
             assert not await worker.run_once()
@@ -457,6 +463,73 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once(
                 )
             ).all()
             assert len(ready_events) == 3
+        for row in rows:
+            assert row.file_key is not None
+            stored, content = await files.get(HOUSE_ONE, row.file_key)
+            assert stored.sha256 == row.file_sha256 == hashlib.sha256(content).hexdigest()
+            extracted = "\n".join(page.extract_text() for page in PdfReader(BytesIO(content)).pages)
+            assert row.snapshot_sha256 in extracted
+            if row.kind == DocumentKind.NOTIFICATION_REGISTER.value:
+                assert str(first.resident_id) in extracted
+            else:
+                assert str(first.resident_id) not in extracted
+        async with sessions.begin() as session:
+            await session.execute(
+                update(OutboxDeliveryRow)
+                .where(
+                    OutboxDeliveryRow.status == "pending",
+                    OutboxDeliveryRow.operation_key.not_like("document:file:%"),
+                )
+                .values(status="sent")
+            )
+            await session.execute(
+                update(ResidentRow).where(ResidentRow.id == author_id).values(max_user_id="777")
+            )
+        sent_files: list[httpx.Request] = []
+        uploaded_files: list[httpx.Request] = []
+
+        def api_response(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/uploads":
+                return httpx.Response(200, json={"url": "https://fu.oneme.ru/upload.do"})
+            sent_files.append(request)
+            return httpx.Response(200, json={"message": {"body": {"mid": str(uuid4())}}})
+
+        def media_response(request: httpx.Request) -> httpx.Response:
+            uploaded_files.append(request)
+            return httpx.Response(200, json={"token": f"z08-file-{len(uploaded_files)}"})
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(api_response), base_url="https://platform-api2.max.ru"
+        ) as api_http:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(media_response)
+            ) as media_http:
+                api = MaxApiClient(api_http, "synthetic-token")
+                delivery = DeliveryWorker(
+                    sessions,
+                    api,
+                    clock,
+                    "z08-private-pdfs",
+                    media=MaxMediaTransport(media_http, api),
+                    files=files,
+                )
+                for _ in range(3):
+                    assert await delivery.run_once()
+                assert not await delivery.run_once()
+        assert len(uploaded_files) == len(sent_files) == 3
+        assert all(request.url.params.get("user_id") == "777" for request in sent_files)
+        assert all("chat_id" not in request.url.params for request in sent_files)
+        async with sessions() as session:
+            delivered = (
+                await session.scalars(
+                    select(OutboxDeliveryRow).where(
+                        OutboxDeliveryRow.operation_key.in_(
+                            [f"document:file:{row.id}" for row in rows]
+                        )
+                    )
+                )
+            ).all()
+            assert len(delivered) == 3 and all(row.status == "sent" for row in delivered)
         for ready_event in ready_events:
             assert await DocumentReadyEventHandler(sessions)(
                 EventEnvelope.model_validate_json(json.dumps(ready_event.normalized_event))

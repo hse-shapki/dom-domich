@@ -28,7 +28,11 @@ docker compose -f deploy/compose.yml ps documents outbox
 
 ```bash
 TEST_DATABASE_URL=postgresql+asyncpg://localhost/dom_domych_test_z_pdf \
-  uv run pytest -q tests/infrastructure/test_z10_max_pdf_pipeline.py
+  uv run pytest -q tests/infrastructure/test_z10_max_pdf_pipeline.py \
+    tests/infrastructure/test_z08_followup_postgres.py \
+    tests/infrastructure/test_g3_runtime.py
 ```
+
+На 30.09.2026 три документа из настоящих producer-событий инициативы/deadline и appeal из G3 request прошли локальный FileStore → приватный outbox → MAX MockTransport. Это добавляет проверку источников поверх синтетических образцов Z10; живое открытие файлов по-прежнему не проверено. Полный ручной порядок для Z-MVP-2 — в [протоколе](z-mvp-2-manual-check.md).
 
 В [`max-mobile-web-matrix.md`](max-mobile-web-matrix.md) укажите для каждого клиента фактический исход, время UTC, commit и ссылку на закрытое/обезличенное evidence. Пока файла не просмотрели в обоих клиентах, Z15 и G2/G3 остаются открытыми.
