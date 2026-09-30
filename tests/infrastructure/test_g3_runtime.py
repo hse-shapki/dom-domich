@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import or_, select, update
 
@@ -18,6 +19,7 @@ from dom_domych.application.executor.service import DemoExecutorService
 from dom_domych.application.initiatives.production import register_initiative_events
 from dom_domych.application.jobs.inbox_worker import EventDispatcher, InboxWorker
 from dom_domych.application.jobs.scheduler import RevisionRouter
+from dom_domych.application.notifications.worker import DeliveryWorker
 from dom_domych.application.requests.emergency_runtime import EmergencyAudienceEventHandler
 from dom_domych.application.requests.events import RequestEventHandler, register_request_events
 from dom_domych.application.requests.service import RequestService
@@ -28,6 +30,8 @@ from dom_domych.domain.executor.models import ExternalStatus
 from dom_domych.domain.polls.models import PollKind, PollStatus, VoteChoice
 from dom_domych.infrastructure.documents.renderer import PdfRenderer
 from dom_domych.infrastructure.files.local import LocalFileStore
+from dom_domych.infrastructure.max.client import MaxApiClient
+from dom_domych.infrastructure.max.media import MaxMediaTransport
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
 from dom_domych.infrastructure.postgres.demo_executor import (
@@ -37,7 +41,12 @@ from dom_domych.infrastructure.postgres.demo_executor import (
 from dom_domych.infrastructure.postgres.documents import PostgresDocuments
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
 from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
-from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, ScheduledJobRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    OutboxDeliveryRow,
+    ResidentRow,
+    ScheduledJobRow,
+)
 from dom_domych.infrastructure.postgres.original_audience import original_audience_id
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.request_models import RequestRow
@@ -295,6 +304,60 @@ async def test_case_request_executor_resolution_outcomes_through_runtime(
                 "g3-documents",
             )
             assert await document_worker.run_once()
+        if kind is CaseKind.PROBLEM and answer == "yes":
+            async with sessions.begin() as session:
+                await session.execute(
+                    update(OutboxDeliveryRow)
+                    .where(
+                        OutboxDeliveryRow.status == "pending",
+                        OutboxDeliveryRow.operation_key.not_like("document:file:%"),
+                    )
+                    .values(status="sent")
+                )
+                await session.execute(
+                    update(ResidentRow).where(ResidentRow.id == actor_id).values(max_user_id="778")
+                )
+            sent_files: list[httpx.Request] = []
+            uploaded_files: list[httpx.Request] = []
+
+            def api_response(request: httpx.Request) -> httpx.Response:
+                if request.url.path == "/uploads":
+                    return httpx.Response(200, json={"url": "https://fu.oneme.ru/upload.do"})
+                sent_files.append(request)
+                return httpx.Response(200, json={"message": {"body": {"mid": str(uuid4())}}})
+
+            def media_response(request: httpx.Request) -> httpx.Response:
+                uploaded_files.append(request)
+                return httpx.Response(200, json={"token": "g3-appeal"})
+
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(api_response),
+                base_url="https://platform-api2.max.ru",
+            ) as api_http:
+                async with httpx.AsyncClient(
+                    transport=httpx.MockTransport(media_response)
+                ) as media_http:
+                    api = MaxApiClient(api_http, "synthetic-token")
+                    delivery = DeliveryWorker(
+                        sessions,
+                        api,
+                        clock,
+                        "g3-private-appeal",
+                        media=MaxMediaTransport(media_http, api),
+                        files=LocalFileStore(tmp_path / "files", clock),
+                    )
+                    assert await delivery.run_once()
+                    assert not await delivery.run_once()
+            assert len(uploaded_files) == len(sent_files) == 1
+            assert sent_files[0].url.params.get("user_id") == "778"
+            assert "chat_id" not in sent_files[0].url.params
+            async with sessions() as session:
+                file_delivery = await session.scalar(
+                    select(OutboxDeliveryRow).where(
+                        OutboxDeliveryRow.operation_key == f"document:file:{document_id}"
+                    )
+                )
+                assert file_delivery is not None and file_delivery.status == "sent"
         assert await runtime_worker.run_once()  # document.ready + request binding
 
         done_event_id = uuid4()
