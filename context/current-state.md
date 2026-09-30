@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 30.09.2026: A-MVP-1, Z-MVP-1 и локальная часть Z-MVP-2 объединены; Z-MVP-3 локально провёл operator CLI через 9 G3 исходов и уточнил K15 оценщик. На чистой PostgreSQL 16.13 прошли **302 теста**, Ruff check/format, mypy и Alembic check; ранее A-MVP-1 и Z-MVP-2 проверялись на PG17/pgvector. PG17 CI нового набора ожидается. Единый polling Compose ранее подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox. Допустимый live голос, доменный edit, PDF Z в mobile/web, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены.
+Проверено 30.09.2026: A-MVP-1, Z-MVP-1 и локальная часть Z-MVP-2 объединены; Z-MVP-3 локально провёл operator CLI через 9 G3 исходов и уточнил K15 оценщик. На чистой PostgreSQL 16.13 прошли **302 теста**, Ruff check/format, mypy и Alembic check; [PG17 CI implementation commit `d4385b4`](https://github.com/hse-shapki/dom-domich/actions/runs/36750425116) и [CI merge в main `596a7a5`](https://github.com/hse-shapki/dom-domich/actions/runs/36743521426) завершились успешно. Единый polling Compose ранее подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox. Допустимый live голос, доменный edit, PDF Z в mobile/web, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены.
 
 ## Факты на дату проверки
 
