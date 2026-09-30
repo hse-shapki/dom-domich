@@ -140,7 +140,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Продуктовая концепция и журнал решений | Есть документация | `IDEA.md`, `docs/backlog.md`, `docs/open-questions.md` |
 | Техническая архитектура, ограничения, треки и приёмка | Есть проектная документация | `docs/engineering/README.md` и восемь документов в той же папке |
 | Персональные пулы технических задач | Спланированы; A00–A13/A15–A17 и часть Z реализованы локально или частично | `context/implementation-plan.md`, `tasks-alina.md`, `tasks-katerina.md`, `tasks-zamira.md` |
-| Корневые правила для агентов | Есть | `AGENTS.md` |
+| Правила разработки | Есть | `DEVELOPMENT.md` |
 | Постоянный контекст | Есть | `context/README.md`, `decisions.md`, `product.md`, `engineering.md`, `current-state.md` |
 | Чистые доменные правила опросов Z01 | Проверены на unit-уровне | `src/dom_domych/domain/polls/policy.py`, `tests/domain/test_poll_policy.py`: 23 теста |
 | Общие контракты A01 / предложения K00/Z00 | Частично: problem open/outcome и initiative open/decision связаны; request после поддержки требует trusted actor/rule | contracts, production orchestration modules, K/Z tests |
@@ -212,7 +212,7 @@ MAX mobile/web, operator/result события, подтверждение пр�
 требуют согласования перед пилотом, они не нормативные правила дома.
 
 Текущий финиш разделён на A-MVP-1…3 (Алина) и Z-MVP-1…3 (Замира);
-детали, зависимости и ручные MAX рубежи — в [AGENTS.md](../AGENTS.md). Реализация
+детали, зависимости и ручные MAX рубежи — в [DEVELOPMENT.md](../DEVELOPMENT.md). Реализация
 stand/preflight A-MVP-1 проверена в ветке `a-mvp-1` на implementation commit `b9de58f`:
 PG17/pgvector, миграции, runtime seed, шесть workers, polling, MAX `/me`, `qwen3:4b` и
 normal group message подтверждённого жителя прошли совместно до sent outbox. Сообщения до
@@ -239,7 +239,7 @@ payload/ID в лог, но предотвращает бессмысленный
 
 1. Сверить `git status`, файлы и результаты подходящих проверок.
 2. Обновить только затронутые строки, указав пути к реализации и точную степень проверки: «частично», «реализовано, не проверено» или «проверено».
-3. Синхронизировать раздел «Что уже сделано» в [AGENTS.md](../AGENTS.md) и при необходимости вводную страницу [инженерных документов](../docs/engineering/README.md).
+3. Синхронизировать раздел «Что уже сделано» в [DEVELOPMENT.md](../DEVELOPMENT.md) и при необходимости вводную страницу [инженерных документов](../docs/engineering/README.md).
 4. Сохранить важный новый выбор в [решениях](decisions.md), а подробности — в соответствующей инженерной спецификации.
 5. Включить изменения контекста в коммит выполненной задачи.
 
