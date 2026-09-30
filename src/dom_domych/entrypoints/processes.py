@@ -42,6 +42,7 @@ from dom_domych.contracts.events import EventName
 from dom_domych.infrastructure.documents.renderer import PdfRenderer
 from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.llm.llama_server import LlamaServerPort
+from dom_domych.infrastructure.llm.ollama import OllamaPort
 from dom_domych.infrastructure.max.client import MAX_API_BASE_URL, MaxApiClient
 from dom_domych.infrastructure.max.media import MaxMediaTransport
 from dom_domych.infrastructure.max.onboarding import MaxOnboardingHandler
@@ -109,8 +110,13 @@ async def _run_once_loop(stop: asyncio.Event, worker: _RunOnce, process: str) ->
 
 def _llm(settings: AppSettings, client: httpx.AsyncClient) -> LlmPort:
     assert settings.llm_model is not None
+    inner: LlmPort
+    if settings.llm_backend == "ollama":
+        inner = OllamaPort(client, settings.llm_model, max_tokens=settings.llm_max_tokens)
+    else:
+        inner = LlamaServerPort(client, settings.llm_model, max_tokens=settings.llm_max_tokens)
     return RetryingLlmPort(
-        LlamaServerPort(client, settings.llm_model, max_tokens=settings.llm_max_tokens),
+        inner,
         timeout_seconds=settings.llm_timeout_seconds,
         attempts=settings.llm_attempts,
     )

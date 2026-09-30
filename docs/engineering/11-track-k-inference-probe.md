@@ -54,3 +54,27 @@ adapter к `/v1/chat/completions`; `scripts/probe_k02.py` сохраняет м�
 замера. Обёртка ограничивает время попытки и число повторов временных ошибок;
 ошибки валидации не повторяет. HTTPX MockTransport и fake путь дают
 воспроизводимые tests без нагрузки на Mac.
+
+## Нативный Ollama и production-подобный прогон 30.09.2026
+
+На macOS arm64 с 16 GiB RAM локально загружен `qwen3:4b`, Ollama digest
+`359d7dd4bcda`, размер слоя около 2,5 GB. Добавлен отдельный adapter
+`infrastructure/llm/ollama.py` к `/api/chat`: он преобразует сохранённую
+OpenAI-style историю tools в нативные сообщения Ollama, принимает только
+структурированные `tool_calls`, дедуплицирует одинаковые вызовы одной генерации
+и не передаёт модели произвольные transport-возможности.
+
+На отдельной мигрированной PostgreSQL выполнен production-подобный вход
+«В первом подъезде не горит лампа». Реальные `LlmTriagePort`, `AgentRuntime`,
+production K services и repositories дали последовательность `case.search` →
+`case.create`; создано одно дело `detected`, agent run завершён, один ответ
+поставлен в durable outbox. Для этого служебные `source_message_id`, `message_id`
+и operation IDs исключены из model-facing schemas и подставляются runtime из
+доверенного event/run. Модель не выбирает эти идентификаторы.
+
+Это подтверждает локальный структурированный tool path, но не live MAX/G3,
+стабильность на всех сценариях, качество классификации или скорость. Один прогон
+занял заметно больше минуты; K01/K15 dataset, p50/p95 и память не измерены,
+поэтому `qwen3:4b` остаётся кандидатом стенда, а не утверждённой release-моделью.
+Воспроизводимый probe теперь принимает `--backend ollama`; production processes
+выбирают adapter через `LLM_BACKEND=ollama`.

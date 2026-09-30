@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 29.09.2026 по ветке `main`. Этот файл меняется после реализации задач; старое значение статуса не является вечной истиной. Раздел с K-фактами ниже описывает их собственные прежние прогоны; актуальные Z/A стыки указаны в таблице.
+Проверено 30.09.2026 по ветке `main`. Этот файл меняется после реализации задач; старое значение статуса не является вечной истиной. Раздел с K-фактами ниже описывает их собственные прежние прогоны; актуальные Z/A стыки указаны в таблице.
 
 ## Факты на дату проверки
 
@@ -11,14 +11,16 @@ K initiative workflow пока не вызывает их автоматичес
 production audience/poll/card через durable event.
 K01: подготовлен русский набор из 24 синтетических кейсов и нулевой baseline
 в `evals/`; прогон реальной модели пока не выполнен.
-K02: `LlmPort`/fake/retry и HTTPX adapter проверены MockTransport. Старый
-Qwen3-8B probe на 8 GiB не удался. Повторная проверка 29.09.2026 на 16 GiB
-через локальный Ollama и `qwen2.5-coder:7b` дала русский ответ и allowlisted
-tool call. Для моделей, сериализующих вызов в content, адаптер принимает только
-точный одиночный JSON (или одиночный JSON fence), сверяет имя с выданным
-allowlist, а schema/capability остаются в backend runtime. Полные K01/K15 evals,
-p50/p95 и выбор модели не выполнены; подробности — в inference probe.
+K02: `LlmPort`/fake/retry, OpenAI-compatible и нативный Ollama HTTPX adapters
+проверены MockTransport. Старый Qwen3-8B probe на 8 GiB не удался; повторная
+проверка `qwen2.5-coder:7b` дала только ограниченный одиночный tool round-trip.
+30.09.2026 локальный Ollama `qwen3:4b` (digest `359d7dd4bcda`) через `/api/chat`
+прошёл production-подобный путь на PostgreSQL: русский problem triage,
+`case.search`, `case.create`, завершённый run и reply outbox. Это не MAX/G3 и
+не оценка качества: полные K01/K15 evals, p50/p95 и release-выбор модели не выполнены.
 K03: runtime проверяет allowlist, JSON schema, режим, capability и бюджет;
+служебные `source_message_id`/`message_id` и operation IDs скрыты от модели и
+детерминированно подставляются backend из доверенного event/run;
 единый реестр связывает девять опубликованных K schemas с KToolHandlers,
 включая срочный `emergency.handle` без ожидания опроса;
 production K case/knowledge/request services собираются одним composition helper.
@@ -34,7 +36,9 @@ K05: разрешённый HTTPS источник поступает как н�
 PostgreSQL 18 migration/search и HTTPX embedding adapter проверены локально;
 ветка pgvector в целевом PG17 и live embedding не проверены.
 K06: типизированная классификация пяти типов и разделение нескольких проблем
-в сообщении проверены fake tests. Срочные выражения имеют консервативный
+в сообщении проверены fake tests. Для локальных моделей допускается пояснение
+только перед одним завершающим JSON-объектом; trailing text и неверная schema
+отклоняются. Срочные выражения имеют консервативный
 fallback; вопрос без проверенного источника ведёт к уточнению. Сервис отдаёт
 маршрут в agent coordinator из общего inbox. PostgreSQL resolver выдаёт actor,
 дом и настроенные capabilities только активному подтверждённому жителю; ответ
@@ -146,7 +150,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | MAX Bot API A03 | Частично: документированные методы проверены через MockTransport; live `/me` и исходящая личка — 29.09.2026 | `infrastructure/max/client.py`, `tests/infrastructure/test_max_client.py`; callback/upload/group delivery ещё требуют live smoke |
 | Webhook/inbox A04 | Частично: все поддержанные Update, dedupe/durable insert проверены на PostgreSQL; live polling принял `bot_started` и `message_created` | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`, `tests/infrastructure/test_max_webhook.py`; публичный HTTPS webhook и прочие live-типы ещё не проверены |
 | Inbox worker A07 | Частично: production loop собирает onboarding → K message/continuation handlers; lease/recovery/retry проверены на PostgreSQL 17 | `entrypoints/processes.py`, `application/agent/messages.py`, inbox/K14 tests; Z handlers ещё не подключены |
-| DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit, недоступный адресат и отдельный process loop проверены на PostgreSQL 17 + MockTransport | `entrypoints/processes.py`, `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`; PDF upload добавлен в A11, реальный MAX отсутствует |
+| DeliveryPort/outbox A08 | Частично: enqueue/rollback, DM, карточка/edit, недоступный адресат и отдельный process loop проверены на PostgreSQL 17 + MockTransport; одна durable DM реально доставлена в MAX | `entrypoints/processes.py`, `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`; group/card/PDF delivery ещё требуют live smoke |
 | JobPort/scheduler A09 | Частично: дедлайны, idempotency, stale no-op и K revision adapter в production loop проверены на PostgreSQL 17 | `entrypoints/processes.py`, `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`; Z handlers/revisions ещё не подключены |
 | MAX poll callbacks A10 | Частично: actor/дом/токен и ACK проверены на PostgreSQL 18 + MockTransport | `infrastructure/postgres/poll_actions.py`, `application/polls/max_callback.py`, `tests/infrastructure/test_max_poll_callback.py`; Z PollRepository и live MAX ещё не подключены |
 | MAX files A11 | Частично: PDF upload, token reuse/retry, безопасное фото, process-local rate limits и coalescing edit реализованы | `infrastructure/max/media.py`, `infrastructure/max/evidence.py`, `infrastructure/max/rate_limit.py`, tests; live MAX mobile/web и K evidence linkage ещё нужны |
@@ -156,9 +160,9 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Backup/restore A15 | Проверено локально на PostgreSQL 17.8/pgvector и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Z head `0a7b6c5d4e3f`, vector, 40 public tables и 5 файлов с теми же SHA-256; временные данные удалены |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
-| Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены; локальный Ollama прошёл один validated `case.search` chain | `src/dom_domych/agent/`, `infrastructure/llm/llama_server.py`, `application/agent/composition.py`, tests/evals; полный live MAX/G3 и реальные метрики ещё открыты |
+| Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены; нативный Ollama `qwen3:4b` прошёл PostgreSQL problem path `case.search` → `case.create` → reply outbox | `src/dom_domych/agent/`, `infrastructure/llm/ollama.py`, `application/agent/composition.py`, tests/evals; полный live MAX/G3 и реальные метрики ещё открыты |
 | Хранение опросов | Частично: PostgreSQL repository/migration, callback и jobs проверены локально | `infrastructure/postgres/polls.py`, `application/polls/production.py`, `tests/infrastructure/test_z04_polls_postgres.py`; K route/live MAX не проверены |
-| Рабочий стенд и внешние проверки | Частично | Целевой PG17/pgvector, production image и полный local Compose lifecycle проверены; live MAX bot identity/polling/DM onboarding пройдены в web-клиенте 29.09.2026, но модель, публичный HTTPS, mobile, group/callback/files и событийный G3 ещё не проверены |
+| Рабочий стенд и внешние проверки | Частично | Целевой PG17/pgvector, production image и полный local Compose lifecycle проверены; live MAX bot identity/polling/DM onboarding и одна outbox DM пройдены, local-LLM problem path проверен отдельно; публичный HTTPS, mobile, group/callback/files и цельный live G3 ещё не проверены |
 
 Эти строки описывают только осмотр репозитория. Они не доказывают отсутствие внешнего аккаунта или бота у команды. И наоборот, схема в Markdown не доказывает готовность реализации.
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
@@ -78,9 +79,25 @@ class LlmTriagePort:
         if response.tool_calls:
             raise ValueError("Классификатор не может вызывать tools")
         try:
-            return TriageDecision.model_validate_json(response.text)
-        except ValidationError as exc:
+            return TriageDecision.model_validate_json(self._json_payload(response.text))
+        except (ValidationError, ValueError) as exc:
             raise ValueError("Некорректное решение классификатора") from exc
+
+    @staticmethod
+    def _json_payload(text: str) -> str:
+        """Допускает пояснение только перед одним завершающим JSON-объектом."""
+
+        decoder = json.JSONDecoder()
+        for index, character in enumerate(text):
+            if character != "{":
+                continue
+            try:
+                payload, end = decoder.raw_decode(text[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict) and not text[index + end :].strip():
+                return text[index : index + end]
+        raise ValueError("JSON object not found")
 
 
 _EMERGENCY_TERMS = (
