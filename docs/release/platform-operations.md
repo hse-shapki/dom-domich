@@ -3,7 +3,8 @@
 ## A-MVP-1: единый demo-стенд
 
 Локальный принимаемый режим — MAX long polling и Ollama на хосте. Веса не попадают в Git или
-Docker image. Проверенная конфигурация 30.09.2026: base commit `c79454168706682a6a1a909812da30cb7bf27dde`,
+Docker image. Проверенная конфигурация 30.09.2026: implementation commit
+`b9de58fb4675e3b74522642d2d0ce517009954ad`, base `c79454168706682a6a1a909812da30cb7bf27dde`,
 Ollama `0.32.1`, модель `qwen3:4b` с digest
 `359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7`, PostgreSQL image
 `pgvector/pgvector@sha256:3e8b3adfd27b5707128f60956f62a793c3c9326ea8cfaf0eab7adccb5d700b21`.
@@ -38,6 +39,9 @@ polling, inbox, scheduler, outbox, documents и maintenance. PostgreSQL оста
 Ollama и Compose запущены; внешний TLS/webhook и mobile/web матрица этим smoke не проверены;
 модель ещё не прошла K15 evals. Demo seed разрешён только для `dom_domych_test*` либо при явном
 флаге для БД с именем `dom_domych_demo`.
+
+Фактический результат единого live-прогона и честные ограничения записаны в
+[A-MVP-1 evidence](a-mvp-1-evidence.md).
 
 Операционные команды не печатают токен/secret:
 

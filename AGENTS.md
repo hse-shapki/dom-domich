@@ -66,7 +66,7 @@
 | MAX files A11 | Частично: synthetic PDF реально прошёл FileStore → upload → сохранение token → `attachment.not.ready` → bounded retry → приватную доставку и виден в web MAX; безопасное фото, rate limits и coalescing edit проверены локально | `infrastructure/max/media.py`, `infrastructure/max/tls.py`, `application/notifications/worker.py`, tests; открытие файла, mobile, реальный документ Z и K evidence linkage ещё нужны |
 | Deploy/runtime A12 | Частично: clean Compose profile `polling` последовательно запускает PG17/pgvector, migrate, runtime demo seed, polling/inbox/scheduler/outbox/documents/maintenance и redacted preflight; `/me` и `qwen3:4b` отвечают из того же stand | `deploy/compose.yml`, `entrypoints/preflight.py`, `docs/release/platform-operations.md`; host Ollama обязателен, публичный DNS/TLS и mobile/web не проверены |
 | Надёжность A13 | Частично: bounded retry, dead-letter, `delivery_unknown`, rate limits, coalescing и lease heartbeat проверены локально | `application/notifications/worker.py`, `application/jobs/scheduler.py`, infrastructure queue tests; live потеря прав/rate limits не проверены |
-| Composition/polling A14 | Частично: локальная production-цепь problem → request → PDF/FileStore/binding → demo registration/done → resolution poll → closed проверена; общий Compose live принял `/start` и отклонил сообщения неподтверждённого actor без ответа | `tests/infrastructure/test_g3_runtime.py`, `deploy/compose.yml`; зарегистрированное normal MAX message → agent → outbox ещё требует ручного сообщения, это не live G3 |
+| Composition/polling A14 | Частично: локальная production-цепь problem → request → PDF/FileStore/binding → demo registration/done → resolution poll → closed проверена; общий Compose live провёл normal MAX group message через durable inbox, agent/tools и sent outbox | `tests/infrastructure/test_g3_runtime.py`, `docs/release/a-mvp-1-evidence.md`; следующий `problem.detected` не принят downstream Z-MVP-1 handler, поэтому это ещё не live G3 |
 | Backup/restore A15 | Проверено локально на PostgreSQL 17.8/pgvector и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Z head `0a7b6c5d4e3f`, vector, 40 public tables и 5 file hashes; PostgreSQL/FileStore named volumes пережили Compose restart |
 | MAX matrix A16 | Не проверено; подготовлен протокол без фиктивных отметок | `docs/release/max-mobile-web-matrix.md`; нужен live бот, mobile/web и общий runtime |
 | Release A17 | Частично: runbook, env placeholders, secret/history audit, transitive license inventory и evidence/archive tool подготовлены; CI Actions закреплены по SHA актуальных релизов | `scripts/release_audit.py`, `.github/workflows/python.yml`, `docs/release/platform-operations.md`; история чиста, но лицензия собственного проекта не выбрана; tag/digests допустимы только после G3 |
@@ -116,11 +116,12 @@ MVP-стыки K (агент/дела/обращения), ранее закре
 | **Z-MVP-2 — голос, карточка и PDF** | Замира: довести frozen audience, личные приглашения, допустимый callback/feedback, edit и финализацию карточки, ревизию инициативы, четыре приватных PDF через настоящий FileStore/outbox/MAX. Локальные tests покрывают replay/concurrency и приватность, live запуск — после A-MVP-1/2. | Один житель — один голос; недоставка не меняет знаменатель; старая кнопка не действует; публично только агрегаты; четыре Z PDF читаются в MAX mobile и web, адресат и snapshot/hash совпадают. |
 | **Z-MVP-3 — результат, evals и демо** | Замира: demo-only register/status/done, исходная аудитория, `closed`/`reopened`/`resolution_unconfirmed`, дедлайн/черновик жалобы, восстановление после повторов; K01/K15 evals выбранной модели и совместный с Алиной live G3. | Пройдены problem, initiative и emergency, положительный и отрицательный исходы и молчание по demo policy; `done` само не закрывает дело. Зафиксированы model/prompt/policy revisions, критические ошибки evals и точные шаги показа без ручной правки live БД. |
 
-Статус A-MVP-1 на 30.09.2026: реализация stand/preflight и clean PG17-проверка готовы в
-ветке `a-mvp-1`; единый polling stand подтвердил MAX `/me`, отсутствие webhook, выбранный
-Ollama `qwen3:4b` и все workers. Live `/start` прошёл, сообщения неподтверждённого участника
-группы не получили прав и ответа. До закрытия ID остаётся одно ручное сообщение уже
-подтверждённого жителя и подтверждение durable `inbox → agent → outbox`.
+Статус A-MVP-1 на 30.09.2026: **проверено** в ветке `a-mvp-1` на implementation commit
+`b9de58f`. Clean polling stand подтвердил PG17/pgvector, миграции/runtime seed, MAX `/me`,
+отсутствие webhook, выбранный Ollama `qwen3:4b`, все workers и live normal group message по
+цепочке durable `inbox → agent/tools → sent outbox`. Полный G3 не объявлен: следующий
+`problem.detected` ждёт Z-MVP-1 handler. Evidence и ограничения —
+`docs/release/a-mvp-1-evidence.md`.
 
 **Порядок:** A-MVP-1 и Z-MVP-1 можно писать независимо; A-MVP-2 и
 локальную часть Z-MVP-2 — параллельно. Совместная MAX проверка Z-MVP-2 ждёт
