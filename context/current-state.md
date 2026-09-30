@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 30.09.2026: A-MVP-1 и локальная часть Z-MVP-1 объединены. С read-only диагностикой A-MVP-2 **303 теста** прошли на чистой PostgreSQL 17/pgvector после полной миграции и двойного runtime seed; Ruff check/format, mypy и Alembic check прошли. Единый polling Compose подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox. Допустимый live голос, PDF Z в mobile/web, downstream `problem.detected`, новый fallback личного сообщения и цельный MAX/LLM G3 ещё не подтверждены.
+Проверено 30.09.2026: A-MVP-1 и локальная часть Z-MVP-1 объединены. A-MVP-2 прошла **305 тестов** на PostgreSQL 18/pgvector; предыдущий clean PostgreSQL 17/pgvector прогон дал 303 теста после полной миграции и двойного runtime seed. Ruff check/format, mypy и Alembic check прошли. Единый polling Compose подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding, normal group message по durable inbox → agent/tools → sent outbox и redacted read-back сообщения. Допустимый live голос, PDF Z в mobile/web, downstream `problem.detected`, новый fallback личного сообщения и цельный MAX/LLM G3 ещё не подтверждены.
 
 ## Факты на дату проверки
 
@@ -138,7 +138,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Сквозная проверка Z14 | Частично: 9 production PostgreSQL 17 сценариев problem/initiative/emergency → request → PDF/FileStore/binding → executor → три исхода и отдельный problem → callback/card → request/PDF → closed/reopened MockTransport путь | `tests/infrastructure/test_g3_runtime.py`, `test_g3_runtime_callback.py`; цельный live MAX/LLM G3 отсутствует |
 | PDF QA Z15 | Частично: 29.09.2026 заново сгенерированы/просмотрены 4 образца (7 страниц) и 4 production PostgreSQL/FileStore документа (6 страниц); embedded fonts, snapshot/hash/поля/приватность сверены | `docs/release/zamira-pdf-qa.md`, `output/pdf/qa-2026-09-29/manifest.json`; MAX mobile/web не проверены |
 | Материалы Z16 | Частично: handoff, 9 локальных G3 исходов, QA manifest, manual demo двух исходов и live PDF smoke готовы | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`; live evidence MAX mobile/web отсутствуют |
-| Python-проект и зависимости A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; ветка A-MVP-2 прошла 303 теста, migration/check, двойной seed, Ruff и mypy на PG17/pgvector; CI ожидается |
+| Python-проект и зависимости A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; ветка A-MVP-2 прошла 305 тестов на PostgreSQL 18/pgvector, предыдущий clean PG17 прогон — 303 теста; migration/check, двойной seed, Ruff и mypy прошли; CI ожидается |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`, `src/dom_domych/demo/house.py`: clean migration/check до `0a7b6c5d4e3f`, повторный runtime seed и 303 теста |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, signed int64 group chat ID, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; реальные `/start <код>` и `bot_added` группы подтверждены | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; mobile и несколько домов ещё не проверены |
@@ -200,6 +200,12 @@ downstream handler — это открытый Z-MVP-1 стык и причин�
 A-MVP-2 начата в ветке `a-mvp-2`: `entrypoints/diagnostics.py` читает inbox/outbox/jobs в
 read-only PostgreSQL транзакции и выводит только redacted агрегаты status/ready/stale lease и
 alerts. Локальный PostgreSQL-тест подтверждает отсутствие mutation и утечки operation key/text.
+`MaxApiClient.get_message_summary` и `scripts.max_operations inspect-message` через официальный
+`GET /messages/{messageId}` возвращают только признак текста и типы вложений без текста,
+адресатов и токенов. Фактический MAX `mid` содержит точку, хотя страница метода документирует
+более узкий шаблон; клиент принимает точку внутри одного path segment, но запрещает `..` и `/`.
+Команда live нашла отправленное текстовое сообщение и вернула только `has_text=true` и отсутствие
+вложений; PDF и inline keyboard через неё ещё не проверены.
 Live фото, допустимый callback/edit, потеря прав и mobile/web по-прежнему открыты.
 
 ## Как обновлять после задачи

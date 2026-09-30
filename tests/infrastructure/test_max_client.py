@@ -144,6 +144,49 @@ async def test_client_reads_polling_batch_without_losing_large_ids() -> None:
 
 
 @pytest.mark.asyncio
+async def test_client_reads_only_redacted_message_summary() -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "sender": {"user_id": 123, "name": "Private sender"},
+                "recipient": {"chat_id": -9007199254740993},
+                "body": {
+                    "mid": "mid_abc-123",
+                    "text": "Private message text",
+                    "attachments": [
+                        {"type": "file", "payload": {"token": "private-token"}},
+                        {"type": "inline_keyboard", "payload": {"buttons": []}},
+                    ],
+                },
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
+    ) as http:
+        summary = await MaxApiClient(http, "secret-token").get_message_summary("mid.abc-123")
+
+    assert summary.has_text is True
+    assert summary.attachment_types == ("file", "inline_keyboard")
+    assert seen[0].url.path == "/messages/mid.abc-123"
+    assert seen[0].headers["Authorization"] == "secret-token"
+    assert "Private" not in repr(summary)
+    assert "private-token" not in repr(summary)
+
+
+@pytest.mark.asyncio
+async def test_client_rejects_unsafe_message_id_before_request() -> None:
+    async with httpx.AsyncClient(base_url="https://platform-api2.max.ru") as http:
+        api = MaxApiClient(http, "secret-token")
+        with pytest.raises(ValueError, match="invalid MAX message ID"):
+            await api.get_message_summary("../me")
+
+
+@pytest.mark.asyncio
 async def test_client_lists_and_deletes_webhook_subscription() -> None:
     seen: list[httpx.Request] = []
 

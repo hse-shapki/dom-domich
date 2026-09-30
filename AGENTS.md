@@ -27,7 +27,7 @@
 
 ## 3. Что уже сделано
 
-**Состояние на 30.09.2026: A-MVP-1 и локальная часть Z-MVP-1 объединены; с read-only диагностикой A-MVP-2 clean PG17/pgvector прогон дал 303 теста, Ruff, format, mypy, двойной runtime seed и Alembic check. Единый polling Compose подтвердил `/me`, Ollama `qwen3:4b` и normal MAX message по durable inbox → agent/tools → sent outbox. Допустимый live голос, Z PDF в mobile/web, downstream `problem.detected` и цельный MAX/LLM G3 ещё не подтверждены. Подробности — в [current-state](context/current-state.md).**
+**Состояние на 30.09.2026: A-MVP-1 и локальная часть Z-MVP-1 объединены; A-MVP-2 прошла 305 тестов на PostgreSQL 18/pgvector, а предыдущий clean PG17/pgvector прогон дал 303 теста, Ruff, format, mypy, двойной runtime seed и Alembic check. Единый polling Compose подтвердил `/me`, Ollama `qwen3:4b`, normal MAX message и redacted read-back по durable inbox → agent/tools → sent outbox. Допустимый live голос, Z PDF в mobile/web, downstream `problem.detected` и цельный MAX/LLM G3 ещё не подтверждены. Подробности — в [current-state](context/current-state.md).**
 
 | Часть | Статус | Подтверждение |
 |---|---|---|
@@ -53,11 +53,11 @@
 | Сквозная проверка Z14 | Частично: 9 production PostgreSQL 17 сценариев problem/initiative/emergency → request/PDF/executor → три исхода и отдельный problem → MAX callback/card → request/PDF → closed/reopened MockTransport путь | `tests/infrastructure/test_g3_runtime.py`, `test_g3_runtime_callback.py`; цельный live MAX/LLM G3 отсутствует |
 | PDF QA Z15 | Частично: 29.09.2026 заново сгенерированы/просмотрены 4 образца (7 страниц) и 4 production PostgreSQL/FileStore документа (6 страниц); embedded fonts, snapshot/hash/поля/приватность сверены | `docs/release/zamira-pdf-qa.md`, `output/pdf/qa-2026-09-29/manifest.json`; MAX mobile/web не проверены |
 | Материалы Z16 | Частично: handoff, 9 G3 сценариев, четыре PDF/manifest, ручной сценарий двух исходов и live PDF smoke подготовлены | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`; MAX mobile/web evidence отсутствуют |
-| Python-проект, зависимости и CI A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; ветка A-MVP-2 прошла 303 теста, migration/check, двойной seed, Ruff и mypy на PG17/pgvector; CI ожидается |
+| Python-проект, зависимости и CI A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; ветка A-MVP-2 прошла 305 тестов на PostgreSQL 18/pgvector, предыдущий clean PG17 прогон — 303 теста; migration/check, двойной seed, Ruff и mypy прошли; CI ожидается |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`, `src/dom_domych/demo/house.py`; clean migration/check до Z head и повторный runtime seed пройдены в A-MVP-1 |
 | HouseContextPort A05 | Частично: чтение реестра и стык с Z проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, signed int64 group chat ID, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; личное сообщение неподтверждённого жителя теперь получает подсказку `/start` по локальному MockTransport-тесту; прежние live `/start <код>` и привязка группы подтверждены | `entrypoints/demo_operator.py`, `infrastructure/max/onboarding.py`, `tests/infrastructure/test_demo_enrollment.py`; новый fallback в live MAX, mobile и несколько домов ещё не проверены |
-| MAX Bot API A03 | Частично: HTTPX MockTransport, live `/me`, личная/групповая отправка, `POST /answers` и PDF upload проверены 29–30.09.2026; MAX TLS использует объединённые Mozilla/Russian roots без ambient proxy | `infrastructure/max/client.py`, `infrastructure/max/tls.py`, `tests/infrastructure/test_max_client.py`, `test_max_tls.py`; mobile ещё не проверен |
+| MAX Bot API A03 | Частично: HTTPX MockTransport, live `/me`, личная/групповая отправка, `POST /answers`, PDF upload и redacted `GET /messages/{messageId}` проверены 29–30.09.2026; MAX TLS использует объединённые Mozilla/Russian roots без ambient proxy | `infrastructure/max/client.py`, `scripts/max_operations.py`, `infrastructure/max/tls.py`, `tests/infrastructure/test_max_client.py`, `test_max_tls.py`; mobile ещё не проверен |
 | Webhook/inbox A04 | Частично: text/callback/attachment refs/deletion/lifecycle/membership/admin permissions и unknown Update проверены через ASGITransport + PostgreSQL; live polling принял `bot_started` и `message_created` | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`; публичный HTTPS webhook и прочие live-типы ещё не проверены |
 | Inbox worker A07 | Частично: lease/recovery/retry и production loop с K/Z handlers проверены локально | `entrypoints/processes.py`, `application/jobs/inbox_worker.py`, K/Z tests; live MAX не проверен |
 | DeliveryPort/outbox A08 | Частично: enqueue/rollback, signed group ID, DM, карточка/edit, недоступный адресат и отдельный process loop проверены на PostgreSQL 17 + MockTransport; durable личная, групповая, карточка с кнопками, PDF и edit того же group message ID реально прошли MAX | `entrypoints/processes.py`, `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`; визуальная mobile/web проверка и доменный edit Z-карточки ещё нужны |
@@ -126,6 +126,9 @@ MVP-стыки K (агент/дела/обращения), ранее закре
 
 Статус A-MVP-2: начата ветка `a-mvp-2`. Добавлена read-only диагностика inbox/outbox/jobs:
 агрегаты status/ready/stale lease и явные alerts без payload, текста, токенов или MAX ID.
+Добавленная redacted проверка отправленного MAX-сообщения по `mid` прошла на реальном текстовом
+сообщении: наружу вышли только признак текста и типы вложений. Она не заменяет ручное открытие
+файла в web/mobile.
 Транспортные live-пункты (фото, допустимый callback/edit, потеря прав и mobile/web) ещё не
 закрыты; наличие CLI не считается их подтверждением.
 
