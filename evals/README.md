@@ -9,6 +9,16 @@
 `reviewed_rule_or_ask` разрешает уточнение/отказ от вывода при отсутствии
 проверенного источника. Эти символические refs не являются настоящими нормами.
 
+Оценщик раскрывает альтернативы в `required_actions` по фактическим действиям:
+`case.create_or_attach` → `case.create` или `case.attach_message`,
+`case.attach_or_clarify` → `case.attach_message` или `conversation.ask`,
+`create_recurrence_or_clarify` → подтверждённая связь `case.recurrence.create`
+или `conversation.ask`, `initiative.create_or_clarify` → создание дела вида
+initiative (`initiative.create`) или `conversation.ask`. Последние два кода
+выводятся harness из сохранённого case event и kind; одного вызова
+`case.create` без проверки kind/recurrence недостаточно. Само символическое
+имя альтернативы в trace не засчитывается.
+
 ## Метрики, утверждённые до настройки prompt
 
 - Exact route set accuracy по всем 24 кейсам и отдельно по смешанным.

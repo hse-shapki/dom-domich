@@ -1,10 +1,9 @@
 """A14: локальная production-цепь от проблемы до подтверждённого закрытия."""
 
 import os
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -26,8 +25,8 @@ from dom_domych.application.requests.service import RequestService
 from dom_domych.application.resolution.production import register_z_poll_events
 from dom_domych.contracts.base import ExecutionMode, PrincipalType, TrustedContext
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
-from dom_domych.domain.executor.models import ExternalStatus
 from dom_domych.domain.polls.models import PollKind, PollStatus, VoteChoice
+from dom_domych.entrypoints.zamira_operator import build_parser, run_command
 from dom_domych.infrastructure.documents.renderer import PdfRenderer
 from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.max.client import MaxApiClient
@@ -64,12 +63,6 @@ class FixedClock:
 
     def now(self) -> datetime:
         return self.current
-
-
-@dataclass(frozen=True)
-class ExecutorContext:
-    house_id: UUID
-    capabilities: frozenset[str]
 
 
 async def accept_event(_: object) -> bool:
@@ -239,11 +232,14 @@ async def test_case_request_executor_resolution_outcomes_through_runtime(
             assert request is not None and request.executor_operation_id is not None
             executor_operation_id = request.executor_operation_id
 
-        executor = DemoExecutorService(executor_store, clock)
-        registration_context = ExecutorContext(HOUSE_ONE, frozenset({"demo_executor.register"}))
-        operator_context = ExecutorContext(HOUSE_ONE, frozenset({"demo_executor.operator"}))
-        registered, emitted = await executor.register(executor_operation_id, registration_context)
-        assert emitted and registered.registration_number is not None
+        parser = build_parser()
+        register_args = parser.parse_args(
+            ["register", "--house-id", str(HOUSE_ONE), "--operation-id", str(executor_operation_id)]
+        )
+        registered = await run_command(register_args, database_url_for_test(), clock)
+        assert "status=registered" in registered and "registration=DEMO-" in registered
+        assert "emitted=True" in registered
+        assert "emitted=False" in await run_command(register_args, database_url_for_test(), clock)
 
         dispatcher, revisions = EventDispatcher({}), RevisionRouter()
         resolution = register_z_poll_events(dispatcher, revisions, sessions, clock)
@@ -361,10 +357,20 @@ async def test_case_request_executor_resolution_outcomes_through_runtime(
         assert await runtime_worker.run_once()  # document.ready + request binding
 
         done_event_id = uuid4()
-        done, emitted = await executor.set_status(
-            executor_operation_id, ExternalStatus.DONE, done_event_id, operator_context
+        done_args = parser.parse_args(
+            [
+                "done",
+                "--house-id",
+                str(HOUSE_ONE),
+                "--operation-id",
+                str(executor_operation_id),
+                "--event-id",
+                str(done_event_id),
+            ]
         )
-        assert emitted and done.status is ExternalStatus.DONE
+        done = await run_command(done_args, database_url_for_test(), clock)
+        assert "status=done" in done and "emitted=True" in done
+        assert "emitted=False" in await run_command(done_args, database_url_for_test(), clock)
         assert await runtime_worker.run_once()
 
         async with sessions() as session:

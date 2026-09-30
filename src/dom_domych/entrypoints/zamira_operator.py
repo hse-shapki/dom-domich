@@ -15,6 +15,7 @@ from dom_domych.application.executor.service import DemoExecutorService
 from dom_domych.application.jobs.inbox_worker import SystemClock
 from dom_domych.domain.documents.snapshot import DocumentKind
 from dom_domych.domain.executor.models import ExternalStatus
+from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.postgres.demo_executor import PostgresDemoExecutor
 from dom_domych.infrastructure.postgres.models import HouseRow
 from dom_domych.infrastructure.postgres.session import database_lifespan
@@ -79,9 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_command(args: argparse.Namespace, database_url: str) -> str:
+async def run_command(
+    args: argparse.Namespace, database_url: str, clock: Clock | None = None
+) -> str:
     """Доступ к локальному процессу/БД — граница operator trust, не команда бота."""
-    clock = SystemClock()
+    clock = clock or SystemClock()
     async with database_lifespan(database_url) as sessions:
         async with sessions() as session:
             house = await session.get(HouseRow, args.house_id)

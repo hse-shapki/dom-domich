@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 30.09.2026: A-MVP-1, Z-MVP-1 и Z-MVP-2 объединены. A-MVP-2 прошла 314 тестов на чистой PostgreSQL 18/pgvector, Z-MVP-3 — 302 на PG16.13; отдельные PG17 CI успешны. Объединённый набор проверяется. Единый polling Compose ранее подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox; redacted read-back MAX подтверждён отдельно. Допустимый live голос, PDF Z в mobile/web, новый fallback личного сообщения, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены.
+Проверено 30.09.2026: A-MVP-1, Z-MVP-1 и Z-MVP-2 объединены; A-MVP-2 добавила диагностику и безопасную обработку событий MAX, Z-MVP-3 провела operator CLI через девять G3 исходов и уточнила K15 оценщик. Ветки отдельно прошли PG17 CI; A-MVP-2 дала 314 тестов на чистой PG18/pgvector, Z-MVP-3 — 302 на PG16.13. Объединённый набор тестируется. Единый polling Compose ранее подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox; redacted read-back MAX подтверждён отдельно. Допустимый live голос, PDF Z в mobile/web, новый fallback личного сообщения, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены.
 
 ## Факты на дату проверки
 
@@ -108,9 +108,14 @@ A14/Z14 G3 тест проводит обычную проблему, иници
 request approval/submit, demo registration/done и resolution poll: все 9 комбинаций
 с `closed`, `reopened` и `resolution_unconfirmed` прошли на PostgreSQL 17.
 Он использует реальные PostgreSQL repositories/dispatcher, рендерит frozen PDF в FileStore
-и связывает `document.ready` с request, но не использует LLM и MAX upload/delivery.
+и связывает `document.ready` с request. В Z-MVP-3 все девять сочетаний прошли
+через operator CLI `register`/`done` с replay на чистой PostgreSQL 16.13;
+LLM и живую MAX delivery этот тест не использует.
 K15: оценщик traces считает маршруты, критические ошибки, источник, задержки
 и tool calls по K01 dataset; добавлен воспроизводимый Ollama triage eval runner.
+Z-MVP-3 исправил подсчёт четырёх альтернатив `_or_` по фактическим действиям;
+модель `qwen3:4b` и prompt/policy revisions взяты из проверенного A-MVP-1
+стенда, но фактический K01/K15 прогон на нём ещё не выполнен.
 Полные критические метрики/порог принятия на выбранном live стенде ещё не
 зафиксированы. Версии и ограничения — в `evals/k15-status.md` и K02 probe.
 K16: четыре вариативных демо-пути, ссылки на проверяемые тесты и provenance
@@ -135,10 +140,10 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Напоминания и итог инициативы Z08 | Частично: права/частота/outbox и решение supported/not_supported связаны с case request_ready/not_supported; поддержанная инициатива проходит approval/submit/исполнение в локальном G3 тесте | `initiative_followup.py`, `application/resolution/production.py`, `test_z08_followup_postgres.py`, `test_g3_runtime.py`; live MAX не проверен |
 | FileStore и immutable snapshot Z09 | Частично: registration → immutable appeal snapshot в одной транзакции; replay с изменившимся Clock сохраняет исходные bytes/hash, проверено на PostgreSQL 17 29.09.2026 | `application/documents/production.py`, `infrastructure/postgres/documents.py`, `tests/infrastructure/test_g3_runtime.py`, `test_z09_documents_postgres.py`; position PDF автоматически после initiative decision; приватный notice register требует отдельной capability; complaint PDF из K deadline draft. Проверены источники, ACL, replay и worker трёх видов в `test_z08_followup_postgres.py`; live MAX не проверен |
 | PDF-рендер Z10 | Частично: 4 шаблона и lease/recovery проверены; полный PostgreSQL → process pool → FileStore → приватный outbox → MAX upload/DM прошёл на MockTransport, включая настоящие producer-события всех четырёх PDF | `application/documents/worker.py`, `tests/infrastructure/test_z08_followup_postgres.py`, `test_g3_runtime.py`, `test_z10_max_pdf_pipeline.py`; live открытие PDF Z в mobile/web не проверено |
-| DemoExecutor Z11 | Частично: PostgreSQL idempotency/конкуренция, approved draft, права, события/outbox и K регистрацию проверены на локальной PostgreSQL 16; K/A process root подключён | `src/dom_domych/infrastructure/postgres/demo_executor.py`, `application/executor/production.py`, `application/resolution/production.py`, `entrypoints/processes.py`, `tests/infrastructure/test_z11_demo_executor_postgres.py`; локальный `entrypoints/zamira_operator.py` проверен: register/status replay и запрет live-дома; live MAX ещё не проверен |
+| DemoExecutor Z11 | Частично: права, идемпотентность и process root проверены локально; register/done CLI и повтор без нового события проведены через 9 G3 сценариев на PostgreSQL 16.13 | `src/dom_domych/entrypoints/zamira_operator.py`, `tests/infrastructure/test_g3_runtime.py`, `test_z11_demo_executor_postgres.py`; live MAX ещё не проверен |
 | Старт проверки результата Z12 | Частично: done → исходная проблема/действующая редакция инициативы/frozen emergency audience → личный poll/jobs/outbox; проверено PostgreSQL 17, авария без начального poll поддерживается | `infrastructure/postgres/original_audience.py`, `resolution.py`, `test_z12_resolution_postgres.py`, `test_g3_runtime.py`; live MAX не проверен |
 | Итоги проверки результата Z13 | Частично: три исхода, отмена будущих jobs, resolution.rejected, stale version и late done replay проверены на PostgreSQL 17 | `application/resolution/production.py`, `infrastructure/postgres/resolution.py`, `tests/infrastructure/test_z12_resolution_postgres.py`; live MAX не проверен |
-| Сквозная проверка Z14 | Частично: 9 production PostgreSQL 17 сценариев problem/initiative/emergency → request → PDF/FileStore/binding → executor → три исхода и отдельный problem → callback/card → request/PDF → closed/reopened MockTransport путь | `tests/infrastructure/test_g3_runtime.py`, `test_g3_runtime_callback.py`; цельный live MAX/LLM G3 отсутствует |
+| Сквозная проверка Z14 | Частично: 9 production PostgreSQL сценариев problem/initiative/emergency → request → PDF/FileStore/binding → operator CLI register/done/replay → три исхода прошли на чистой PG16.13; отдельно problem → callback/card → request/PDF → closed/reopened MockTransport путь | `tests/infrastructure/test_g3_runtime.py`, `test_g3_runtime_callback.py`, `docs/release/z-mvp-3-check.md`; цельный live MAX/LLM G3 отсутствует |
 | PDF QA Z15 | Частично: 29.09.2026 заново сгенерированы/просмотрены 4 образца (7 страниц) и 4 production PostgreSQL/FileStore документа (6 страниц); embedded fonts, snapshot/hash/поля/приватность сверены | `docs/release/zamira-pdf-qa.md`, `output/pdf/qa-2026-09-29/manifest.json`; MAX mobile/web не проверены |
 | Материалы Z16 | Частично: handoff, 9 локальных G3 исходов, QA manifest, manual demo двух исходов и live PDF smoke готовы | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`; live evidence MAX mobile/web отсутствуют |
 | Python-проект и зависимости A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; ветка A-MVP-2 прошла 314 тестов на чистой PostgreSQL 18/pgvector, предыдущий clean PG17 прогон — 303 теста; migration/check, двойной seed, Ruff и mypy прошли; CI ожидается |

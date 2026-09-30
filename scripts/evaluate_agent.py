@@ -95,6 +95,24 @@ def _percentile(values: list[float], fraction: float) -> float | None:
     return ordered[max(0, ceil(len(ordered) * fraction) - 1)]
 
 
+_ACTION_ALTERNATIVES: dict[str, frozenset[str]] = {
+    "case.create_or_attach": frozenset({"case.create", "case.attach_message"}),
+    "case.attach_or_clarify": frozenset({"case.attach_message", "conversation.ask"}),
+    "create_recurrence_or_clarify": frozenset({"case.recurrence.create", "conversation.ask"}),
+    "initiative.create_or_clarify": frozenset({"initiative.create", "conversation.ask"}),
+}
+
+
+def _required_actions_met(required: tuple[str, ...], actual: tuple[str, ...]) -> bool:
+    actions = set(actual)
+    return all(
+        bool(actions & _ACTION_ALTERNATIVES[action])
+        if action in _ACTION_ALTERNATIVES
+        else action in actions
+        for action in required
+    )
+
+
 def score(cases: list[EvalCase], traces: dict[str, EvalTrace], invalid_lines: int = 0) -> EvalScore:
     expected = {case.id for case in cases}
     if len(expected) != len(cases) or set(traces) - expected:
@@ -116,7 +134,7 @@ def score(cases: list[EvalCase], traces: dict[str, EvalTrace], invalid_lines: in
                 critical.append(case.id)
             continue
         route_ok = set(trace.routes) == set(case.routes) and len(trace.routes) == len(case.routes)
-        action_ok = set(case.required_actions) <= set(trace.actions)
+        action_ok = _required_actions_met(case.required_actions, trace.actions)
         forbidden_hit = bool(
             set(case.forbidden_actions) & (set(trace.actions) | set(trace.violations))
         )
