@@ -7,6 +7,7 @@ import os
 import httpx
 
 from dom_domych.infrastructure.max.client import MAX_API_BASE_URL, MaxApiClient
+from dom_domych.infrastructure.max.tls import max_ssl_context
 
 
 def _required(name: str) -> str:
@@ -19,7 +20,12 @@ def _required(name: str) -> str:
 async def run(arguments: argparse.Namespace) -> None:
     token = _required("MAX_BOT_TOKEN")
     timeout = httpx.Timeout(connect=5, read=30, write=30, pool=5)
-    async with httpx.AsyncClient(base_url=MAX_API_BASE_URL, timeout=timeout) as http:
+    async with httpx.AsyncClient(
+        base_url=MAX_API_BASE_URL,
+        timeout=timeout,
+        verify=max_ssl_context(),
+        trust_env=False,
+    ) as http:
         client = MaxApiClient(http, token)
         if arguments.command == "probe":
             identity = await client.get_me()
