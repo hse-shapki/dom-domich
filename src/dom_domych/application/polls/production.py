@@ -14,10 +14,9 @@ from dom_domych.application.polls.callback import (
 from dom_domych.application.polls.max_callback import MaxPollCallbackTransport
 from dom_domych.application.polls.service import PollService
 from dom_domych.contracts.events import EventEnvelope, EventName
-from dom_domych.domain.ports.core import Clock, DeliveryIntent
+from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.max.client import MaxApiClient, MaxApiError
-from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
-from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore, token_digest
+from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 
 logger = structlog.get_logger()
@@ -53,7 +52,6 @@ class PostgresPollCallbackProcessor:
             polls = PostgresPollRepository(session)
             processor = PollCallbackHandler(actions, polls, PollService(polls, self.clock))
             outcome = await MaxPollCallbackTransport(session, actions, processor).handle(event)
-            await self._enqueue_feedback(session, event, outcome)
             if outcome.status in (CallbackStatus.RECORDED, CallbackStatus.CHANGED):
                 if outcome.poll_id is None or outcome.delivery_house_id is None:
                     raise RuntimeError("recorded callback has no trusted poll context")
@@ -62,30 +60,6 @@ class PostgresPollCallbackProcessor:
                 )
         await self._acknowledge(event, outcome)
         return outcome
-
-    async def _enqueue_feedback(
-        self, session: AsyncSession, event: EventEnvelope, outcome: CallbackOutcome
-    ) -> None:
-        if outcome.recipient_id is None or outcome.delivery_house_id is None:
-            return
-        callback = event.callback
-        if callback is None:
-            raise ValueError("callback payload required")
-        action_key = token_digest(callback.action_token)[:16]
-        subject = str(outcome.poll_id) if outcome.poll_id else action_key
-        operation_key = f"poll:feedback:{subject}:{outcome.recipient_id}:{outcome.status.value}"
-        if outcome.status in (CallbackStatus.RECORDED, CallbackStatus.CHANGED):
-            operation_key += f":{event.event_id}"
-        elif outcome.status is CallbackStatus.DUPLICATE:
-            operation_key += f":{action_key}"
-        await PostgresDeliveryQueue(session, self.clock).enqueue(
-            DeliveryIntent(
-                house_id=outcome.delivery_house_id,
-                operation_key=operation_key,
-                text=_CALLBACK_NOTIFICATIONS[outcome.status],
-                recipient_id=outcome.recipient_id,
-            )
-        )
 
     async def _acknowledge(self, event: EventEnvelope, outcome: CallbackOutcome) -> None:
         callback = event.callback

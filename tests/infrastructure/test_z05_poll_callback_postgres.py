@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import or_, select, update
+from sqlalchemy import select, update
 
 from dom_domych.application.audiences.service import AudienceService
 from dom_domych.application.cards.production import PostgresPublicCards
@@ -26,7 +26,7 @@ from dom_domych.infrastructure.postgres.audiences import PostgresAudienceReposit
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, ResidentRow
-from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore, token_digest
+from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
 from dom_domych.infrastructure.postgres.z_poll_models import PollAnswerHistoryRow, PollAnswerRow
@@ -189,13 +189,8 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
             assert (await processor.process(good)).status == CallbackStatus.RECORDED
             worker = DeliveryWorker(sessions, max_client, clock, "z05-delivery")
             assert await worker.run_once() is True
-            assert await worker.run_once() is True
             assert await worker.run_once() is False
-            assert {(method, path) for method, path, _, _ in sent} == {
-                ("POST", "/messages"),
-                ("PUT", "/messages"),
-            }
-            assert any(params.get("user_id") == user_one for _, _, params, _ in sent)
+            assert {(method, path) for method, path, _, _ in sent} == {("PUT", "/messages")}
             assert any(params.get("message_id") == "public-card" for _, _, params, _ in sent)
             assert (await processor.process(good)).status == CallbackStatus.DUPLICATE
             assert (
@@ -242,26 +237,11 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
                 feedback = (
                     await session.scalars(
                         select(OutboxDeliveryRow).where(
-                            or_(
-                                OutboxDeliveryRow.operation_key.like(
-                                    f"poll:feedback:{poll.definition.poll_id}:%"
-                                ),
-                                OutboxDeliveryRow.operation_key.like(
-                                    f"poll:feedback:{token_digest('unknown-token')[:16]}:%"
-                                ),
-                                OutboxDeliveryRow.operation_key.like(
-                                    f"poll:feedback:{token_digest(token)[:16]}:%"
-                                ),
-                            )
+                            OutboxDeliveryRow.operation_key.like("poll:feedback:%")
                         )
                     )
                 ).all()
-                assert len(feedback) == 6
-                assert all(row.chat_id is None and row.recipient_id is not None for row in feedback)
-                assert any(
-                    row.recipient_id == synthetic_id("resident-17") and "только жителям" in row.text
-                    for row in feedback
-                )
+                assert feedback == []
                 edits = (
                     await session.scalars(
                         select(OutboxDeliveryRow).where(
