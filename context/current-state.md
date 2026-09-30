@@ -53,9 +53,12 @@ case messages, versioned events и recurrence. Тест на PostgreSQL 18 пр�
 Для Z06 добавлен scoped reader автора инициативы из неизменяемой origin-связи;
 он не принимает author/house из аргументов модели. Z repository/UoW реализован
 и проверен; K case command автоматически открывает инициативу через durable событие.
-K09: ProblemWorkflow проверяет scope дела и доверенный итог Z. Production handler
-после `case.create` теперь одной UoW сохраняет frozen audience, poll, deadline,
-переход case и публичную карточку/outbox; отсутствие group chat откатывает весь переход.
+K09: ProblemWorkflow проверяет scope дела и доверенный итог Z. В MAX message route
+`case.create` сначала сохраняет скрытый draft `awaiting_confirmation` и ставит автору
+детерминированное личное предложение ответить «Да»; tool trace, рассуждения модели и
+UUID дела наружу не отправляются. Только явное подтверждение выпускает durable
+`problem.detected`, после чего production handler одной UoW сохраняет frozen audience,
+poll, deadline, переход case и публичную карточку/outbox; отсутствие group chat откатывает весь переход.
 Trusted итог poll до agent continuation переводит дело в `request_ready` либо
 `needs_evidence`; во второй ветке private outbox создаётся только для ответивших «да».
 K09 evidence assessment теперь требует отдельной capability, текущей версии дела и
@@ -160,7 +163,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов, CI Actions закреплены по SHA актуальных релизов | `scripts/release_audit.py`, `.github/workflows/python.yml`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
 | Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены; нативный Ollama `qwen3:4b` прошёл PostgreSQL problem path `case.search` → `case.create` → reply outbox | `src/dom_domych/agent/`, `infrastructure/llm/ollama.py`, `application/agent/composition.py`, tests/evals; полный live MAX/G3 и реальные метрики ещё открыты |
 | Хранение опросов | Частично: PostgreSQL repository/migration, callback и jobs проверены локально | `infrastructure/postgres/polls.py`, `application/polls/production.py`, `tests/infrastructure/test_z04_polls_postgres.py`; K route проверен локально; live MAX не проверен |
-| Z-MVP-1: вход до обращения | Частично: reviewed вопрос/уточнение, личные evidence/assessment, авторская ревизия инициативы, reviewed rule и явные approve/send подключены к inbox; повторы и чужой actor проверены на PG16.13 | `application/agent/resident_actions.py`, `resident_production.py`, `entrypoints/processes.py`, Z-MVP-1 tests; live MAX mobile/web и вариативные фразы ещё не проверены |
+| Z-MVP-1: вход до обращения | Частично: reviewed вопрос/уточнение, личное подтверждение запуска problem poll, evidence/assessment, авторская ревизия инициативы, reviewed rule и явные approve/send подключены к inbox; повторы и чужой actor проверены локально | `application/agent/resident_actions.py`, `resident_production.py`, `entrypoints/processes.py`, Z-MVP-1 tests; новый confirm-flow, MAX mobile/web и вариативные фразы ещё требуют live проверки |
 | Рабочий стенд и внешние проверки | Частично | Целевой PG17/pgvector, production image и полный local Compose lifecycle проверены; live MAX bot identity/polling/DM onboarding, group card, отказ callback вне аудитории и транспорт синтетического PDF пройдены, local-LLM problem path проверен отдельно; публичный HTTPS, mobile, допустимый голос/доменный edit/файлы Z и цельный live G3 ещё не проверены |
 
 Эти строки описывают только осмотр репозитория. Они не доказывают отсутствие внешнего аккаунта или бота у команды. И наоборот, схема в Markdown не доказывает готовность реализации.

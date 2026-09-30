@@ -14,7 +14,10 @@ from dom_domych.application.agent.composition import (
     build_k_message_agent,
 )
 from dom_domych.application.agent.messages import register_message_agent
+from dom_domych.application.agent.resident_actions import ResidentAction
+from dom_domych.application.agent.resident_production import PostgresResidentActions
 from dom_domych.application.jobs.inbox_worker import EventDispatcher, InboxWorker
+from dom_domych.contracts.base import ExecutionMode, PrincipalType, TrustedContext
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource, MessagePayload
 from dom_domych.domain.executor.models import ApprovedDraft, DemoOperation
 from dom_domych.infrastructure.postgres.agent_models import AgentRunRow
@@ -99,7 +102,6 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                 '"entrance":1,"object_name":"lighting"}]}'
             ),
             LlmResponse("", (LlmToolCall("case.create", create_arguments),)),
-            LlmResponse("Создала дело о неработающем освещении."),
         ]
     )
     async with database_lifespan(database_url) as sessions:
@@ -162,12 +164,12 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
             worker = InboxWorker(sessions, dispatcher, clock, "k14-message-worker")
 
             assert await worker.run_once()
-            assert llm.call_count == 3
+            assert llm.call_count == 2
 
             async with sessions() as session:
                 case = await session.scalar(select(CaseRow).where(CaseRow.house_id == house_id))
                 assert case is not None
-                assert case.kind == "problem" and case.status == "detected"
+                assert case.kind == "problem" and case.status == "awaiting_confirmation"
                 origin = await session.get(CaseMessageRow, (case.id, event_id))
                 assert origin is not None and origin.actor_id == resident_id
                 run = await session.scalar(
@@ -180,11 +182,45 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                     )
                 )
                 assert delivery is not None
-                assert delivery.house_id == house_id and delivery.chat_id == "777"
+                assert delivery.house_id == house_id and delivery.chat_id is None
+                assert delivery.recipient_id == resident_id
                 assert delivery.status == "pending"
-                assert f"ID дела: {case.id}" in delivery.text
+                assert "Ответьте «Да»" in delivery.text
+                assert str(case.id) not in delivery.text
+                assert "case.create" not in delivery.text
                 inbox = await session.get(InboxEventRow, event_id)
                 assert inbox is not None and inbox.status == "done"
+                problem_event = await session.scalar(
+                    select(InboxEventRow).where(
+                        InboxEventRow.source_key == f"problem-detected:{case.id}"
+                    )
+                )
+                assert problem_event is None
+
+            confirm_id = uuid4()
+            confirmed = await PostgresResidentActions(
+                sessions,
+                clock,
+                object(),
+                object(),  # type: ignore[arg-type]
+            ).execute(
+                ResidentAction("confirm", None),
+                event,
+                TrustedContext(
+                    run_id=uuid4(),
+                    event_id=confirm_id,
+                    house_id=house_id,
+                    actor_id=resident_id,
+                    principal_type=PrincipalType.RESIDENT,
+                    capabilities=frozenset(),
+                    correlation_id=confirm_id,
+                    mode=ExecutionMode.DEMO,
+                ),
+            )
+            assert "Опрос запускается" in confirmed
+            async with sessions() as session:
+                case = await session.scalar(select(CaseRow).where(CaseRow.house_id == house_id))
+                assert case is not None and case.status == "detected" and case.version == 2
                 problem_event = await session.scalar(
                     select(InboxEventRow).where(
                         InboxEventRow.source_key == f"problem-detected:{case.id}"

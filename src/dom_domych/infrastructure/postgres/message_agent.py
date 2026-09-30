@@ -9,7 +9,7 @@ from dom_domych.application.agent.messages import MessagePrincipal
 from dom_domych.contracts.base import ExecutionMode
 from dom_domych.contracts.events import EventEnvelope
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
-from dom_domych.infrastructure.postgres.case_models import CaseMessageRow
+from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseRow
 from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
 from dom_domych.infrastructure.postgres.models import HouseRow, ResidencyRow, ResidentRow
 
@@ -80,15 +80,32 @@ class PostgresMessageReplies:
             raise ValueError("MESSAGE_REQUIRED")
         direct = event.message.chat_id.startswith("dm:")
         async with self.sessions.begin() as session:
-            case_id = await session.scalar(
-                select(CaseMessageRow.case_id).where(
-                    CaseMessageRow.house_id == principal.house_id,
-                    CaseMessageRow.message_id == event.event_id,
-                    CaseMessageRow.actor_id == principal.actor_id,
+            case = (
+                await session.execute(
+                    select(CaseRow.id, CaseRow.title, CaseRow.status)
+                    .join(
+                        CaseMessageRow,
+                        (CaseMessageRow.case_id == CaseRow.id)
+                        & (CaseMessageRow.house_id == CaseRow.house_id),
+                    )
+                    .where(
+                        CaseMessageRow.house_id == principal.house_id,
+                        CaseMessageRow.message_id == event.event_id,
+                        CaseMessageRow.actor_id == principal.actor_id,
+                    )
                 )
-            )
-            if case_id is not None and str(case_id) not in text:
-                text = f"{text}\nID дела: {case_id}"
+            ).one_or_none()
+            if case is not None and case.status == "awaiting_confirmation":
+                text = (
+                    f"Похожих активных обращений не найдено. Запустить опрос по проблеме "
+                    f"«{case.title}»? Ответьте «Да» в этом чате."
+                )
+                direct = True
+            elif any(
+                marker in text.casefold()
+                for marker in ("<think", "</think", "case.search", "case.create", "tool_call")
+            ):
+                text = "Сообщение обработано, но безопасный ответ не сформирован. Уточните запрос."
             intent = DeliveryIntent(
                 house_id=principal.house_id,
                 operation_key=f"agent-reply:{event.event_id}",
