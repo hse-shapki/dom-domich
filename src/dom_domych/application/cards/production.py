@@ -29,6 +29,28 @@ class PostgresPublicCards:
         self.sessions = sessions
         self.clock = clock
 
+    async def enqueue_poll_update(
+        self, session: AsyncSession, poll_id: UUID, house_id: UUID
+    ) -> UUID | None:
+        """Обновить публичную карточку в транзакции принятого голоса."""
+
+        poll = await PostgresPollRepository(session).get_state(poll_id, house_id)
+        if poll is None or poll.definition.kind is PollKind.RESOLUTION_CHECK:
+            return None
+        if poll.definition.kind is PollKind.INITIATIVE_POSITION:
+            state = await PostgresInitiativeRepository._load(
+                session, poll.definition.case_id, house_id
+            )
+            return await self.enqueue_initiative(session, state, poll)
+        case = await session.scalar(
+            select(CaseRow).where(
+                CaseRow.id == poll.definition.case_id, CaseRow.house_id == house_id
+            )
+        )
+        if case is None:
+            raise ValueError("case is missing or belongs to another house")
+        return await self.enqueue_problem(session, case.title, case.version, poll)
+
     async def publish_initiative(self, case_id: UUID, house_id: UUID) -> UUID:
         async with self.sessions.begin() as session:
             initiative = await session.scalar(
@@ -100,7 +122,22 @@ class PostgresPublicCards:
                 OutboxDeliveryRow.operation_key == card.edit_key,
             )
         )
-        if base is not None and base.text == card.text and base.chat_id == chat_id:
+        prior_edit = None
+        if base is not None:
+            prior_edit = await session.scalar(
+                select(OutboxDeliveryRow.id)
+                .where(
+                    OutboxDeliveryRow.house_id == card.house_id,
+                    OutboxDeliveryRow.edit_key == card.edit_key,
+                )
+                .limit(1)
+            )
+        if (
+            base is not None
+            and prior_edit is None
+            and base.text == card.text
+            and base.chat_id == chat_id
+        ):
             if poll.status is not PollStatus.OPEN and not base.buttons:
                 return base.id
             if poll.status is PollStatus.OPEN and len(base.buttons) == 2:

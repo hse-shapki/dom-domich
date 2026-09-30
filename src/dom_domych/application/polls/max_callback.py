@@ -1,6 +1,6 @@
 """MAX callback → доверенный житель дома → Z PollCallbackHandler."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
 from uuid import UUID
@@ -51,6 +51,20 @@ class MaxPollCallbackTransport:
             raise ValueError("inconsistent callback actor")
         action = await self.actions.get(callback.action_token)
         if action is None:
+            if callback.chat_id is not None and not callback.chat_id.startswith("dm:"):
+                house_id = await self.session.scalar(
+                    select(HouseRow.id).where(HouseRow.max_chat_id == callback.chat_id)
+                )
+                if house_id is not None:
+                    actor_id = await self._resolve_resident(
+                        callback.sender_user_id, house_id, event.received_at
+                    )
+                    if actor_id is not None:
+                        return CallbackOutcome(
+                            CallbackStatus.UNKNOWN_ACTION,
+                            recipient_id=actor_id,
+                            delivery_house_id=house_id,
+                        )
             return CallbackOutcome(CallbackStatus.UNKNOWN_ACTION)
         if callback.chat_id is not None and not callback.chat_id.startswith("dm:"):
             house_id = await self.session.scalar(
@@ -63,10 +77,11 @@ class MaxPollCallbackTransport:
         )
         if actor_id is None:
             return CallbackOutcome(CallbackStatus.NOT_ALLOWED)
-        return await self.processor.handle(
+        outcome = await self.processor.handle(
             CallbackInput(callback.action_token, event.event_id, event.received_at),
             ResolvedCallbackContext(action.house_id, actor_id),
         )
+        return replace(outcome, recipient_id=actor_id, delivery_house_id=action.house_id)
 
     async def _resolve_resident(
         self, max_user_id: str, house_id: UUID, at: datetime

@@ -162,7 +162,7 @@ async def test_stale_revision_revocation_and_expiry_reject_callback() -> None:
 
     assert stale_revision.status == CallbackStatus.STALE
     assert revoked.status == CallbackStatus.STALE
-    assert expired.status == CallbackStatus.STALE
+    assert expired.status == CallbackStatus.LATE
     assert repository.by_id[poll_id].tally.answered == 0
 
 
