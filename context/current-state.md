@@ -112,9 +112,10 @@ request approval/submit, demo registration/done, resolution poll и подтве
 Он использует реальные PostgreSQL repositories/dispatcher, рендерит frozen PDF в FileStore
 и связывает `document.ready` с request, но не использует LLM и MAX upload/delivery.
 K15: оценщик traces считает маршруты, критические ошибки, источник, задержки
-и tool calls по K01 dataset; unit-тесты проходят. Реальные метрики модели
-не измерены: Qwen3-8B на 8 GiB Mac не дал ответа и вызвал swap. Версии и
-ограничения записаны в `evals/k15-status.md` и K02 probe.
+и tool calls по K01 dataset; route-harness запускает 24 сообщения через реальный
+Ollama `LlmTriagePort` и сохраняет валидированные traces без выдуманных tool actions;
+unit-тесты проходят. Полные метрики модели ещё не измерены. Версии и ограничения
+записаны в `evals/k15-status.md` и K02 probe.
 K16: четыре вариативных демо-пути, ссылки на проверяемые тесты и provenance
 собраны в `docs/release/katerina-demo-handoff.md`; live MAX/G3 evidence не
 заполнены. Z handoff обновлён для PostgreSQL-модулей и локального воспроизведения.

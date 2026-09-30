@@ -7,6 +7,13 @@ harness и выдаёт отдельно точность маршрутов, re
 число вызовов tools. Пропуск кейса считается провалом; критические ошибки
 перечисляются по ID. Локальные unit-тесты оценщика проходят.
 
+`scripts/run_triage_evals.py` воспроизводимо запускает все сообщения через
+Ollama и production `LlmTriagePort`. Он фиксирует только валидированные routes,
+latency и ошибки schema/transport; `actions` намеренно остаются пустыми, потому
+что route-only прогон не исполняет backend tools. Такой trace пригоден для
+route accuracy, emergency recall, schema validity и latency, но не закрывает
+action/source/access метрики полного K15.
+
 ```sh
 uv run python scripts/evaluate_agent.py trace.jsonl \
   --model-revision REVISION --prompt-revision REVISION --hardware HOST
