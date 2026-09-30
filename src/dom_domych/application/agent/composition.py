@@ -38,6 +38,7 @@ from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
 from dom_domych.infrastructure.postgres.emergency_evidence import PostgresEmergencyEvidenceQueue
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
 from dom_domych.infrastructure.postgres.message_agent import (
+    PostgresMessageHistory,
     PostgresMessagePrincipals,
     PostgresMessageReplies,
 )
@@ -144,6 +145,7 @@ def build_k_message_agent(
         TriageService(LlmTriagePort(llm), knowledge),
         coordinator,
         PostgresMessageReplies(sessions, clock),
+        PostgresMessageHistory(sessions),
     )
 
 

@@ -1,5 +1,6 @@
 """PostgreSQL adapters доверенного MAX actor/house и ответа agent в outbox."""
 
+from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -11,7 +12,12 @@ from dom_domych.contracts.events import EventEnvelope
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseRow
 from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
-from dom_domych.infrastructure.postgres.models import HouseRow, ResidencyRow, ResidentRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    InboxEventRow,
+    ResidencyRow,
+    ResidentRow,
+)
 
 
 class PostgresMessagePrincipals:
@@ -114,3 +120,47 @@ class PostgresMessageReplies:
                 chat_id=None if direct else event.message.chat_id,
             )
             return await PostgresDeliveryQueue(session, self.clock).enqueue(intent)
+
+
+class PostgresMessageHistory:
+    """Возвращает только недавний текст того же MAX actor и чата."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self.sessions = sessions
+
+    async def previous_text(self, event: EventEnvelope, principal: MessagePrincipal) -> str | None:
+        if event.message is None:
+            return None
+        async with self.sessions() as session:
+            rows = (
+                await session.scalars(
+                    select(InboxEventRow)
+                    .where(
+                        InboxEventRow.source == "max",
+                        InboxEventRow.event_name == "message.received",
+                        or_(
+                            InboxEventRow.house_id.is_(None),
+                            InboxEventRow.house_id == principal.house_id,
+                        ),
+                        InboxEventRow.id != event.event_id,
+                        InboxEventRow.received_at < event.received_at,
+                        InboxEventRow.received_at >= event.received_at - timedelta(minutes=15),
+                    )
+                    .order_by(InboxEventRow.received_at.desc())
+                    .limit(20)
+                )
+            ).all()
+        for row in rows:
+            payload = row.normalized_event or {}
+            message = payload.get("message")
+            if not isinstance(message, dict):
+                continue
+            if (
+                payload.get("actor_user_id") != event.actor_user_id
+                or message.get("chat_id") != event.message.chat_id
+            ):
+                continue
+            text = message.get("text")
+            if isinstance(text, str) and len(text.strip()) >= 8:
+                return text.strip()
+        return None

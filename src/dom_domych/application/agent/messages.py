@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -34,6 +35,19 @@ class MessageReplyPort(Protocol):
     ) -> UUID: ...
 
 
+class MessageHistoryPort(Protocol):
+    async def previous_text(
+        self, event: EventEnvelope, principal: MessagePrincipal
+    ) -> str | None: ...
+
+
+_SHORT_SCOPE_REPLY = re.compile(
+    r"^(?:в\s+)?(?:весь\s+дом|по\s+всему\s+дому|(?:подъезд\s*)?\d+\s*"
+    r"(?:-?(?:й|ый|ой))?\s*(?:подъезд(?:е|а)?|п\.?)?)[.!]?$",
+    re.IGNORECASE,
+)
+
+
 class MessageAgentHandler:
     """Строит trusted context до LLM и ставит ответ в outbox после сохранения run."""
 
@@ -43,11 +57,13 @@ class MessageAgentHandler:
         triage: TriageService,
         coordinator: AgentCoordinator,
         replies: MessageReplyPort,
+        history: MessageHistoryPort | None = None,
     ) -> None:
         self.principals = principals
         self.triage = triage
         self.coordinator = coordinator
         self.replies = replies
+        self.history = history
 
     async def __call__(self, event: EventEnvelope) -> bool:
         if event.name is not EventName.MESSAGE_RECEIVED:
@@ -84,7 +100,12 @@ class MessageAgentHandler:
             correlation_id=event.correlation_id,
             mode=principal.mode,
         )
-        routes = await self.triage.route(text, context, at=event.received_at)
+        model_text = text
+        if self.history is not None and _SHORT_SCOPE_REPLY.fullmatch(text):
+            previous = await self.history.previous_text(event, principal)
+            if previous is not None:
+                model_text = f"{previous}\nУточнение пользователя: {text}"
+        routes = await self.triage.route(model_text, context, at=event.received_at)
         if not routes:
             return True
         if all(route.kind is MessageKind.CONVERSATION for route in routes):
@@ -132,7 +153,7 @@ class MessageAgentHandler:
                         f"Маршруты: {route_facts}"
                     ),
                 },
-                {"role": "user", "content": text},
+                {"role": "user", "content": model_text},
             ],
             context,
             AgentMode.TRIAGE,
