@@ -12,6 +12,16 @@ class EnrollmentDenied(ValueError):
     pass
 
 
+def _valid_max_chat_id(value: str) -> bool:
+    """MAX group IDs are signed int64 values; dialogs can be positive."""
+
+    digits = value[1:] if value.startswith("-") else value
+    if not digits.isdecimal():
+        return False
+    parsed = int(value)
+    return -(2**63) <= parsed <= 2**63 - 1
+
+
 @dataclass(frozen=True, slots=True)
 class TrustedDemoOperator:
     house_id: UUID
@@ -92,6 +102,8 @@ class DemoEnrollmentService:
         return await self.port.set_dm_reachable(max_user_id, False)
 
     async def connect_house_chat(self, max_chat_id: str, operator: TrustedDemoOperator) -> None:
-        if "demo.house_chat_bind" not in operator.capabilities or not max_chat_id.isdecimal():
+        if "demo.house_chat_bind" not in operator.capabilities or not _valid_max_chat_id(
+            max_chat_id
+        ):
             raise EnrollmentDenied("demo operator and MAX chat required")
         await self.port.bind_house_chat(operator.house_id, max_chat_id)
