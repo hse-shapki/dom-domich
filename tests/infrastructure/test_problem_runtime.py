@@ -87,7 +87,7 @@ async def test_problem_created_event_opens_poll_job_and_card_atomically() -> Non
         async with sessions.begin() as session:
             await seed_demo_house(session)
             await session.execute(
-                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id="8800555")
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id="-8800555")
             )
         case = await PostgresCaseWriter(sessions, emit_workflow_events=True).create_case(
             command(f"Проверка runtime {uuid4()}"), context(), clock.now()

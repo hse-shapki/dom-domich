@@ -15,11 +15,31 @@ from dom_domych.contracts.events import (
     EventSource,
     MessagePayload,
 )
+from dom_domych.contracts.max_ids import parse_max_chat_id, valid_max_chat_id
 from dom_domych.contracts.tools import ToolResult
 from dom_domych.domain.audiences.models import AudienceScope, ScopeKind
 from dom_domych.domain.ports.core import HouseContextPort
 from tests.fakes.house import FakeHouseContext
 from tests.fixtures.zamira_house import HOUSE_ONE, HOUSE_TWO, zamira_fixture
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("123", 123),
+        ("-79548166263349", -79548166263349),
+        (str(2**63 - 1), 2**63 - 1),
+        (str(-(2**63)), -(2**63)),
+        ("", None),
+        ("-", None),
+        ("12.3", None),
+        (str(2**63), None),
+        (str(-(2**63) - 1), None),
+    ],
+)
+def test_max_chat_id_is_a_signed_int64(value: str, expected: int | None) -> None:
+    assert parse_max_chat_id(value) == expected
+    assert valid_max_chat_id(value) is (expected is not None)
 
 
 def test_event_rejects_float_external_ids_and_wrong_payload() -> None:

@@ -8,6 +8,7 @@ import httpx
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.contracts.max_ids import parse_max_chat_id
 from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.files.local import FileKind, FileStoreError, LocalFileStore
 from dom_domych.infrastructure.max.client import MaxApiClient, MaxApiError
@@ -19,14 +20,6 @@ from dom_domych.infrastructure.postgres.delivery import (
 )
 
 logger = structlog.get_logger()
-
-
-def _parse_max_chat_id(value: str) -> int | None:
-    digits = value[1:] if value.startswith("-") else value
-    if not digits.isdecimal():
-        return None
-    parsed = int(value)
-    return parsed if -(2**63) <= parsed <= 2**63 - 1 else None
 
 
 class DeliveryWorker:
@@ -159,7 +152,7 @@ class DeliveryWorker:
                 )
             else:
                 assert delivery.chat_id is not None
-                chat_id = _parse_max_chat_id(delivery.chat_id)
+                chat_id = parse_max_chat_id(delivery.chat_id)
                 if chat_id is None:
                     await self._settle(delivery, "failed", error_code="invalid_chat_id")
                     return

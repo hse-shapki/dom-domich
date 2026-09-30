@@ -7,6 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.initiatives.followup import InitiativeDecision, ReminderPolicy
+from dom_domych.contracts.max_ids import valid_max_chat_id
 from dom_domych.domain.initiatives.models import InitiativeConflict
 from dom_domych.domain.polls.models import PollStatus
 from dom_domych.domain.polls.policy import InitiativeOutcome
@@ -286,7 +287,7 @@ class PostgresInitiativeFollowupRepository:
             chat_id = await session.scalar(
                 select(HouseRow.max_chat_id).where(HouseRow.id == decision.house_id)
             )
-            if chat_id is not None and chat_id.isdecimal():
+            if chat_id is not None and valid_max_chat_id(chat_id):
                 label = (
                     "поддержана по демонстрационному правилу"
                     if decision.outcome == InitiativeOutcome.SUPPORTED

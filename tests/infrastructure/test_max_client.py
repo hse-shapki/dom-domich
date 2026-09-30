@@ -44,7 +44,26 @@ async def test_client_rejects_200_without_semantic_success() -> None:
         with pytest.raises(MaxApiError):
             await api.edit_text("mid.abc", "Изменено")
         with pytest.raises(MaxApiError):
-            await api.answer_callback("callback-1")
+            await api.answer_callback("callback-1", "Голос учтён.")
+
+
+@pytest.mark.asyncio
+async def test_client_answers_callback_with_non_empty_notification() -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"success": True})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
+    ) as http:
+        api = MaxApiClient(http, "secret-token")
+        await api.answer_callback("callback-1", "Голос учтён.")
+        with pytest.raises(ValueError):
+            await api.answer_callback("callback-2", "  ")
+    assert seen[0].url.params["callback_id"] == "callback-1"
+    assert json.loads(seen[0].content) == {"notification": "Голос учтён."}
 
 
 @pytest.mark.asyncio

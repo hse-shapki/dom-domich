@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.cards.builders import PublicCard, initiative_card, problem_card
 from dom_domych.application.polls.callback import StoredPollAction
+from dom_domych.contracts.max_ids import valid_max_chat_id
 from dom_domych.domain.initiatives.models import InitiativeState
 from dom_domych.domain.polls.models import PollKind, PollState, PollStatus, VoteChoice
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
@@ -91,7 +92,7 @@ class PostgresPublicCards:
         chat_id = await session.scalar(
             select(HouseRow.max_chat_id).where(HouseRow.id == card.house_id)
         )
-        if chat_id is None or not chat_id.isdecimal():
+        if chat_id is None or not valid_max_chat_id(chat_id):
             raise ValueError("house group chat is not configured")
         base = await session.scalar(
             select(OutboxDeliveryRow).where(

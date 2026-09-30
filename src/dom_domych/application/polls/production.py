@@ -1,16 +1,34 @@
 """Production composition callback-опроса поверх общих A/Z adapters."""
 
+import httpx
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.jobs.inbox_worker import EventDispatcher
-from dom_domych.application.polls.callback import CallbackOutcome, PollCallbackHandler
+from dom_domych.application.polls.callback import (
+    CallbackOutcome,
+    CallbackStatus,
+    PollCallbackHandler,
+)
 from dom_domych.application.polls.max_callback import MaxPollCallbackTransport
 from dom_domych.application.polls.service import PollService
 from dom_domych.contracts.events import EventEnvelope, EventName
 from dom_domych.domain.ports.core import Clock
-from dom_domych.infrastructure.max.client import MaxApiClient
+from dom_domych.infrastructure.max.client import MaxApiClient, MaxApiError
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
+
+logger = structlog.get_logger()
+
+_CALLBACK_NOTIFICATIONS = {
+    CallbackStatus.RECORDED: "Голос учтён.",
+    CallbackStatus.CHANGED: "Голос изменён.",
+    CallbackStatus.DUPLICATE: "Этот голос уже учтён.",
+    CallbackStatus.LATE: "Время голосования истекло.",
+    CallbackStatus.STALE: "Опрос уже завершён или кнопка устарела.",
+    CallbackStatus.NOT_ALLOWED: "Этот опрос доступен только жителям затронутой части дома.",
+    CallbackStatus.UNKNOWN_ACTION: "Кнопка устарела. Откройте актуальную карточку.",
+}
 
 
 class PostgresPollCallbackProcessor:
@@ -31,9 +49,27 @@ class PostgresPollCallbackProcessor:
             actions = PostgresPollActionStore(session)
             polls = PostgresPollRepository(session)
             processor = PollCallbackHandler(actions, polls, PollService(polls, self.clock))
-            return await MaxPollCallbackTransport(
-                session, actions, processor, self.max_client
-            ).handle(event)
+            outcome = await MaxPollCallbackTransport(session, actions, processor).handle(event)
+        await self._acknowledge(event, outcome)
+        return outcome
+
+    async def _acknowledge(self, event: EventEnvelope, outcome: CallbackOutcome) -> None:
+        callback = event.callback
+        if callback is None:
+            raise ValueError("callback payload required")
+        try:
+            await self.max_client.answer_callback(
+                callback.callback_id,
+                _CALLBACK_NOTIFICATIONS[outcome.status],
+                dialog_key=callback.chat_id or f"user:{callback.sender_user_id}",
+            )
+        except (MaxApiError, httpx.TransportError) as exc:
+            logger.warning(
+                "max_callback_ack_failed",
+                error=type(exc).__name__,
+                status_code=exc.status_code if isinstance(exc, MaxApiError) else None,
+                code=exc.code if isinstance(exc, MaxApiError) else None,
+            )
 
     async def handle(self, event: EventEnvelope) -> bool:
         await self.process(event)

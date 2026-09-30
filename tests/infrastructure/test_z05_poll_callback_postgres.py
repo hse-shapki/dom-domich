@@ -1,5 +1,6 @@
 """Z05: настоящий actor MAX проходит через Z callback к PostgreSQL-голосу."""
 
+import json
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -68,10 +69,10 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
     clock = FixedClock()
     chat_one, chat_two = str(uuid4().int)[:18], str(uuid4().int)[:18]
     user_one, user_two = str(uuid4().int)[:18], str(uuid4().int)[:18]
-    acknowledged: list[str] = []
+    acknowledged: list[tuple[str, dict[str, object]]] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
-        acknowledged.append(request.url.params["callback_id"])
+        acknowledged.append((request.url.params["callback_id"], json.loads(request.content)))
         return httpx.Response(200, json={"success": True})
 
     async with database_lifespan(database_url) as sessions:
@@ -161,6 +162,13 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
                 await processor.process(callback_event(token, user_one, chat_one))
             ).status == CallbackStatus.STALE
         assert len(acknowledged) == 5
+        assert [body["notification"] for _, body in acknowledged] == [
+            "Голос учтён.",
+            "Этот голос уже учтён.",
+            "Этот опрос доступен только жителям затронутой части дома.",
+            "Этот опрос доступен только жителям затронутой части дома.",
+            "Опрос уже завершён или кнопка устарела.",
+        ]
         async with sessions.begin() as session:
             await session.execute(
                 update(ResidentRow)
