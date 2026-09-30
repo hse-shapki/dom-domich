@@ -4,7 +4,6 @@ import os
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import httpx
 import pytest
 from sqlalchemy import delete, select, update
 
@@ -20,7 +19,6 @@ from dom_domych.application.polls.max_callback import (
 )
 from dom_domych.contracts.events import CallbackPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.polls.models import VoteChoice
-from dom_domych.infrastructure.max.client import MaxApiClient
 from dom_domych.infrastructure.postgres.models import HouseRow, PollActionRow, ResidentRow
 from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore, token_digest
 from dom_domych.infrastructure.postgres.session import database_lifespan
@@ -82,12 +80,6 @@ async def test_max_callback_uses_registry_actor_and_rejects_wrong_house_or_resid
         bound_resident_id=resident_id,
     )
     processor = RecordingProcessor()
-    acknowledged: list[str] = []
-
-    def respond(request: httpx.Request) -> httpx.Response:
-        acknowledged.append(request.url.params["callback_id"])
-        return httpx.Response(200, json={"success": True})
-
     async with database_lifespan(database_url_for_test()) as sessions:
         async with sessions.begin() as session:
             await seed_demo_house(session)
@@ -111,31 +103,26 @@ async def test_max_callback_uses_registry_actor_and_rejects_wrong_house_or_resid
                 select(PollActionRow).where(PollActionRow.token_digest == token_digest(token))
             )
             assert stored is not None and stored.token_digest != token
-        async with httpx.AsyncClient(
-            transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
-        ) as http:
-            async with sessions() as session:
-                transport = MaxPollCallbackTransport(
-                    session,
-                    PostgresPollActionStore(session),
-                    processor,
-                    MaxApiClient(http, "test-token"),
-                )
-                good = callback_event(token, "222", "333")
-                assert (await transport.handle(good)).status is CallbackStatus.RECORDED
-                assert (
-                    await transport.handle(callback_event(token, "313", "333"))
-                ).status is CallbackStatus.NOT_ALLOWED
-                assert (
-                    await transport.handle(callback_event(token, "222", "444"))
-                ).status is CallbackStatus.NOT_ALLOWED
-                assert (
-                    await transport.handle(callback_event("unknown", "222"))
-                ).status is CallbackStatus.UNKNOWN_ACTION
+        async with sessions() as session:
+            transport = MaxPollCallbackTransport(
+                session,
+                PostgresPollActionStore(session),
+                processor,
+            )
+            good = callback_event(token, "222", "333")
+            assert (await transport.handle(good)).status is CallbackStatus.RECORDED
+            assert (
+                await transport.handle(callback_event(token, "313", "333"))
+            ).status is CallbackStatus.NOT_ALLOWED
+            assert (
+                await transport.handle(callback_event(token, "222", "444"))
+            ).status is CallbackStatus.NOT_ALLOWED
+            assert (
+                await transport.handle(callback_event("unknown", "222"))
+            ).status is CallbackStatus.UNKNOWN_ACTION
         assert len(processor.calls) == 1
         assert processor.calls[0][0].source_event_id == good.event_id
         assert processor.calls[0][1] == ResolvedCallbackContext(HOUSE_ONE, resident_id)
-        assert len(acknowledged) == 4
         async with sessions.begin() as session:
             await PostgresPollActionStore(session).revoke_poll(poll_id, HOUSE_ONE)
             assert (await PostgresPollActionStore(session).get(token)).revoked is True

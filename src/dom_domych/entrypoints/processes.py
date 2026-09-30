@@ -43,11 +43,13 @@ from dom_domych.contracts.events import EventName
 from dom_domych.infrastructure.documents.renderer import PdfRenderer
 from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.llm.llama_server import LlamaServerPort
+from dom_domych.infrastructure.llm.ollama import OllamaPort
 from dom_domych.infrastructure.max.client import MAX_API_BASE_URL, MaxApiClient
 from dom_domych.infrastructure.max.media import MaxMediaTransport
 from dom_domych.infrastructure.max.onboarding import MaxOnboardingHandler
 from dom_domych.infrastructure.max.polling import MaxPollingConsumer
 from dom_domych.infrastructure.max.rate_limit import MaxRateLimits
+from dom_domych.infrastructure.max.tls import max_ssl_context
 from dom_domych.infrastructure.postgres.demo_executor import (
     PostgresDemoExecutor,
     PostgresExecutorPort,
@@ -110,8 +112,13 @@ async def _run_once_loop(stop: asyncio.Event, worker: _RunOnce, process: str) ->
 
 def _llm(settings: AppSettings, client: httpx.AsyncClient) -> LlmPort:
     assert settings.llm_model is not None
+    inner: LlmPort
+    if settings.llm_backend == "ollama":
+        inner = OllamaPort(client, settings.llm_model, max_tokens=settings.llm_max_tokens)
+    else:
+        inner = LlamaServerPort(client, settings.llm_model, max_tokens=settings.llm_max_tokens)
     return RetryingLlmPort(
-        LlamaServerPort(client, settings.llm_model, max_tokens=settings.llm_max_tokens),
+        inner,
         timeout_seconds=settings.llm_timeout_seconds,
         attempts=settings.llm_attempts,
     )
@@ -153,9 +160,15 @@ async def run_inbox() -> None:
     _install_stop_handlers(stop)
     max_timeout = httpx.Timeout(connect=5, read=30, write=30, pool=5)
     llm_timeout = httpx.Timeout(settings.llm_timeout_seconds)
+    max_verify = max_ssl_context()
     async with (
         database_lifespan(settings.database_url) as sessions,
-        httpx.AsyncClient(base_url=MAX_API_BASE_URL, timeout=max_timeout) as max_http,
+        httpx.AsyncClient(
+            base_url=MAX_API_BASE_URL,
+            timeout=max_timeout,
+            verify=max_verify,
+            trust_env=False,
+        ) as max_http,
         httpx.AsyncClient(base_url=settings.llm_base_url, timeout=llm_timeout) as llm_http,
     ):
         clock = SystemClock()
@@ -246,10 +259,16 @@ async def run_outbox() -> None:
     stop = asyncio.Event()
     _install_stop_handlers(stop)
     timeout = httpx.Timeout(connect=5, read=30, write=30, pool=5)
+    max_verify = max_ssl_context()
     async with (
         database_lifespan(settings.database_url) as sessions,
-        httpx.AsyncClient(base_url=MAX_API_BASE_URL, timeout=timeout) as api_http,
-        httpx.AsyncClient(timeout=timeout) as media_http,
+        httpx.AsyncClient(
+            base_url=MAX_API_BASE_URL,
+            timeout=timeout,
+            verify=max_verify,
+            trust_env=False,
+        ) as api_http,
+        httpx.AsyncClient(timeout=timeout, verify=max_verify, trust_env=False) as media_http,
     ):
         max_api = MaxApiClient(api_http, settings.max_bot_token, MaxRateLimits())
         clock = SystemClock()
@@ -299,9 +318,15 @@ async def run_polling() -> None:
     stop = asyncio.Event()
     _install_stop_handlers(stop)
     timeout = httpx.Timeout(connect=5, read=45, write=10, pool=5)
+    max_verify = max_ssl_context()
     async with (
         database_lifespan(settings.database_url) as sessions,
-        httpx.AsyncClient(base_url=MAX_API_BASE_URL, timeout=timeout) as api_http,
+        httpx.AsyncClient(
+            base_url=MAX_API_BASE_URL,
+            timeout=timeout,
+            verify=max_verify,
+            trust_env=False,
+        ) as api_http,
     ):
         max_api = MaxApiClient(api_http, settings.max_bot_token, MaxRateLimits())
         if await max_api.list_webhooks():

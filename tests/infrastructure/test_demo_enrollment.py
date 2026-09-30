@@ -76,7 +76,7 @@ async def test_demo_invitation_onboards_from_max_dm_and_marks_stopped_chat_unrea
             "timestamp": int(clock.now().timestamp() * 1000),
             "message": {
                 "sender": {"user_id": 313},
-                "recipient": {"user_id": 900},
+                "recipient": {"chat_id": 12345, "user_id": 900, "chat_type": "dialog"},
                 "timestamp": int(clock.now().timestamp() * 1000),
                 "body": {"mid": "start.1", "text": f"/start {code}"},
             },
@@ -153,3 +153,23 @@ async def test_demo_operator_cannot_issue_invitation_or_bind_chat_for_non_demo_h
                     TrustedDemoOperator(HOUSE_ONE, frozenset({"demo.house_chat_bind"})),
                 )
             await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_demo_operator_binds_signed_max_group_chat_id() -> None:
+    async with database_lifespan(database_url_for_test()) as sessions:
+        async with sessions.begin() as session:
+            await seed_demo_house(session)
+            service = DemoEnrollmentService(PostgresEnrollment(session), FixedClock())
+            operator = TrustedDemoOperator(HOUSE_ONE, frozenset({"demo.house_chat_bind"}))
+
+            await service.connect_house_chat("-79548166263349", operator)
+            house = await session.get(HouseRow, HOUSE_ONE)
+            assert house is not None and house.max_chat_id == "-79548166263349"
+
+            with pytest.raises(EnrollmentDenied):
+                await service.connect_house_chat("not-a-chat", operator)
+            with pytest.raises(EnrollmentDenied):
+                await service.connect_house_chat(str(2**63), operator)
+
+            house.max_chat_id = None

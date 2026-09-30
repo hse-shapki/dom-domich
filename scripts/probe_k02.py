@@ -8,10 +8,12 @@ import json
 import math
 from statistics import median
 from time import perf_counter
+from typing import Literal, cast
 
 import httpx
 
 from dom_domych.infrastructure.llm.llama_server import LlamaServerPort
+from dom_domych.infrastructure.llm.ollama import OllamaPort
 
 
 def _percentile(values: list[float], fraction: float) -> float:
@@ -19,7 +21,12 @@ def _percentile(values: list[float], fraction: float) -> float:
     return ordered[max(0, math.ceil(len(ordered) * fraction) - 1)]
 
 
-async def probe(url: str, model: str, samples: int) -> dict[str, object]:
+async def probe(
+    url: str,
+    model: str,
+    samples: int,
+    backend: Literal["openai_compatible", "ollama"] = "openai_compatible",
+) -> dict[str, object]:
     timings: list[float] = []
     calls: list[dict[str, object]] = []
     schema: list[dict[str, object]] = [
@@ -40,7 +47,11 @@ async def probe(url: str, model: str, samples: int) -> dict[str, object]:
         "Кто отвечает за освещение общего коридора, если источник не найден?",
     )
     async with httpx.AsyncClient(base_url=url, timeout=120.0) as client:
-        port = LlamaServerPort(client, model, max_tokens=128)
+        port = (
+            OllamaPort(client, model, max_tokens=512)
+            if backend == "ollama"
+            else LlamaServerPort(client, model, max_tokens=128)
+        )
         for index in range(samples):
             prompt = prompts[index % len(prompts)]
             started = perf_counter()
@@ -66,6 +77,8 @@ async def probe(url: str, model: str, samples: int) -> dict[str, object]:
                 }
             )
     return {
+        "backend": backend,
+        "model": model,
         "samples": samples,
         "p50_seconds": round(median(timings), 3),
         "p95_seconds": round(_percentile(timings, 0.95), 3),
@@ -84,11 +97,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Локальный K02 inference probe")
     parser.add_argument("--url", default="http://127.0.0.1:8080")
     parser.add_argument("--model", required=True)
+    parser.add_argument(
+        "--backend",
+        choices=("openai_compatible", "ollama"),
+        default="openai_compatible",
+    )
     parser.add_argument("--samples", type=int, default=6)
     args = parser.parse_args()
     if args.samples < 1:
         parser.error("samples должен быть положительным")
-    print(json.dumps(asyncio.run(probe(args.url, args.model, args.samples)), ensure_ascii=False))
+    backend = cast(Literal["openai_compatible", "ollama"], args.backend)
+    print(
+        json.dumps(
+            asyncio.run(probe(args.url, args.model, args.samples, backend)),
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

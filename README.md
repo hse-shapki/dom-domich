@@ -16,7 +16,7 @@
 Алины: webhook, реестр, inbox/outbox/jobs, callback, онбординг, файлы, rate limits, dev polling,
 retention/release audit и production Compose/Caddy-конфигурация. Production repositories и K/Z orchestration подключены; девять локальных циклов
 problem/initiative/emergency до трёх исходов результата проверены на PostgreSQL 17.
-Живой MAX и inference ещё не проверены; точное состояние — в [контексте](context/current-state.md).
+Отдельные live MAX transport и локальный Ollama problem path проверены; цельный MAX/LLM G3 и mobile/web остаются открытыми. Точное состояние — в [контексте](context/current-state.md).
 
 Локальная проверка: `uv sync --locked`, затем `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/dom_domych`, `uv run pytest`.
 
@@ -29,4 +29,4 @@ backup/restore описаны в [эксплуатационном runbook](docs
 PostgreSQL 17.8 + pgvector 0.8.1. Production app image, migrate/API startup и сохранность
 PostgreSQL/FileStore volumes после рестарта также проверены локальным изолированным Compose
 smoke. Все process services и Caddy поднялись и перезапустились; локальный HTTPS readiness
-доступен только через Caddy. Публичный TLS/DNS и live MAX/LLM не проверены.
+доступен только через Caddy. Публичный TLS/DNS и цельный live MAX/LLM G3 не проверены.

@@ -1,12 +1,10 @@
 """MAX callback → доверенный житель дома → Z PollCallbackHandler."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-import httpx
-import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,10 +15,7 @@ from dom_domych.application.polls.callback import (
     PollActionStore,
 )
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
-from dom_domych.infrastructure.max.client import MaxApiClient, MaxApiError
 from dom_domych.infrastructure.postgres.models import HouseRow, ResidencyRow, ResidentRow
-
-logger = structlog.get_logger()
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,12 +38,10 @@ class MaxPollCallbackTransport:
         session: AsyncSession,
         actions: PollActionStore,
         processor: CallbackProcessor,
-        max_client: MaxApiClient,
     ) -> None:
         self.session = session
         self.actions = actions
         self.processor = processor
-        self.max_client = max_client
 
     async def handle(self, event: EventEnvelope) -> CallbackOutcome:
         if event.source is not EventSource.MAX or event.name is not EventName.CALLBACK_RECEIVED:
@@ -56,12 +49,22 @@ class MaxPollCallbackTransport:
         callback = event.callback
         if callback is None or callback.sender_user_id != event.actor_user_id:
             raise ValueError("inconsistent callback actor")
-        await self._acknowledge(
-            callback.callback_id,
-            callback.chat_id or f"user:{callback.sender_user_id}",
-        )
         action = await self.actions.get(callback.action_token)
         if action is None:
+            if callback.chat_id is not None and not callback.chat_id.startswith("dm:"):
+                house_id = await self.session.scalar(
+                    select(HouseRow.id).where(HouseRow.max_chat_id == callback.chat_id)
+                )
+                if house_id is not None:
+                    actor_id = await self._resolve_resident(
+                        callback.sender_user_id, house_id, event.received_at
+                    )
+                    if actor_id is not None:
+                        return CallbackOutcome(
+                            CallbackStatus.UNKNOWN_ACTION,
+                            recipient_id=actor_id,
+                            delivery_house_id=house_id,
+                        )
             return CallbackOutcome(CallbackStatus.UNKNOWN_ACTION)
         if callback.chat_id is not None and not callback.chat_id.startswith("dm:"):
             house_id = await self.session.scalar(
@@ -74,10 +77,11 @@ class MaxPollCallbackTransport:
         )
         if actor_id is None:
             return CallbackOutcome(CallbackStatus.NOT_ALLOWED)
-        return await self.processor.handle(
+        outcome = await self.processor.handle(
             CallbackInput(callback.action_token, event.event_id, event.received_at),
             ResolvedCallbackContext(action.house_id, actor_id),
         )
+        return replace(outcome, recipient_id=actor_id, delivery_house_id=action.house_id)
 
     async def _resolve_resident(
         self, max_user_id: str, house_id: UUID, at: datetime
@@ -95,9 +99,3 @@ class MaxPollCallbackTransport:
             )
             .limit(1)
         )
-
-    async def _acknowledge(self, callback_id: str, dialog_key: str) -> None:
-        try:
-            await self.max_client.answer_callback(callback_id, dialog_key=dialog_key)
-        except (MaxApiError, httpx.TransportError) as exc:
-            logger.warning("max_callback_ack_failed", error=type(exc).__name__)

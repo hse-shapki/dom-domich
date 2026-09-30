@@ -49,6 +49,29 @@ def test_normalize_callback_uses_real_max_actor() -> None:
     assert event.callback.action_token == "opaque-action"
 
 
+def test_normalize_dialog_with_numeric_chat_id_as_direct_message() -> None:
+    raw = {
+        "update_type": "message_created",
+        "timestamp": 1790326800000,
+        "message": {
+            "sender": {"user_id": 389214773},
+            "recipient": {
+                "chat_id": 199171631,
+                "user_id": 485354522,
+                "chat_type": "dialog",
+            },
+            "timestamp": 1790326800000,
+            "body": {"mid": "dialog.1", "text": "/start invitation"},
+        },
+    }
+
+    key, event = normalize_update(raw, datetime.now(UTC))
+
+    assert key == "message_created:dm:389214773:dialog.1"
+    assert event is not None and event.message is not None
+    assert event.message.chat_id == "dm:389214773"
+
+
 @pytest.mark.parametrize(
     ("update_type", "change"), (("bot_added", "added"), ("bot_removed", "removed"))
 )

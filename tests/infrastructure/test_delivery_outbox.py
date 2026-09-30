@@ -121,7 +121,7 @@ async def test_public_card_is_sent_then_edited_by_saved_message_id() -> None:
         async with sessions.begin() as session:
             await seed_demo_house(session)
             await session.execute(
-                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id="333")
+                update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id="-333")
             )
             queue = PostgresDeliveryQueue(session, clock)
             first_id = await queue.enqueue(
@@ -129,7 +129,7 @@ async def test_public_card_is_sent_then_edited_by_saved_message_id() -> None:
                     HOUSE_ONE,
                     initial_key,
                     "Первый",
-                    chat_id="333",
+                    chat_id="-333",
                     buttons=(("За", "opaque-yes"), ("Против", "opaque-no")),
                 )
             )
@@ -144,7 +144,7 @@ async def test_public_card_is_sent_then_edited_by_saved_message_id() -> None:
                         HOUSE_ONE,
                         f"{initial_key}:edit",
                         "Обновлён",
-                        chat_id="333",
+                        chat_id="-333",
                         edit_key=initial_key,
                         buttons=(("За", "opaque-yes"), ("Против", "opaque-no")),
                     )

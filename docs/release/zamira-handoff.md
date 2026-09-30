@@ -1,6 +1,6 @@
 # Передача пула Замиры: опросы, инициативы, PDF и результат
 
-Обновлено 29.09.2026: ветка `tasks_last_zamira` (ранее `codex/zamira-2026-09-29`), подготовленная от `main` (`71a35ae`), объединена с локальным `main` после обновления до `c65f415`. Точный статус всех модулей — в
+Обновлено 30.09.2026 после объединения Z изменений с MAX/callback/Ollama изменениями `origin/main`. Точный статус всех модулей — в
 [`context/current-state.md`](../../context/current-state.md). Положительные локальные
 тесты не заменяют приёмку в живом MAX.
 
@@ -30,7 +30,10 @@ DATABASE_URL=postgresql+asyncpg://localhost/dom_domych_test_zamira uv run alembi
 карточки — в [`test_z07_cards_outbox.py`](../../tests/infrastructure/test_z07_cards_outbox.py).
 Загрузка PDF после durable job в FileStore и приватный outbox — в
 [`test_z09_documents_postgres.py`](../../tests/infrastructure/test_z09_documents_postgres.py).
-Эти тесты позволяют воспроизвести обе развилки результата без изменения БД вручную.
+Эти тесты позволяют воспроизвести все три исхода результата без изменения БД вручную.
+Дополнительно `test_g3_runtime_callback.py` проверяет problem → MAX callback/card
+→ request/PDF → demo executor → closed/reopened, а `test_z10_max_pdf_pipeline.py`
+проводит четыре PDF через PostgreSQL/FileStore/MAX MockTransport.
 
 ## Ручной demo executor и приватный реестр
 
@@ -116,14 +119,21 @@ uv run python scripts/generate_zamira_demo_pdfs.py --output-dir /tmp/dom-domich-
 
 | Часть | Состояние |
 |---|---|
-| PostgreSQL аудитории, опросы, инициативы, документы, demo executor и проверка результата | Реализованы; 261 тест и полная миграция проверены на PostgreSQL 17.8 + pgvector 0.8.1; прежние наборы проверялись на PostgreSQL 16; concurrency/idempotency tests есть |
-| MAX callback, outbox, кнопки, PDF upload | Подключены к process root, проверены PostgreSQL/MockTransport; живой MAX не проверен |
+| PostgreSQL аудитории, опросы, инициативы, документы, demo executor и проверка результата | Частично: 9 G3 комбинаций проверены на PostgreSQL 17.8/pgvector; новый callback/PDF/CLI набор проходил на PG16.13 до объединения; текущий прогон указан в `context/current-state.md` |
+| MAX callback, outbox, кнопки, PDF upload | Callback → приватный feedback/edit и четыре PDF через MAX upload проверены PostgreSQL/MockTransport; live MAX подтвердил доставку групповой карточки, отказ callback вне аудитории и синтетический PDF transport, но допустимый голос и Z файлы в mobile/web открытыми не проверены |
 | Исполнитель и `DEMO-*` регистрация | Только смоделированный DemoExecutor, без УК/ГИС ЖКХ; операторская capability обязательна |
-| Дело и агент | K problem/initiative/emergency opening, public card, request approval/submit/PDF binding и результат связаны; 9 локальных production сценариев прошли. Live LLM/MAX не проверены |
+| Дело и агент | K problem/initiative/emergency opening, request approval/submit/PDF binding и результат связаны; 9 локальных production сценариев прошли. Ollama провёл отдельный problem path; цельный live MAX/LLM G3 не проверен |
 | Официальная отправка и протокол ОСС | Не реализованы; четыре PDF являются демо-документами, протокол назван позицией жителей |
-| MAX mobile/web, публичный HTTPS и live inference | Не проверены; строки [матрицы](max-mobile-web-matrix.md) остаются открытыми |
+| MAX mobile/web, публичный HTTPS и цельный live G3 | Частично: отдельные live transport probes есть; полный путь, публичный HTTPS и оба клиента остаются открытыми в [матрице](max-mobile-web-matrix.md) |
 
-## Демо-порядок и оставшиеся проверки
+## Точный ручной сценарий и оставшиеся проверки
+
+Два дела с порогами `3/12`, позитивным `12/12` и негативным `3/12` описаны в
+[`zamira-manual-demo.md`](zamira-manual-demo.md). Все четыре приватных PDF
+проверяются по [`zamira-live-pdf-smoke.md`](zamira-live-pdf-smoke.md).
+Локальный CLI поддерживает и `--request-id`, и `--operation-id`; команды
+`list`/`done` удобны для ручного демо. Повтор с тем же `event-id` не создаёт
+второе событие.
 
 1. Подтверждённому жителю назначают проживание и MAX ID через demo onboarding.
    Выбор аудитории фиксирует всех eligible, независимо от доставки личных сообщений.

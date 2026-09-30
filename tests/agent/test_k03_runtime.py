@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from dom_domych.agent.contracts import CaseSearch, StrictModel, TrustedContext
+from dom_domych.agent.contracts import CaseCreate, CaseSearch, StrictModel, TrustedContext
 from dom_domych.agent.llm import FakeLlmPort, LlmResponse, LlmToolCall
 from dom_domych.agent.runtime import (
     AgentMode,
@@ -201,3 +201,62 @@ async def test_malformed_handler_result_cannot_be_success() -> None:
     result = await runtime.run([], _context(), AgentMode.TRIAGE)
     assert result.status == "failed"
     assert result.text == ""
+
+
+@pytest.mark.asyncio
+async def test_runtime_injects_trusted_event_and_operation_fields() -> None:
+    context = _context(frozenset({"case.write"}))
+    seen_args: list[CaseCreate] = []
+    seen_tools: list[list[dict[str, object]]] = []
+
+    class Recorder:
+        call_count = 0
+
+        async def complete(
+            self, messages: list[dict[str, object]], tools: list[dict[str, object]]
+        ) -> LlmResponse:
+            self.call_count += 1
+            seen_tools.append(tools)
+            if self.call_count == 1:
+                return LlmResponse(
+                    "",
+                    (
+                        LlmToolCall(
+                            "case.create",
+                            '{"kind":"problem","title":"Темно в подъезде",'
+                            '"description":"Не горит лампа","entrance":1,'
+                            '"floor":null,"object_name":"lighting",'
+                            '"candidate_case_ids":[]}',
+                        ),
+                    ),
+                )
+            return LlmResponse("Дело создано")
+
+    async def handler(args: StrictModel, trusted: TrustedContext) -> ToolResult:
+        assert isinstance(args, CaseCreate)
+        seen_args.append(args)
+        return ToolResult(ok=True, data={"case_id": "fixture"})
+
+    runtime = AgentRuntime(
+        Recorder(),
+        [
+            ToolDefinition(
+                "case.create",
+                "Создаёт дело",
+                CaseCreate,
+                frozenset({AgentMode.TRIAGE}),
+                "write",
+                "case.write",
+                handler,
+            )
+        ],
+    )
+    result = await runtime.run([], context, AgentMode.TRIAGE)
+
+    assert result.status == "completed"
+    assert seen_args[0].source_message_id == context.event_id
+    assert seen_args[0].operation_id.version == 5
+    parameters = seen_tools[0][0]["parameters"]
+    assert isinstance(parameters, dict)
+    assert "source_message_id" not in parameters["properties"]
+    assert "operation_id" not in parameters["properties"]

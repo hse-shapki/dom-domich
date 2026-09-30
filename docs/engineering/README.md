@@ -2,7 +2,7 @@
 
 Для реализации отдельных задач команды см. [персональный план Алины, Катерины и Замиры](../../context/implementation-plan.md); этот раздел содержит технические основания и сквозные процессы.
 
-Дата проверки: 29.09.2026. Статус: A/K/Z модули связаны в process root; локальные production цепи problem/initiative/emergency → request/PDF → DemoExecutor → closed/reopened/resolution_unconfirmed проверены (9 сценариев). Начальные личные приглашения, callback/card refresh, четыре вида frozen PDF и operator CLI реализованы. Полный набор — 261 тест на PostgreSQL 17.8/pgvector 0.8.1. Реальный MAX/LLM, mobile/web и live G3 не проверены. [Проверенное состояние](../../context/current-state.md).
+Дата проверки: 30.09.2026. A/K/Z модули связаны в process root; девять локальных production G3 исходов и callback G3 путь проверены. Начальные приглашения, callback feedback/card edit, четыре вида frozen PDF и operator CLI реализованы. Объединённый набор — 291 тест на PostgreSQL 16.13; прежний набор — 261 на PG17.8/pgvector. Отдельные live MAX transport и Ollama problem probes прошли, цельный MAX/LLM G3 и mobile/web не проверены. [Проверенное состояние](../../context/current-state.md); [финальные два трека](../../AGENTS.md#финальные-задачи-mvp-два-параллельных-трека-30092026).
 
 Это рабочая спецификация для разработки через AI и проверки командой из трёх человек. Она описывает целевой продукт, а не уже существующий код. Этапы определяются зависимостями и готовностью результатов, без разбивки по дням.
 

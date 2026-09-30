@@ -36,12 +36,14 @@ def test_runtime_settings_require_valid_llm_and_redact_url(
 
     monkeypatch.setenv("LLM_BASE_URL", "http://token@inference.internal:8080")
     monkeypatch.setenv("LLM_MODEL", "demo-model")
+    monkeypatch.setenv("LLM_BACKEND", "ollama")
     monkeypatch.setenv("LLM_MAX_TOKENS", "700")
     monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("LLM_ATTEMPTS", "3")
     settings = AppSettings.from_env(require_llm=True)
 
     assert settings.llm_model == "demo-model"
+    assert settings.llm_backend == "ollama"
     assert settings.llm_max_tokens == 700
     assert settings.llm_timeout_seconds == 45
     assert settings.llm_attempts == 3

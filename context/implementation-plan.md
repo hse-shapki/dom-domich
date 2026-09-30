@@ -1,6 +1,19 @@
 # План реализации: три независимых пула
 
-Статус на 27.09.2026: это **план**; ветки A/K/Z объединены в `main`, а дополнительные Z-модули реализованы в `task_zamira`. A14 process root запускает K/Z inbox/scheduler, callback, DemoExecutor и PDF worker; PostgreSQL-хранилища Z проверены локально. Автоматический K/Z маршрут открытия опроса и инициативы, общий G3, live MAX/LLM и mobile/web приёмка ещё отсутствуют. Канонические задачи находятся в трёх файлах: [Алина](tasks-alina.md), [Катерина](tasks-katerina.md), [Замира](tasks-zamira.md). Техническое обоснование — [архитектура](../docs/engineering/02-architecture.md), [данные](../docs/engineering/05-data-and-state.md), [процессы](../docs/engineering/06-runtime-flows.md), [приёмка](../docs/engineering/08-verification-and-release.md). Порядок A/B/C из [07](../docs/engineering/07-workstreams.md) сохраняется; этот план делает его исполнимым по отдельным задачам.
+Статус на 30.09.2026: ниже сохранены исходные три пула и G0–Release как история требований. Реализация K/Z production route, 9 локальных G3 исходов, callback feedback/edit, четыре PDF и отдельные live MAX/Ollama probes уже есть; цельный live MAX/LLM G3 и mobile/web приёмка открыты. **Текущий финальный backlog из двух параллельных треков — [в AGENTS.md](../AGENTS.md#финальные-задачи-mvp-два-параллельных-трека-30092026): A-MVP-1…3 и Z-MVP-1…3.** Канонические старые задачи: [Алина](tasks-alina.md), [Катерина](tasks-katerina.md), [Замира](tasks-zamira.md). Техническое обоснование — [архитектура](../docs/engineering/02-architecture.md), [данные](../docs/engineering/05-data-and-state.md), [процессы](../docs/engineering/06-runtime-flows.md), [приёмка](../docs/engineering/08-verification-and-release.md).
+
+## Текущий двухтрековый финиш
+
+Алина ведёт transport/composition/deploy/CI, Замира — application/domain Z и
+неоконченные MVP use cases K, agent evals и ручной сценарий. Это согласованное
+исключение к исторической таблице владельцев ниже. A-MVP-1 и локальный Z-MVP-1
+стартуют независимо от одного `main` в разных worktree; A-MVP-2 и локальный
+Z-MVP-2 также параллельны. Совместный live Z-MVP-2 ждёт A transport; Z-MVP-3
+затем соединяет сценарии; A-MVP-3 фиксирует релиз после общего G3. Для общей
+схемы/event/contract сначала отдельный маленький коммит, затем обновление
+потребителей. Ручные MAX проверки после каждого рубежа и критерии по ID
+находятся в AGENTS.md; результат без реального mobile/web свидетельства не
+помечается пройденным.
 
 ## Владение и параллельность
 

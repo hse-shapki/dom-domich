@@ -106,4 +106,7 @@ HTTP contracts MAX проверяем через HTTPX MockTransport, FastAPI in
 4. Сохранить модель/шаблоны/prompts/config revisions и image digests, чтобы стенд соответствовал сдаче.
 5. После дедлайна не менять переданную версию и не подменять её на стенде. Дальнейшая разработка — отдельная ветка; submitted tag не передвигается.
 
-Сейчас реализованы чистые правила, выбор аудитории и доменные переходы опроса Z с unit/fake tests. Сквозные сценарии, MAX mobile/web, PostgreSQL concurrency и релизные пункты не проверены; текущий статус — в [контексте](../../context/current-state.md).
+На 30.09.2026 локальные PostgreSQL/MockTransport G3 сценарии и concurrency
+проверены; отдельные live MAX transport и локальный Ollama path есть.
+Цельный live MAX/LLM G3, все строки mobile/web и финальный release gate
+остаются открытыми. Текущий статус — в [контексте](../../context/current-state.md).

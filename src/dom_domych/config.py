@@ -25,6 +25,7 @@ class AppSettings:
     payload_retention_days: int
     llm_base_url: str | None
     llm_model: str | None
+    llm_backend: Literal["openai_compatible", "ollama"]
     llm_max_tokens: int
     llm_timeout_seconds: float
     llm_attempts: int
@@ -47,6 +48,9 @@ class AppSettings:
             raise ValueError("PAYLOAD_RETENTION_DAYS must be between 1 and 365")
         llm_base_url = os.environ.get("LLM_BASE_URL", "").strip() or None
         llm_model = os.environ.get("LLM_MODEL", "").strip() or None
+        llm_backend = os.environ.get("LLM_BACKEND", "openai_compatible").strip()
+        if llm_backend not in {"openai_compatible", "ollama"}:
+            raise ValueError("LLM_BACKEND must be openai_compatible or ollama")
         if require_llm and (llm_base_url is None or llm_model is None):
             raise ValueError("LLM_BASE_URL and LLM_MODEL are required")
         if llm_base_url is not None:
@@ -72,6 +76,7 @@ class AppSettings:
             payload_retention_days=retention_days,
             llm_base_url=llm_base_url,
             llm_model=llm_model,
+            llm_backend=cast(Literal["openai_compatible", "ollama"], llm_backend),
             llm_max_tokens=llm_max_tokens,
             llm_timeout_seconds=llm_timeout_seconds,
             llm_attempts=llm_attempts,
@@ -85,6 +90,7 @@ class AppSettings:
             f"file_store_dir={str(self.file_store_dir)!r}, worker_id={self.worker_id!r}, "
             f"payload_retention_days={self.payload_retention_days}, "
             f"llm_base_url={'<redacted>' if self.llm_base_url else None!r}, "
-            f"llm_model={self.llm_model!r}, llm_max_tokens={self.llm_max_tokens}, "
+            f"llm_model={self.llm_model!r}, llm_backend={self.llm_backend!r}, "
+            f"llm_max_tokens={self.llm_max_tokens}, "
             f"llm_timeout_seconds={self.llm_timeout_seconds}, llm_attempts={self.llm_attempts})"
         )

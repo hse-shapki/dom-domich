@@ -1,15 +1,19 @@
 """Z05: настоящий actor MAX проходит через Z callback к PostgreSQL-голосу."""
 
+import json
 import os
+from asyncio import gather
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import update
+from sqlalchemy import or_, select, update
 
 from dom_domych.application.audiences.service import AudienceService
+from dom_domych.application.cards.production import PostgresPublicCards
+from dom_domych.application.notifications.worker import DeliveryWorker
 from dom_domych.application.polls.callback import CallbackStatus, StoredPollAction
 from dom_domych.application.polls.production import PostgresPollCallbackProcessor
 from dom_domych.application.polls.service import PollService
@@ -21,12 +25,13 @@ from dom_domych.infrastructure.max.client import MaxApiClient
 from dom_domych.infrastructure.postgres.audiences import PostgresAudienceRepository
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
-from dom_domych.infrastructure.postgres.models import HouseRow, ResidentRow
-from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore
+from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow, ResidentRow
+from dom_domych.infrastructure.postgres.poll_actions import PostgresPollActionStore, token_digest
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
 from dom_domych.infrastructure.postgres.session import database_lifespan
+from dom_domych.infrastructure.postgres.z_poll_models import PollAnswerHistoryRow, PollAnswerRow
 from scripts.seed_demo_house import seed_demo_house
-from tests.fixtures.zamira_house import HOUSE_ONE, HOUSE_TWO
+from tests.fixtures.zamira_house import HOUSE_ONE, HOUSE_TWO, synthetic_id
 
 
 @dataclass(frozen=True)
@@ -39,9 +44,11 @@ class FixedClock:
         return datetime(2026, 9, 25, 12, tzinfo=UTC)
 
 
-def callback_event(token: str, user_id: str, chat_id: str) -> EventEnvelope:
+def callback_event(
+    token: str, user_id: str, chat_id: str, *, received_at: datetime | None = None
+) -> EventEnvelope:
     event_id = uuid4()
-    received_at = FixedClock().now() + timedelta(minutes=1)
+    received_at = received_at or FixedClock().now() + timedelta(minutes=1)
     return EventEnvelope(
         event_id=event_id,
         source=EventSource.MAX,
@@ -66,12 +73,19 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
     if not database_url:
         pytest.skip("Z05 requires a dedicated migrated PostgreSQL test database")
     clock = FixedClock()
-    chat_one, chat_two = str(uuid4().int)[:18], str(uuid4().int)[:18]
-    user_one, user_two = str(uuid4().int)[:18], str(uuid4().int)[:18]
-    acknowledged: list[str] = []
+    chat_one, chat_two = "-" + str(uuid4().int)[:17], "-" + str(uuid4().int)[:17]
+    user_one, user_two, user_outside, user_concurrent = (str(uuid4().int)[:18] for _ in range(4))
+    acknowledged: list[tuple[str, dict[str, object]]] = []
+    sent: list[tuple[str, str, dict[str, str], dict[str, object]]] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
-        acknowledged.append(request.url.params["callback_id"])
+        body = json.loads(request.content)
+        if request.url.path == "/answers":
+            acknowledged.append((request.url.params["callback_id"], body))
+            return httpx.Response(200, json={"success": True})
+        sent.append((request.method, request.url.path, dict(request.url.params), body))
+        if request.method == "POST":
+            return httpx.Response(200, json={"message": {"body": {"mid": str(uuid4())}}})
         return httpx.Response(200, json={"success": True})
 
     async with database_lifespan(database_url) as sessions:
@@ -118,6 +132,16 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
                 .values(max_user_id=user_two)
             )
             await session.execute(
+                update(ResidentRow)
+                .where(ResidentRow.id == synthetic_id("resident-17"))
+                .values(max_user_id=user_outside)
+            )
+            await session.execute(
+                update(ResidentRow)
+                .where(ResidentRow.id == audience.members[2].resident_id)
+                .values(max_user_id=user_concurrent)
+            )
+            await session.execute(
                 update(HouseRow).where(HouseRow.id == HOUSE_ONE).values(max_chat_id=chat_one)
             )
             await session.execute(
@@ -134,37 +158,189 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
                     bound_resident_id=first.resident_id,
                 )
             )
+            no_token = await PostgresPollActionStore(session).create(
+                StoredPollAction(
+                    poll_id=poll.definition.poll_id,
+                    house_id=HOUSE_ONE,
+                    audience_id=audience.audience_id,
+                    subject_revision=1,
+                    choice=VoteChoice.NO,
+                    expires_at=poll.definition.closes_at,
+                )
+            )
+        base_id = await PostgresPublicCards(sessions, clock).publish_problem(
+            poll.definition.poll_id, HOUSE_ONE
+        )
+        async with sessions.begin() as session:
+            await session.execute(
+                update(OutboxDeliveryRow)
+                .where(OutboxDeliveryRow.house_id == HOUSE_ONE)
+                .values(status="sent")
+            )
+            base = await session.get(OutboxDeliveryRow, base_id)
+            assert base is not None
+            base.max_message_id = "public-card"
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
         ) as http:
-            processor = PostgresPollCallbackProcessor(
-                sessions, MaxApiClient(http, "test-token"), clock
-            )
+            max_client = MaxApiClient(http, "test-token")
+            processor = PostgresPollCallbackProcessor(sessions, max_client, clock)
             good = callback_event(token, user_one, chat_one)
             assert (await processor.process(good)).status == CallbackStatus.RECORDED
+            worker = DeliveryWorker(sessions, max_client, clock, "z05-delivery")
+            assert await worker.run_once() is True
+            assert await worker.run_once() is True
+            assert await worker.run_once() is False
+            assert {(method, path) for method, path, _, _ in sent} == {
+                ("POST", "/messages"),
+                ("PUT", "/messages"),
+            }
+            assert any(params.get("user_id") == user_one for _, _, params, _ in sent)
+            assert any(params.get("message_id") == "public-card" for _, _, params, _ in sent)
             assert (await processor.process(good)).status == CallbackStatus.DUPLICATE
+            assert (
+                await processor.process(callback_event(token, user_one, chat_one))
+            ).status == CallbackStatus.DUPLICATE
+            assert (
+                await processor.process(callback_event(no_token, user_one, chat_one))
+            ).status == CallbackStatus.CHANGED
+            assert (
+                await processor.process(callback_event(no_token, user_outside, chat_one))
+            ).status == CallbackStatus.NOT_ALLOWED
             assert (
                 await processor.process(callback_event(token, user_two, chat_one))
             ).status == CallbackStatus.NOT_ALLOWED
             assert (
                 await processor.process(callback_event(token, user_one, chat_two))
             ).status == CallbackStatus.NOT_ALLOWED
+            assert (
+                await processor.process(callback_event("unknown-token", user_one, chat_one))
+            ).status == CallbackStatus.UNKNOWN_ACTION
+            assert (
+                await processor.process(callback_event("unknown-token", "999999999", chat_one))
+            ).status == CallbackStatus.UNKNOWN_ACTION
             async with sessions.begin() as session:
                 state = await PostgresPollRepository(session).get_state(
                     poll.definition.poll_id, HOUSE_ONE
                 )
-                assert state is not None and state.tally.yes == 1
-                await PostgresPollRepository(session).cancel_atomic(
+                assert state is not None and state.tally.yes == 0 and state.tally.no == 1
+                answers = (
+                    await session.scalars(
+                        select(PollAnswerRow).where(
+                            PollAnswerRow.poll_id == poll.definition.poll_id
+                        )
+                    )
+                ).all()
+                history = (
+                    await session.scalars(
+                        select(PollAnswerHistoryRow).where(
+                            PollAnswerHistoryRow.poll_id == poll.definition.poll_id
+                        )
+                    )
+                ).all()
+                assert len(answers) == 1 and len(history) == 2
+                feedback = (
+                    await session.scalars(
+                        select(OutboxDeliveryRow).where(
+                            or_(
+                                OutboxDeliveryRow.operation_key.like(
+                                    f"poll:feedback:{poll.definition.poll_id}:%"
+                                ),
+                                OutboxDeliveryRow.operation_key.like(
+                                    f"poll:feedback:{token_digest('unknown-token')[:16]}:%"
+                                ),
+                                OutboxDeliveryRow.operation_key.like(
+                                    f"poll:feedback:{token_digest(token)[:16]}:%"
+                                ),
+                            )
+                        )
+                    )
+                ).all()
+                assert len(feedback) == 6
+                assert all(row.chat_id is None and row.recipient_id is not None for row in feedback)
+                assert any(
+                    row.recipient_id == synthetic_id("resident-17") and "только жителям" in row.text
+                    for row in feedback
+                )
+                edits = (
+                    await session.scalars(
+                        select(OutboxDeliveryRow).where(
+                            OutboxDeliveryRow.edit_key == f"problem:{case_id}"
+                        )
+                    )
+                ).all()
+                assert len(edits) == 2
+                assert "Подтвердили: 0/12" in next(
+                    row.text for row in edits if row.status == "pending"
+                )
+            concurrent = await gather(
+                processor.process(callback_event(no_token, user_concurrent, chat_one)),
+                processor.process(callback_event(no_token, user_concurrent, chat_one)),
+            )
+            assert {item.status for item in concurrent} == {
+                CallbackStatus.RECORDED,
+                CallbackStatus.DUPLICATE,
+            }
+            assert (
+                await processor.process(
+                    callback_event(
+                        token,
+                        user_one,
+                        chat_one,
+                        received_at=poll.definition.closes_at,
+                    )
+                )
+            ).status == CallbackStatus.LATE
+            async with sessions.begin() as session:
+                for member in audience.members[3:6]:
+                    await PostgresPollRepository(session).record_answer_atomic(
+                        poll.definition.poll_id,
+                        HOUSE_ONE,
+                        member.resident_id,
+                        VoteChoice.YES,
+                        uuid4(),
+                        clock.now() + timedelta(minutes=1),
+                    )
+            assert (
+                await processor.process(callback_event(no_token, user_one, chat_one))
+            ).status == CallbackStatus.CLOSED
+            async with sessions.begin() as session:
+                await PostgresPollActionStore(session).revoke_poll(
                     poll.definition.poll_id, HOUSE_ONE
                 )
             assert (
                 await processor.process(callback_event(token, user_one, chat_one))
             ).status == CallbackStatus.STALE
-        assert len(acknowledged) == 5
+        assert len(acknowledged) == 14
+        assert [body["notification"] for _, body in acknowledged] == [
+            "Голос учтён.",
+            "Этот голос уже учтён.",
+            "Этот голос уже учтён.",
+            "Голос изменён.",
+            "Этот опрос доступен только жителям затронутой части дома.",
+            "Этот опрос доступен только жителям затронутой части дома.",
+            "Этот опрос доступен только жителям затронутой части дома.",
+            "Кнопка устарела. Откройте актуальную карточку.",
+            "Кнопка устарела. Откройте актуальную карточку.",
+            "Голос учтён.",
+            "Этот голос уже учтён.",
+            "Время голосования истекло.",
+            "Опрос уже завершён.",
+            "Кнопка устарела. Откройте актуальную карточку.",
+        ]
         async with sessions.begin() as session:
             await session.execute(
                 update(ResidentRow)
-                .where(ResidentRow.id.in_((first.resident_id, second.resident_id)))
+                .where(
+                    ResidentRow.id.in_(
+                        (
+                            first.resident_id,
+                            second.resident_id,
+                            audience.members[2].resident_id,
+                            synthetic_id("resident-17"),
+                        )
+                    )
+                )
                 .values(max_user_id=None)
             )
             await session.execute(

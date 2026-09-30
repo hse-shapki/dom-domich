@@ -44,6 +44,7 @@ class CallbackStatus(StrEnum):
     CHANGED = "changed"
     DUPLICATE = "duplicate"
     LATE = "late"
+    CLOSED = "closed"
     STALE = "stale"
     NOT_ALLOWED = "not_allowed"
     UNKNOWN_ACTION = "unknown_action"
@@ -54,6 +55,8 @@ class CallbackOutcome:
     status: CallbackStatus
     poll_id: UUID | None = None
     poll_version: int | None = None
+    recipient_id: UUID | None = None
+    delivery_house_id: UUID | None = None
 
 
 class PollActionStore(Protocol):
@@ -88,8 +91,10 @@ class PollCallbackHandler:
             return CallbackOutcome(CallbackStatus.NOT_ALLOWED)
         if action.bound_resident_id is not None and action.bound_resident_id != context.actor_id:
             return CallbackOutcome(CallbackStatus.NOT_ALLOWED)
-        if action.revoked or callback.received_at >= action.expires_at:
+        if action.revoked:
             return CallbackOutcome(CallbackStatus.STALE, poll_id=action.poll_id)
+        if callback.received_at >= action.expires_at:
+            return CallbackOutcome(CallbackStatus.LATE, poll_id=action.poll_id)
         definition = await self.polls.get_definition(action.poll_id, context.house_id)
         if definition is None:
             return CallbackOutcome(CallbackStatus.STALE, poll_id=action.poll_id)
@@ -118,6 +123,6 @@ class PollCallbackHandler:
             AnswerStatus.DUPLICATE: CallbackStatus.DUPLICATE,
             AnswerStatus.NOT_ELIGIBLE: CallbackStatus.NOT_ALLOWED,
             AnswerStatus.LATE: CallbackStatus.LATE,
-            AnswerStatus.CLOSED: CallbackStatus.STALE,
+            AnswerStatus.CLOSED: CallbackStatus.CLOSED,
         }[result.status]
         return CallbackOutcome(status, poll_id=action.poll_id, poll_version=result.poll_version)

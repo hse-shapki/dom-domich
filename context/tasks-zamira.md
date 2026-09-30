@@ -1,5 +1,13 @@
 # Пул Замиры — аудитории, опросы, инициативы, документы и результат
 
+30.09.2026: Z00–Z16 ниже остаются историческими требованиями. Текущий
+финальный трек — **Z-MVP-1, Z-MVP-2, Z-MVP-3** из
+[AGENTS.md](../AGENTS.md#финальные-задачи-mvp-два-параллельных-трека-30092026).
+На этот финиш Замира также закрывает оставшиеся MVP-стыки K
+(агент/дела/обращения), сохраняя существующие use cases и contracts.
+Алина параллельно ведёт A-MVP; общий process root/transport остаётся у неё.
+Сверяй [фактическое состояние](current-state.md).
+
 [Общий порядок и gates](implementation-plan.md) · [данные/формулы](../docs/engineering/05-data-and-state.md) · [приёмка](../docs/engineering/08-verification-and-release.md)
 
 **Владение:** модули `application/audiences/`, `application/polls/`, `application/initiatives/`, `application/documents/`, `application/resolution/`, соответствующие `domain/` и `infrastructure/postgres/` модули, `infrastructure/documents/`, `infrastructure/files/`, `infrastructure/executor/`, свои миграции/тесты. Опросы получают actor из callback-события Алины. LLM не голосует и не закрывает дело собственным выводом. Общий case aggregate принадлежит Катерине; Замира ведёт initiative specialization и результат через порты.

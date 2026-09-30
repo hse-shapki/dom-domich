@@ -1,6 +1,6 @@
 # K02: состояние проверки inference
 
-Проверено локально 26.09.2026 в рабочей среде ветки `kae`:
+Первый probe проверен локально 26.09.2026 в рабочей среде ветки `kae`:
 
 - macOS arm64, физическая память 8 GiB (`sysctl hw.memsize`).
 - Установлен Homebrew `llama.cpp` 0.5.0, build 11146 (`7fe450e19`).
@@ -27,9 +27,54 @@
 сверяются с [документацией llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/function-calling.md)
 перед подключением адаптера. Выбор модели пока не утверждён.
 
+## Повторный локальный smoke 29.09.2026
+
+На macOS arm64 с 16 GiB RAM и уже установленным Ollama проверен
+`qwen2.5-coder:7b`: digest
+`dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364`,
+GGUF Q4_K_M, размер локального слоя около 4,7 GB. OpenAI-compatible endpoint
+`/v1/chat/completions` дал русский ответ. Модель сериализует часть tool calls
+в `message.content`, поэтому адаптер получил ограниченный compatibility path:
+он принимает только одиночный JSON объекта `name`/`arguments` (допустим один
+чистый `json` fence), проверяет имя по фактически переданному allowlist и не
+исполняет окружающий текст, дополнительные поля или неизвестное имя. После
+этого обычный `AgentRuntime` отдельно проверяет Pydantic schema, mode,
+capability и бюджет.
+
+Изолированный live chain успешно выполнил `case.search`: модель сформировала
+вызов, backend провалидировал аргументы, тестовый handler вернул результат,
+модель сформировала итоговый русский ответ. Это подтверждает доступность
+локального inference и один tool round-trip, но не качество маршрутизации,
+полный реестр tools, p50/p95, K01/K15 или сквозной MAX G3. Модель остаётся
+кандидатом стенда, а не утверждённой release-моделью.
+
 `src/dom_domych/agent/llm.py` содержит `LlmPort`, `FakeLlmPort` и
 `RetryingLlmPort`. `infrastructure/llm/llama_server.py` реализует HTTPX
 adapter к `/v1/chat/completions`; `scripts/probe_k02.py` сохраняет методику
 замера. Обёртка ограничивает время попытки и число повторов временных ошибок;
 ошибки валидации не повторяет. HTTPX MockTransport и fake путь дают
 воспроизводимые tests без нагрузки на Mac.
+
+## Нативный Ollama и production-подобный прогон 30.09.2026
+
+На macOS arm64 с 16 GiB RAM локально загружен `qwen3:4b`, Ollama digest
+`359d7dd4bcda`, размер слоя около 2,5 GB. Добавлен отдельный adapter
+`infrastructure/llm/ollama.py` к `/api/chat`: он преобразует сохранённую
+OpenAI-style историю tools в нативные сообщения Ollama, принимает только
+структурированные `tool_calls`, дедуплицирует одинаковые вызовы одной генерации
+и не передаёт модели произвольные transport-возможности.
+
+На отдельной мигрированной PostgreSQL выполнен production-подобный вход
+«В первом подъезде не горит лампа». Реальные `LlmTriagePort`, `AgentRuntime`,
+production K services и repositories дали последовательность `case.search` →
+`case.create`; создано одно дело `detected`, agent run завершён, один ответ
+поставлен в durable outbox. Для этого служебные `source_message_id`, `message_id`
+и operation IDs исключены из model-facing schemas и подставляются runtime из
+доверенного event/run. Модель не выбирает эти идентификаторы.
+
+Это подтверждает локальный структурированный tool path, но не live MAX/G3,
+стабильность на всех сценариях, качество классификации или скорость. Один прогон
+занял заметно больше минуты; K01/K15 dataset, p50/p95 и память не измерены,
+поэтому `qwen3:4b` остаётся кандидатом стенда, а не утверждённой release-моделью.
+Воспроизводимый probe теперь принимает `--backend ollama`; production processes
+выбирают adapter через `LLM_BACKEND=ollama`.

@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
+from uuid import NAMESPACE_URL, uuid5
 
 import structlog
 from pydantic import ValidationError
@@ -17,6 +18,13 @@ from dom_domych.contracts.errors import ContractError, ErrorCode
 from dom_domych.contracts.tools import ToolResult
 
 logger = structlog.get_logger()
+
+_TRUSTED_TOOL_FIELDS = {
+    "case.create": frozenset({"source_message_id", "operation_id"}),
+    "case.attach_message": frozenset({"message_id", "operation_id"}),
+    "request.prepare": frozenset({"operation_id"}),
+    "request.submit": frozenset({"operation_id"}),
+}
 
 
 class AgentMode(StrEnum):
@@ -90,14 +98,27 @@ class AgentRuntime:
             if mode in definition.modes
             and (definition.capability is None or definition.capability in context.capabilities)
         ]
-        schemas: list[dict[str, object]] = [
-            {
-                "name": definition.name,
-                "description": definition.description,
-                "parameters": definition.input_model.model_json_schema(),
-            }
-            for definition in available
-        ]
+        schemas: list[dict[str, object]] = []
+        for schema_definition in available:
+            parameters = schema_definition.input_model.model_json_schema()
+            trusted_fields = _TRUSTED_TOOL_FIELDS.get(schema_definition.name, frozenset())
+            properties = parameters.get("properties")
+            if isinstance(properties, dict):
+                for field in trusted_fields:
+                    properties.pop(field, None)
+            required = parameters.get("required")
+            if isinstance(required, list):
+                parameters["required"] = [
+                    field for field in required if field not in trusted_fields
+                ]
+            schemas.append(
+                {
+                    "name": schema_definition.name,
+                    "description": schema_definition.description,
+                    "parameters": parameters,
+                    "effect": schema_definition.effect,
+                }
+            )
         used_calls = 0
         had_tool_error = False
         while True:
@@ -135,8 +156,25 @@ class AgentRuntime:
                     result = ToolResult(ok=False, error=ContractError(code=ErrorCode.FORBIDDEN))
                 else:
                     try:
-                        args = definition.input_model.model_validate_json(call.arguments_json)
-                    except ValidationError:
+                        raw_arguments = json.loads(call.arguments_json)
+                        if not isinstance(raw_arguments, dict):
+                            raise ValueError("tool arguments must be an object")
+                        trusted_fields = _TRUSTED_TOOL_FIELDS.get(call.name, frozenset())
+                        for field in trusted_fields:
+                            raw_arguments.pop(field, None)
+                        if "source_message_id" in trusted_fields:
+                            raw_arguments["source_message_id"] = str(context.event_id)
+                        if "message_id" in trusted_fields:
+                            raw_arguments["message_id"] = str(context.event_id)
+                        if "operation_id" in trusted_fields:
+                            raw_arguments["operation_id"] = str(
+                                uuid5(
+                                    NAMESPACE_URL,
+                                    f"dom-domich:{context.run_id}:{used_calls}:{call.name}",
+                                )
+                            )
+                        args = definition.input_model.model_validate_json(json.dumps(raw_arguments))
+                    except (json.JSONDecodeError, ValidationError, ValueError):
                         result = ToolResult(
                             ok=False, error=ContractError(code=ErrorCode.VALIDATION_ERROR)
                         )

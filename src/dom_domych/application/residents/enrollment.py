@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
+from dom_domych.contracts.max_ids import valid_max_chat_id
 from dom_domych.domain.ports.core import Clock
 
 
@@ -92,6 +93,8 @@ class DemoEnrollmentService:
         return await self.port.set_dm_reachable(max_user_id, False)
 
     async def connect_house_chat(self, max_chat_id: str, operator: TrustedDemoOperator) -> None:
-        if "demo.house_chat_bind" not in operator.capabilities or not max_chat_id.isdecimal():
+        if "demo.house_chat_bind" not in operator.capabilities or not valid_max_chat_id(
+            max_chat_id
+        ):
             raise EnrollmentDenied("demo operator and MAX chat required")
         await self.port.bind_house_chat(operator.house_id, max_chat_id)

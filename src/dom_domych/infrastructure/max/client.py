@@ -147,12 +147,16 @@ class MaxApiClient:
         if payload.get("success") is not True:
             raise MaxApiError("/messages", 200, "missing_success")
 
-    async def answer_callback(self, callback_id: str, *, dialog_key: str | None = None) -> None:
+    async def answer_callback(
+        self, callback_id: str, notification: str, *, dialog_key: str | None = None
+    ) -> None:
+        if not notification.strip():
+            raise ValueError("callback notification must not be empty")
         payload = await self._request(
             "POST",
             "/answers",
             params={"callback_id": callback_id},
-            body={},
+            body={"notification": notification},
             operation="callback",
             dialog_key=dialog_key,
         )

@@ -8,6 +8,7 @@ import httpx
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.contracts.max_ids import parse_max_chat_id
 from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.files.local import FileKind, FileStoreError, LocalFileStore
 from dom_domych.infrastructure.max.client import MaxApiClient, MaxApiError
@@ -151,11 +152,12 @@ class DeliveryWorker:
                 )
             else:
                 assert delivery.chat_id is not None
-                if not delivery.chat_id.isdecimal():
+                chat_id = parse_max_chat_id(delivery.chat_id)
+                if chat_id is None:
                     await self._settle(delivery, "failed", error_code="invalid_chat_id")
                     return
                 message_id = await self.max_client.send_text(
-                    delivery.text, chat_id=int(delivery.chat_id), attachments=attachments
+                    delivery.text, chat_id=chat_id, attachments=attachments
                 )
         except (httpx.TimeoutException, httpx.TransportError):
             # MAX мог принять сообщение до разрыва соединения; повтор может создать дубль.

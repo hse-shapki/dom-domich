@@ -1,5 +1,12 @@
 # Пул Алины — платформа, MAX, реестр и надёжность
 
+30.09.2026: A00–A17 ниже остаются историческими требованиями. Текущий
+финальный трек — **A-MVP-1, A-MVP-2, A-MVP-3** из
+[AGENTS.md](../AGENTS.md#финальные-задачи-mvp-два-параллельных-трека-30092026).
+Алина ведёт общий process root, MAX, стенд и релиз; Замира параллельно
+ведёт Z-MVP. Сверяй [фактическое состояние](current-state.md), чтобы не
+повторять уже проверенные локальные части.
+
 [Общий порядок и gates](implementation-plan.md) · [MAX](../docs/engineering/03-max-integration.md) · [архитектура](../docs/engineering/02-architecture.md)
 
 **Владение:** `src/dom_domych/entrypoints/`, `contracts/`, базовые `domain/ports`, `application/residents/`, `application/notifications/`, `application/jobs/`, `infrastructure/max/`, инфраструктура PostgreSQL для core/residents/jobs/notifications, их тесты, `deploy/`, корневые Python-конфиги и интеграция Alembic. Ключи и персональные данные не в Git. Соседние use cases вызываются через согласованные ports. `A` отвечает за сам Bot API MAX; его клиент не выдаём за официальный SDK.

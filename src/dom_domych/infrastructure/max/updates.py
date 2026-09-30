@@ -30,6 +30,7 @@ class MaxUser(MaxDto):
 class MaxRecipient(MaxDto):
     chat_id: int | None = None
     user_id: int | None = None
+    chat_type: str | None = None
 
 
 class MaxMessageBody(MaxDto):
@@ -109,7 +110,9 @@ def _timestamp(milliseconds: int) -> datetime:
     return datetime.fromtimestamp(seconds, UTC) + timedelta(milliseconds=remainder)
 
 
-def _chat_id(message: MaxMessage) -> str:
+def _chat_id(message: MaxMessage, *, dialog_user_id: int | None = None) -> str:
+    if message.recipient.chat_type == "dialog":
+        return f"dm:{dialog_user_id or message.sender.user_id}"
     if message.recipient.chat_id is not None:
         return str(message.recipient.chat_id)
     return f"dm:{message.sender.user_id}"
@@ -173,7 +176,10 @@ def normalize_update(
                 sender_user_id=str(callback_update.callback.user.user_id),
                 action_token=callback_update.callback.payload,
                 chat_id=(
-                    _chat_id(callback_update.message)
+                    _chat_id(
+                        callback_update.message,
+                        dialog_user_id=callback_update.callback.user.user_id,
+                    )
                     if callback_update.message is not None
                     else None
                 ),

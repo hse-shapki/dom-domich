@@ -84,7 +84,7 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once(
     case_id = uuid4()
     author_id = synthetic_id("resident-2")
     context = Context(HOUSE_ONE, author_id)
-    chat_id = str(uuid4().int)[:18]
+    chat_id = f"-{str(uuid4().int)[:18]}"
     async with database_lifespan(database_url) as sessions:
         async with sessions.begin() as session:
             await seed_demo_house(session)

@@ -8,6 +8,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
+from sqlalchemy import select
+
 from dom_domych.application.documents.cases import CaseDocumentPreparer
 from dom_domych.application.executor.service import DemoExecutorService
 from dom_domych.application.jobs.inbox_worker import SystemClock
@@ -16,6 +18,7 @@ from dom_domych.domain.executor.models import ExternalStatus
 from dom_domych.infrastructure.postgres.demo_executor import PostgresDemoExecutor
 from dom_domych.infrastructure.postgres.models import HouseRow
 from dom_domych.infrastructure.postgres.session import database_lifespan
+from dom_domych.infrastructure.postgres.z_executor_models import DemoExecutorRow
 
 
 @dataclass(frozen=True)
@@ -44,12 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
         description="Локальный demo operator. DATABASE_URL из окружения; только demo-дома."
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    for command in ("register", "status", "show"):
+    for command in ("list", "register", "status", "show", "done"):
         sub = commands.add_parser(command)
         sub.add_argument("--house-id", type=_uuid, required=True)
-        sub.add_argument("--request-id", type=_uuid, required=True)
+        if command != "list":
+            target = sub.add_mutually_exclusive_group(required=True)
+            target.add_argument("--request-id", type=_uuid)
+            target.add_argument("--operation-id", type=_uuid)
         if command == "status":
             sub.add_argument("--status", choices=("in_progress", "done"), required=True)
+        if command in ("status", "done"):
             sub.add_argument(
                 "--event-id",
                 type=_uuid,
@@ -79,7 +86,41 @@ async def run_command(args: argparse.Namespace, database_url: str) -> str:
         async with sessions() as session:
             house = await session.get(HouseRow, args.house_id)
             if house is None or not house.demo:
-                raise PermissionError("DEMO_HOUSE_REQUIRED")
+                if getattr(args, "request_id", None) is not None:
+                    raise PermissionError("DEMO_HOUSE_REQUIRED")
+                raise ValueError("operator command is allowed only for an existing demo house")
+            if args.command == "list":
+                rows = (
+                    await session.scalars(
+                        select(DemoExecutorRow)
+                        .where(DemoExecutorRow.house_id == args.house_id)
+                        .order_by(DemoExecutorRow.submitted_at, DemoExecutorRow.id)
+                    )
+                ).all()
+                return (
+                    "\n".join(
+                        f"{row.id} request={row.request_id} status={row.status} "
+                        f"registration={row.registration_number or '-'}"
+                        for row in rows
+                    )
+                    or "no demo operations"
+                )
+            operation_id = getattr(args, "operation_id", None)
+            request_id: UUID | None
+            if operation_id is not None:
+                row = await session.scalar(
+                    select(DemoExecutorRow).where(
+                        DemoExecutorRow.id == operation_id,
+                        DemoExecutorRow.house_id == args.house_id,
+                    )
+                )
+                if row is None:
+                    raise ValueError("demo operation is missing or belongs to another house")
+                request_id = row.request_id
+            else:
+                request_id = getattr(args, "request_id", None)
+            if request_id is None and args.command != "document":
+                raise ValueError("request ID is required")
         if args.command == "document":
             ref = await CaseDocumentPreparer(sessions, clock).prepare(
                 DocumentKind(args.kind),
@@ -97,20 +138,30 @@ async def run_command(args: argparse.Namespace, database_url: str) -> str:
             )
         executor = DemoExecutorService(PostgresDemoExecutor(sessions, clock), clock)
         context = _OperatorContext(args.house_id)
-        operation = await executor.get_status(args.request_id, context)
+        if request_id is None:
+            raise ValueError("request ID is required")
+        operation = await executor.get_status(request_id, context)
         emitted = False
         if args.command == "register":
             operation, emitted = await executor.register(operation.operation_id, context)
-        elif args.command == "status":
+        elif args.command in ("status", "done"):
             operation, emitted = await executor.set_status(
-                operation.operation_id, ExternalStatus(args.status), args.event_id, context
+                operation.operation_id,
+                ExternalStatus.DONE if args.command == "done" else ExternalStatus(args.status),
+                args.event_id,
+                context,
             )
         elif args.command != "show":
             raise ValueError("unsupported operator command")
+        if operation_id is not None:
+            return (
+                f"{operation.operation_id} request={request_id} status={operation.status.value} "
+                f"registration={operation.registration_number or '-'} emitted={emitted}"
+            )
         return json.dumps(
             {
                 "source": "demo_executor",
-                "request_id": str(args.request_id),
+                "request_id": str(request_id),
                 "operation_id": str(operation.operation_id),
                 "registration": operation.registration_number,
                 "external_status": operation.status.value,

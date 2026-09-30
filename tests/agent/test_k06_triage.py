@@ -59,6 +59,23 @@ async def test_llm_triage_validates_json_and_rejects_tools() -> None:
 
 
 @pytest.mark.asyncio
+async def test_llm_triage_accepts_explanation_only_before_final_valid_json() -> None:
+    response = (
+        "Классифицирую сообщение.\n"
+        '{"items":[{"kind":"problem","text":"Не горит лампа",'
+        '"entrance":3,"object_name":"лампа"}]}'
+    )
+
+    result = await LlmTriagePort(FakeLlmPort([LlmResponse(response)])).classify("Темно")
+
+    assert result.items[0].entrance == 3
+    with pytest.raises(ValueError):
+        await LlmTriagePort(FakeLlmPort([LlmResponse(response + "\nлишний текст")])).classify(
+            "Темно"
+        )
+
+
+@pytest.mark.asyncio
 async def test_multiple_problems_are_separate_routes_and_gas_is_urgent() -> None:
     decision = TriageDecision(
         items=(

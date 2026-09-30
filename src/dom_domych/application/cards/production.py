@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from dom_domych.application.cards.builders import PublicCard, initiative_card, problem_card
 from dom_domych.application.polls.callback import StoredPollAction
+from dom_domych.contracts.max_ids import valid_max_chat_id
 from dom_domych.domain.initiatives.models import InitiativeState
 from dom_domych.domain.polls.models import PollKind, PollState, PollStatus, VoteChoice
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
@@ -27,6 +28,28 @@ class PostgresPublicCards:
     def __init__(self, sessions: async_sessionmaker[AsyncSession], clock: Clock) -> None:
         self.sessions = sessions
         self.clock = clock
+
+    async def enqueue_poll_update(
+        self, session: AsyncSession, poll_id: UUID, house_id: UUID
+    ) -> UUID | None:
+        """Обновить публичную карточку в транзакции принятого голоса."""
+
+        poll = await PostgresPollRepository(session).get_state(poll_id, house_id)
+        if poll is None or poll.definition.kind is PollKind.RESOLUTION_CHECK:
+            return None
+        if poll.definition.kind is PollKind.INITIATIVE_POSITION:
+            state = await PostgresInitiativeRepository._load(
+                session, poll.definition.case_id, house_id
+            )
+            return await self.enqueue_initiative(session, state, poll)
+        case = await session.scalar(
+            select(CaseRow).where(
+                CaseRow.id == poll.definition.case_id, CaseRow.house_id == house_id
+            )
+        )
+        if case is None:
+            raise ValueError("case is missing or belongs to another house")
+        return await self.enqueue_problem(session, case.title, case.version, poll)
 
     async def publish_initiative(self, case_id: UUID, house_id: UUID) -> UUID:
         async with self.sessions.begin() as session:
@@ -122,7 +145,7 @@ class PostgresPublicCards:
         chat_id = await session.scalar(
             select(HouseRow.max_chat_id).where(HouseRow.id == card.house_id)
         )
-        if chat_id is None or not chat_id.isdecimal():
+        if chat_id is None or not valid_max_chat_id(chat_id):
             raise ValueError("house group chat is not configured")
         base = await session.scalar(
             select(OutboxDeliveryRow).where(
@@ -130,7 +153,22 @@ class PostgresPublicCards:
                 OutboxDeliveryRow.operation_key == card.edit_key,
             )
         )
-        if base is not None and base.text == card.text and base.chat_id == chat_id:
+        prior_edit = None
+        if base is not None:
+            prior_edit = await session.scalar(
+                select(OutboxDeliveryRow.id)
+                .where(
+                    OutboxDeliveryRow.house_id == card.house_id,
+                    OutboxDeliveryRow.edit_key == card.edit_key,
+                )
+                .limit(1)
+            )
+        if (
+            base is not None
+            and prior_edit is None
+            and base.text == card.text
+            and base.chat_id == chat_id
+        ):
             if poll.status is not PollStatus.OPEN and not base.buttons:
                 return base.id
             if poll.status is PollStatus.OPEN and len(base.buttons) == 2:
