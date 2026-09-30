@@ -113,9 +113,10 @@ resolution poll и оба исхода `closed`/`reopened`. Он использ�
 repositories/dispatcher и MockTransport ACK, рендерит frozen PDF в FileStore и связывает
 `document.ready` с request; цельный live LLM/MAX upload/delivery он не проверяет.
 K15: оценщик traces считает маршруты, критические ошибки, источник, задержки
-и tool calls по K01 dataset; unit-тесты проходят. Реальные метрики модели
-не измерены: Qwen3-8B на 8 GiB Mac не дал ответа и вызвал swap. Версии и
-ограничения записаны в `evals/k15-status.md` и K02 probe.
+и tool calls по K01 dataset; route-harness запускает 24 сообщения через реальный
+Ollama `LlmTriagePort` и сохраняет валидированные traces без выдуманных tool actions;
+unit-тесты проходят. Полные метрики модели ещё не измерены. Версии и ограничения
+записаны в `evals/k15-status.md` и K02 probe.
 K16: четыре вариативных демо-пути, ссылки на проверяемые тесты и provenance
 собраны в `docs/release/katerina-demo-handoff.md`; live MAX/G3 evidence не
 заполнены. Z handoff обновлён для PostgreSQL-модулей и локального воспроизведения.
@@ -144,7 +145,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Сквозная проверка Z14 | Частично: 30.09.2026 единый локальный PostgreSQL/MockTransport problem → MAX callback → голос/card edit → request/PDF/FileStore/binding → demo executor → result poll → closed/reopened пройден; полный live MAX/LLM G3 остаётся открытым | `tests/infrastructure/test_g3_runtime.py`, `test_z10_max_pdf_pipeline.py` |
 | PDF QA Z15 | Частично: 4 образца/7 страниц ранее визуально просмотрены; 30.09.2026 локально проверены hash, PDF text, версия/демо-маркировка и приватная доставка четырёх файлов в MockTransport. Реальные файлы в MAX mobile/web не открывались | `docs/release/zamira-pdf-qa.md`, `zamira-live-pdf-smoke.md`, `tests/infrastructure/test_z10_max_pdf_pipeline.py` |
 | Материалы Z16 | Частично: handoff, безопасный live PDF smoke и точный ручной demo-сценарий `closed`/`reopened` с demo-only CLI подготовлены 30.09.2026. Двухчасовая live-финализация, MAX mobile/web и полный G3 не проверены | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`, `src/dom_domych/entrypoints/zamira_operator.py` |
-| Python-проект и зависимости A00 | Проверено локально; GitHub Actions #50 для предыдущего набора | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; на целевом PG17/pgvector 275 тестов, объединённый набор: 278 тестов, Ruff, mypy и Alembic check на чистой PG16.13 |
+| Python-проект и зависимости A00 | Проверено локально; GitHub Actions #50 для предыдущего набора | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; на целевом PG17/pgvector 275 тестов, объединённый набор: 279 тестов, Ruff, mypy и Alembic check на чистой PG16.13 |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17.8 + pgvector 0.8.1 для предыдущего набора | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: единая migration/check до `0a7b6c5d4e3f` и 275 тестов на чистой БД |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, signed int64 group chat ID, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; реальные `/start <код>` и `bot_added` группы подтверждены | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; mobile и несколько домов ещё не проверены |
@@ -177,7 +178,7 @@ K/Z handlers и repositories запускаются из A14 process root; об�
 доступ, HTTPS smoke и G1–G3/mobile-web прогоны. На отдельной PostgreSQL 17.8 +
 pgvector 0.8.1 с полной миграцией с нуля ранее прошли 275 тестов, Ruff, mypy по `src` и Alembic
 check без новых операций. На чистой PostgreSQL 16.13 30.09.2026 после Z05/Z07/Z10/Z14/Z16
-прошли 278 тестов, Ruff, mypy по `src` и Alembic check; PG17 для этого нового набора ещё не повторён. Старое
+прошли 279 тестов, Ruff, mypy по `src` и Alembic check; PG17 для этого нового набора ещё не повторён. Старое
 предупреждение Alembic о неизвестном типе `vector` сохраняется. A-пул повторно
 проверил полный Compose lifecycle уже с Z document worker и восстановление нового
 Z head. CI workflow поднимает тот же PG17/pgvector; GitHub Actions #50 на `2c6af2b`
