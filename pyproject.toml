@@ -25,6 +25,7 @@ dependencies = [
 [project.scripts]
 dom-domych-demo-operator = "dom_domych.entrypoints.demo_operator:main"
 dom-domych-process = "dom_domych.entrypoints.processes:main"
+dom-domych-preflight = "dom_domych.entrypoints.preflight:main"
 
 [dependency-groups]
 dev = [

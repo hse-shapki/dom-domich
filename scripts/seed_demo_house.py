@@ -1,13 +1,16 @@
-"""Заполняет только синтетический дом Z02 в явно указанной тестовой PostgreSQL."""
+"""Заполняет синтетический дом Z02 в явно разрешённой demo/test PostgreSQL."""
 
+import argparse
 import asyncio
 import os
 from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dom_domych.demo.house import HOUSE_ONE, HOUSE_TWO, demo_residencies
 from dom_domych.infrastructure.postgres.models import (
     ApartmentRiserRow,
     ApartmentRow,
@@ -17,7 +20,6 @@ from dom_domych.infrastructure.postgres.models import (
     RiserRow,
 )
 from dom_domych.infrastructure.postgres.session import database_lifespan
-from tests.fixtures.zamira_house import HOUSE_ONE, HOUSE_TWO, zamira_fixture
 
 
 async def _insert_once(
@@ -30,7 +32,7 @@ async def _insert_once(
 async def seed_demo_house(session: AsyncSession) -> None:
     """Идемпотентный seed; существующие записи и права не перезаписываются."""
 
-    fixture = zamira_fixture()
+    residencies = demo_residencies()
     for house_id, address in (
         (HOUSE_ONE, "Демо: Москва, Тестовая улица, дом 1"),
         (HOUSE_TWO, "Демо: Москва, Тестовая улица, дом 2"),
@@ -41,14 +43,12 @@ async def seed_demo_house(session: AsyncSession) -> None:
             {"id": house_id, "address": address, "timezone": "Europe/Moscow", "demo": True},
         )
 
-    residents = {row.resident_id: row for row in fixture.residencies}
-    apartments = {row.apartment_id: row for row in fixture.residencies}
-    for row in fixture.residencies:
+    residents = {row.resident_id: row for row in residencies}
+    apartments = {row.apartment_id: row for row in residencies}
+    for row in residencies:
         if row.risers != apartments[row.apartment_id].risers:
             raise ValueError("one apartment cannot have conflicting riser memberships")
-    risers = {
-        (row.house_id, riser.riser_id): riser for row in fixture.residencies for riser in row.risers
-    }
+    risers = {(row.house_id, riser.riser_id): riser for row in residencies for riser in row.risers}
     for resident_id, row in residents.items():
         await _insert_once(
             session,
@@ -78,7 +78,7 @@ async def seed_demo_house(session: AsyncSession) -> None:
             RiserRow,
             {"id": riser_id, "house_id": house_id, "kind": riser.kind, "label": str(riser_id)},
         )
-    for row in fixture.residencies:
+    for row in residencies:
         for riser in row.risers:
             await _insert_once(
                 session,
@@ -109,10 +109,29 @@ async def seed_demo_house(session: AsyncSession) -> None:
         )
 
 
+def _demo_seed_allowed(database_url: str, *, explicit_demo: bool) -> bool:
+    database = make_url(database_url).database or ""
+    return database.startswith("dom_domych_test") or (
+        explicit_demo and database == "dom_domych_demo"
+    )
+
+
 async def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--allow-demo-database",
+        action="store_true",
+        help="allow seeding only a database whose name contains dom_domych_demo",
+    )
+    args = parser.parse_args()
     database_url = os.environ.get("DATABASE_URL", "")
-    if not database_url or "dom_domych_test" not in database_url:
-        raise RuntimeError("seed requires an explicit test DATABASE_URL containing dom_domych_test")
+    if not database_url or not _demo_seed_allowed(
+        database_url, explicit_demo=args.allow_demo_database
+    ):
+        raise RuntimeError(
+            "seed requires a dom_domych_test database or --allow-demo-database "
+            "with a dom_domych_demo database"
+        )
     async with database_lifespan(database_url) as sessions:
         async with sessions.begin() as session:
             await seed_demo_house(session)
