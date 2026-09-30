@@ -233,6 +233,13 @@ class RequestService:
         self._require(context, "request.submit")
         if context.mode != ExecutionMode.DEMO:
             raise ValueError("LIVE_SUBMISSION_NOT_CONFIGURED")
+        approved = await self.store.get(command.request_id, context.house_id)
+        if (
+            approved is not None
+            and approved.status in {"approved", "submitting", "submitted", "registered"}
+            and approved.approval_actor != context.actor_id
+        ):
+            raise PermissionError("APPROVAL_ACTOR_REQUIRED")
         reserved = await self.store.reserve_submit(
             command.request_id,
             context.house_id,

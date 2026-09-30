@@ -78,8 +78,29 @@ class MessageAgentHandler:
             return True
         if all(route.kind is MessageKind.CONVERSATION for route in routes):
             return True
+        answers = [
+            (
+                f"{route.answer}\nИсточник: {', '.join(route.source_refs)}"
+                if route.next_action == "answer_with_sources" and route.answer
+                else (
+                    "Уточните, пожалуйста, вопрос или место: "
+                    "в проверенных источниках дома пока нет ответа."
+                )
+            )
+            for route in routes
+            if route.kind is MessageKind.QUESTION
+        ]
+        actions = [
+            route
+            for route in routes
+            if route.kind not in {MessageKind.QUESTION, MessageKind.CONVERSATION}
+        ]
+        if not actions:
+            if answers:
+                await self.replies.enqueue(event, principal, "\n\n".join(answers))
+            return True
         route_facts = json.dumps(
-            [route.model_dump(mode="json") for route in routes],
+            [route.model_dump(mode="json") for route in actions],
             ensure_ascii=False,
             sort_keys=True,
         )
@@ -102,8 +123,9 @@ class MessageAgentHandler:
         )
         if outcome.status != "completed":
             raise RuntimeError("AGENT_MESSAGE_FAILED")
-        if outcome.text.strip():
-            await self.replies.enqueue(event, principal, outcome.text.strip())
+        reply = "\n\n".join([*answers, outcome.text.strip()]).strip()
+        if reply:
+            await self.replies.enqueue(event, principal, reply)
         return True
 
 

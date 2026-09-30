@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 30.09.2026: локальные Z изменения (девять G3 комбинаций, четыре вида PDF, повтор и восстановление) объединены с опубликованными изменениями MAX, callback feedback и Ollama. Объединённый набор: **291 тест** на чистой PostgreSQL 16.13 после полной миграции, Ruff check/format, mypy по `src/dom_domych` и Alembic check прошли. Предыдущие отдельные прогоны: 261 тест на PostgreSQL 17.8/pgvector (Z) и 279 на PostgreSQL 16.13 (remote); итоговый PG17/CI ещё нужен. Live MAX подтвердил `/me`, polling, demo onboarding, групповую карточку/edit сообщения, отказ callback вне аудитории и транспорт синтетического PDF. Допустимый live голос, PDF Z в mobile/web и цельный MAX/LLM G3 не подтверждены. Исторические проверки ниже не следует читать как состояние live-стенда.
+Проверено 30.09.2026: в ветке `z-mvp-1` локальные Z изменения объединены с MAX/callback/Ollama, а явные команды жителя Z-MVP-1 подключены к inbox. **297 тестов** прошли на чистой PostgreSQL 16.13 после полной миграции; Ruff check/format, mypy и Alembic check — локальные ворота этой ветки. Предыдущие отдельные прогоны: 261 тест на PostgreSQL 17.8/pgvector (Z) и 279 на PostgreSQL 16.13 (remote); PG17/CI и live MAX для Z-MVP-1 ещё нужны. Ранее live MAX подтвердил `/me`, polling, demo onboarding, групповую карточку/edit сообщения, отказ callback вне аудитории и транспорт синтетического PDF. Допустимый live голос, PDF Z в mobile/web и цельный MAX/LLM G3 не подтверждены. Исторические проверки ниже не следует читать как состояние live-стенда.
 
 ## Факты на дату проверки
 
@@ -58,8 +58,9 @@ Trusted итог poll до agent continuation переводит дело в `re
 K09 evidence assessment теперь требует отдельной capability, текущей версии дела и
 ссылки на сохранённое evidence того же дома. Решение и источники сохраняются в
 versioned case event; повтор команды идемпотентен, статус дела не меняется от одного
-фото или оценки. Проверено на мигрированной PostgreSQL 16 и повторно при слиянии на PostgreSQL 17; адресная привязка
-входящего MAX-фото к делу, следующий request/evidence цикл и live MAX ещё не проверены.
+фото или оценки. Привязка входящего MAX-фото по сохранённому Update, FileStore,
+отдельная оценка отправителем и последующий prepare/approve/send проверены на
+PostgreSQL 16.13 в Z-MVP-1; live MAX и независимая оценка человеком ещё не проверены.
 K10: RequestService сверяет актуальную версию дела и проверенное правило,
 хранит draft hash/version и явное согласование. Изменение черновика сбрасывает
 approval, submit в demo идемпотентен через operation key, статус registered
@@ -147,7 +148,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | DeliveryPort/outbox A08 | Частично: enqueue/rollback, signed group ID, DM, карточка/edit, недоступный адресат и отдельный process loop проверены на PostgreSQL 17 + MockTransport; durable DM, group message, карточка с кнопками, PDF и edit того же group message ID реально прошли MAX | `entrypoints/processes.py`, `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`; визуальная mobile/web проверка и доменный edit Z-карточки ещё нужны |
 | JobPort/scheduler A09 | Частично: дедлайны, idempotency, stale no-op и K revision adapter в production loop проверены на PostgreSQL 17 | `entrypoints/processes.py`, `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`; K/Z handlers/revisions подключены; live runtime не проверен |
 | MAX poll callbacks A10 | Частично: actor/дом/токен, outcome-specific notification и Z PollRepository проверены на PostgreSQL + MockTransport; live callback группы принят и отказ вне frozen audience подтверждён без записи голоса, notification принят MAX | `infrastructure/postgres/poll_actions.py`, `application/polls/production.py`, `tests/infrastructure/test_z05_poll_callback_postgres.py`; live допустимый голос/edit ещё не проверены |
-| MAX files A11 | Частично: synthetic PDF реально прошёл FileStore → upload → сохранение token → `attachment.not.ready` → bounded retry → приватную доставку и виден в web MAX; безопасное фото, rate limits и coalescing edit проверены локально | `infrastructure/max/media.py`, `infrastructure/max/tls.py`, `application/notifications/worker.py`, tests; открытие файла, mobile, документ Z и K evidence linkage ещё нужны |
+| MAX files A11 | Частично: synthetic PDF реально прошёл FileStore → upload → token → retry → приватную доставку и виден в web MAX; безопасное фото и K evidence linkage проверены локально на PG16.13, rate limits/coalescing — отдельными тестами | `infrastructure/max/media.py`, `application/agent/resident_production.py`, `tests/infrastructure/test_z_mvp1_resident_actions.py`; открытие файла, mobile и live фото ещё нужны |
 | Deploy/runtime A12 | Частично: полный Compose с Z document worker локально запускает и перезапускает migrate/API/inbox/scheduler/outbox/documents/maintenance/Caddy; локальный HTTPS readiness различает БД и LLM; наружу опубликован только Caddy | `Dockerfile`, `deploy/compose.yml`, `entrypoints/api.py`, `entrypoints/processes.py`; публичный DNS/TLS, выбранная модель и live MAX/inference не проверены |
 | Надёжность A13 | Частично: bounded retry/dead-letter/delivery_unknown, rate limits, coalescing и heartbeat outbox/jobs проверены | `infrastructure/max/rate_limit.py`, queue workers/repositories и PostgreSQL tests; live rate-limit и потеря прав MAX не проверены |
 | Composition/polling A14 | Частично: локальная production-цепь problem → request → PDF binding → demo executor → resolution → closed проверена; initiative/emergency handlers подключены | `tests/infrastructure/test_g3_runtime.py`; без LLM/MAX upload это не live G3 |
@@ -156,6 +157,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов, CI Actions закреплены по SHA актуальных релизов | `scripts/release_audit.py`, `.github/workflows/python.yml`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
 | Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены; нативный Ollama `qwen3:4b` прошёл PostgreSQL problem path `case.search` → `case.create` → reply outbox | `src/dom_domych/agent/`, `infrastructure/llm/ollama.py`, `application/agent/composition.py`, tests/evals; полный live MAX/G3 и реальные метрики ещё открыты |
 | Хранение опросов | Частично: PostgreSQL repository/migration, callback и jobs проверены локально | `infrastructure/postgres/polls.py`, `application/polls/production.py`, `tests/infrastructure/test_z04_polls_postgres.py`; K route проверен локально; live MAX не проверен |
+| Z-MVP-1: вход до обращения | Частично: reviewed вопрос/уточнение, личные evidence/assessment, авторская ревизия инициативы, reviewed rule и явные approve/send подключены к inbox; повторы и чужой actor проверены на PG16.13 | `application/agent/resident_actions.py`, `resident_production.py`, `entrypoints/processes.py`, Z-MVP-1 tests; live MAX mobile/web и вариативные фразы ещё не проверены |
 | Рабочий стенд и внешние проверки | Частично | Целевой PG17/pgvector, production image и полный local Compose lifecycle проверены; live MAX bot identity/polling/DM onboarding, group card, отказ callback вне аудитории и транспорт синтетического PDF пройдены, local-LLM problem path проверен отдельно; публичный HTTPS, mobile, допустимый голос/доменный edit/файлы Z и цельный live G3 ещё не проверены |
 
 Эти строки описывают только осмотр репозитория. Они не доказывают отсутствие внешнего аккаунта или бота у команды. И наоборот, схема в Markdown не доказывает готовность реализации.
@@ -166,11 +168,14 @@ K/Z handlers и repositories запускаются из A14 process root; об�
 открывает audience/poll/card атомарно, применяет trusted outcome и после доверенной
 регистрации ставит immutable appeal PDF в очередь через durable inbox.
 Поддержанная инициатива проходит request preparation после явного trusted действия
-подтверждённого жителя и проверенного правила в локальном G3 тесте. Локальный
-author workflow изменения инициативы проверен на уровне сервиса/inbox; UX
-запуска через MAX, привязка входящего фото к K evidence и полный MAX/LLM G3
-остаются открытыми. На чистой PostgreSQL 16.13 30.09.2026 весь объединённый
-набор прошёл: 291 тест, Ruff, mypy и Alembic check без новых операций.
+подтверждённого жителя и проверенного правила в локальном G3 тесте. Теперь
+авторская редакция вызывается из явной личной команды; фото из сохранённого MAX
+Update привязывается к K evidence в FileStore. Отправитель отдельно оценивает
+релевантность фото, автоматического vision нет. `prepare` проверяет автора,
+актуальный case, reviewed rule и ответственного; `approve` и `send` — отдельные
+личные действия, отправка идёт только demo executor. Вопрос из reviewed source
+отвечает без mutation tools. На чистой PostgreSQL 16.13 30.09.2026 прошли
+297 тестов; live MAX UX, вариативные формулировки и полный MAX/LLM G3 открыты.
 Целевой PG17/pgvector для этого commit и CI ещё не повторён; предыдущий
 набор PG17/pgvector и Compose lifecycle проверены. GitHub Actions #50 до
 объединения прошёл 275 тестов на PG17/pgvector. Публичный HTTPS, mobile/web

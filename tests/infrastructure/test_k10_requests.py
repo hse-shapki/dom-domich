@@ -197,6 +197,8 @@ async def test_request_lifecycle_requires_reviewed_rule_and_real_registration() 
             submit = RequestSubmit(
                 request_id=prepared.request_id, expected_draft_version=2, operation_id=uuid4()
             )
+            with pytest.raises(PermissionError, match="APPROVAL_ACTOR_REQUIRED"):
+                await service.submit(submit, _context(house_id, uuid4()))
             submitted = await service.submit(submit, context)
             assert submitted.status == "submitted" and submitted.registration_id is None
             async with sessions() as session:

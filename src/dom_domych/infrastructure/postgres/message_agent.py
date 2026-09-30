@@ -9,6 +9,7 @@ from dom_domych.application.agent.messages import MessagePrincipal
 from dom_domych.contracts.base import ExecutionMode
 from dom_domych.contracts.events import EventEnvelope
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
+from dom_domych.infrastructure.postgres.case_models import CaseMessageRow
 from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
 from dom_domych.infrastructure.postgres.models import HouseRow, ResidencyRow, ResidentRow
 
@@ -44,6 +45,7 @@ class PostgresMessagePrincipals:
                     ResidencyRow.house_id == house.id,
                     ResidencyRow.resident_id == resident.id,
                     ResidencyRow.confirmed.is_(True),
+                    ResidencyRow.adult.is_(True),
                     ResidencyRow.valid_from <= now,
                     or_(ResidencyRow.valid_until.is_(None), ResidencyRow.valid_until > now),
                 )
@@ -77,12 +79,21 @@ class PostgresMessageReplies:
         if event.message is None:
             raise ValueError("MESSAGE_REQUIRED")
         direct = event.message.chat_id.startswith("dm:")
-        intent = DeliveryIntent(
-            house_id=principal.house_id,
-            operation_key=f"agent-reply:{event.event_id}",
-            text=text,
-            recipient_id=principal.actor_id if direct else None,
-            chat_id=None if direct else event.message.chat_id,
-        )
         async with self.sessions.begin() as session:
+            case_id = await session.scalar(
+                select(CaseMessageRow.case_id).where(
+                    CaseMessageRow.house_id == principal.house_id,
+                    CaseMessageRow.message_id == event.event_id,
+                    CaseMessageRow.actor_id == principal.actor_id,
+                )
+            )
+            if case_id is not None and str(case_id) not in text:
+                text = f"{text}\nID дела: {case_id}"
+            intent = DeliveryIntent(
+                house_id=principal.house_id,
+                operation_key=f"agent-reply:{event.event_id}",
+                text=text,
+                recipient_id=principal.actor_id if direct else None,
+                chat_id=None if direct else event.message.chat_id,
+            )
             return await PostgresDeliveryQueue(session, self.clock).enqueue(intent)

@@ -25,6 +25,7 @@ from dom_domych.infrastructure.postgres.case_models import (
     CaseRow,
 )
 from dom_domych.infrastructure.postgres.inbox import save_inbox_event
+from dom_domych.infrastructure.postgres.message_agent import PostgresMessagePrincipals
 from dom_domych.infrastructure.postgres.models import (
     ApartmentRow,
     HouseRow,
@@ -181,6 +182,7 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                 assert delivery is not None
                 assert delivery.house_id == house_id and delivery.chat_id == "777"
                 assert delivery.status == "pending"
+                assert f"ID дела: {case.id}" in delivery.text
                 inbox = await session.get(InboxEventRow, event_id)
                 assert inbox is not None and inbox.status == "done"
                 problem_event = await session.scalar(
@@ -192,6 +194,11 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
 
             async with sessions.begin() as session:
                 assert not await save_inbox_event(session, event.source_key, event, {}, NOW)
+                residency = await session.get(ResidencyRow, residency_id)
+                assert residency is not None
+                residency.adult = False
+            resolver = PostgresMessagePrincipals(sessions, clock, frozenset({"case.read"}))
+            assert await resolver.resolve(event) is None
         finally:
             async with sessions.begin() as session:
                 case_ids = select(CaseRow.id).where(CaseRow.house_id == house_id)

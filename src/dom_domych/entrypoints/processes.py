@@ -17,6 +17,8 @@ from dom_domych.application.agent.composition import (
     register_k_continuations,
 )
 from dom_domych.application.agent.messages import register_message_agent
+from dom_domych.application.agent.resident_actions import ResidentActionHandler
+from dom_domych.application.agent.resident_production import PostgresResidentActions
 from dom_domych.application.cases.production import register_problem_events
 from dom_domych.application.documents.followup import RequestComplaintEventHandler
 from dom_domych.application.documents.production import RequestDocumentEventHandler
@@ -45,6 +47,7 @@ from dom_domych.infrastructure.files.local import LocalFileStore
 from dom_domych.infrastructure.llm.llama_server import LlamaServerPort
 from dom_domych.infrastructure.llm.ollama import OllamaPort
 from dom_domych.infrastructure.max.client import MAX_API_BASE_URL, MaxApiClient
+from dom_domych.infrastructure.max.evidence import MaxEvidenceLoader
 from dom_domych.infrastructure.max.media import MaxMediaTransport
 from dom_domych.infrastructure.max.onboarding import MaxOnboardingHandler
 from dom_domych.infrastructure.max.polling import MaxPollingConsumer
@@ -55,6 +58,10 @@ from dom_domych.infrastructure.postgres.demo_executor import (
     PostgresExecutorPort,
 )
 from dom_domych.infrastructure.postgres.documents import PostgresDocuments
+from dom_domych.infrastructure.postgres.message_agent import (
+    PostgresMessagePrincipals,
+    PostgresMessageReplies,
+)
 from dom_domych.infrastructure.postgres.session import database_lifespan
 
 logger = structlog.get_logger()
@@ -169,6 +176,7 @@ async def run_inbox() -> None:
             verify=max_verify,
             trust_env=False,
         ) as max_http,
+        httpx.AsyncClient(timeout=max_timeout, verify=max_verify, trust_env=False) as media_http,
         httpx.AsyncClient(base_url=settings.llm_base_url, timeout=llm_timeout) as llm_http,
     ):
         clock = SystemClock()
@@ -199,6 +207,20 @@ async def run_inbox() -> None:
             EventName.BOT_STOPPED,
         }:
             dispatcher.register(event_name, onboarding.handle)
+        files = LocalFileStore(settings.file_store_dir, clock)
+        dispatcher.register(
+            EventName.MESSAGE_RECEIVED,
+            ResidentActionHandler(
+                PostgresMessagePrincipals(sessions, clock, _RESIDENT_AGENT_CAPABILITIES),
+                PostgresMessageReplies(sessions, clock),
+                PostgresResidentActions(
+                    sessions,
+                    clock,
+                    MaxEvidenceLoader(sessions, MaxMediaTransport(media_http, max_client), files),
+                    files,
+                ),
+            ),
+        )
         register_message_agent(
             dispatcher,
             build_k_message_agent(
