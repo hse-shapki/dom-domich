@@ -12,6 +12,7 @@ from dom_domych.agent.runtime import AgentMode
 from dom_domych.agent.triage import MessageKind, TriageService
 from dom_domych.application.jobs.inbox_worker import EventDispatcher
 from dom_domych.contracts.base import ExecutionMode, PrincipalType, TrustedContext
+from dom_domych.contracts.errors import ErrorCode
 from dom_domych.contracts.events import EventEnvelope, EventName, EventSource
 
 
@@ -57,7 +58,17 @@ class MessageAgentHandler:
             raise ValueError("MESSAGE_ACTOR_MISMATCH")
         text = (event.message.text or "").strip()
         if not text:
-            return False
+            principal = await self.principals.resolve(event)
+            if principal is None:
+                return False
+            reply = (
+                "Вложение без команды не обработано. Для фото по делу отправьте в личном "
+                "чате /evidence ID_ДЕЛА и прикрепите ровно одно фото."
+                if event.message.attachment_refs
+                else "Сообщение без текста не обработано. Опишите проблему словами."
+            )
+            await self.replies.enqueue(event, principal, reply)
+            return True
         principal = await self.principals.resolve(event)
         if principal is None:
             return False
@@ -129,6 +140,14 @@ class MessageAgentHandler:
             now=event.received_at,
         )
         if outcome.status != "completed":
+            if any(item.outcome == ErrorCode.VALIDATION_ERROR.value for item in outcome.audit):
+                await self.replies.enqueue(
+                    event,
+                    principal,
+                    "Не удалось безопасно определить место. Уточните: весь дом или номер "
+                    "подъезда; если указываете этаж — обязательно укажите подъезд.",
+                )
+                return True
             raise RuntimeError("AGENT_MESSAGE_FAILED")
         reply = "\n\n".join([*answers, outcome.text.strip()]).strip()
         if reply:

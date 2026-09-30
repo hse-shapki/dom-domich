@@ -1,5 +1,6 @@
 """Документированные методы Bot API; клиент создаётся на lifespan процесса."""
 
+import re
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -32,6 +33,14 @@ class UploadSlot:
 class UpdateBatch:
     updates: tuple[dict[str, object], ...]
     marker: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class MessageSummary:
+    """Минимальный read-only результат без текста и адресатов сообщения."""
+
+    has_text: bool
+    attachment_types: tuple[str, ...]
 
 
 class RateLimits(Protocol):
@@ -92,6 +101,31 @@ class MaxApiClient:
             raise MaxApiError("/me", 200, "invalid_bot_identity")
         username = payload.get("username")
         return BotIdentity(user_id, username if isinstance(username, str) else None)
+
+    async def get_message_summary(self, message_id: str) -> MessageSummary:
+        """Проверяет доступность сообщения, не возвращая его содержимое вызывающему коду."""
+
+        # Live MAX uses IDs like ``mid.<hex>`` although the API page documents a
+        # narrower pattern. A dot is safe inside one path segment; traversal is not.
+        if re.fullmatch(r"[A-Za-z0-9_.-]+", message_id) is None or ".." in message_id:
+            raise ValueError("invalid MAX message ID")
+        path = f"/messages/{message_id}"
+        payload = await self._request("GET", path, operation="message_read")
+        body = payload.get("body")
+        if body is None:
+            return MessageSummary(False, ())
+        if not isinstance(body, dict):
+            raise MaxApiError(path, 200, "invalid_message_body")
+        text = body.get("text")
+        attachments = body.get("attachments", [])
+        if not isinstance(attachments, list):
+            raise MaxApiError(path, 200, "invalid_attachments")
+        attachment_types: list[str] = []
+        for attachment in attachments:
+            if not isinstance(attachment, dict) or not isinstance(attachment.get("type"), str):
+                raise MaxApiError(path, 200, "invalid_attachment")
+            attachment_types.append(attachment["type"])
+        return MessageSummary(bool(isinstance(text, str) and text), tuple(attachment_types))
 
     async def send_text(
         self,

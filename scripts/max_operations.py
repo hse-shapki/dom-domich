@@ -42,6 +42,13 @@ async def run(arguments: argparse.Namespace) -> None:
                 tuple(arguments.update_type),
             )
             print("webhook_registered=true")
+        elif arguments.command == "inspect-message":
+            summary = await client.get_message_summary(arguments.message_id)
+            types = ",".join(summary.attachment_types) or "-"
+            print(
+                f"message_found=true has_text={str(summary.has_text).lower()} "
+                f"attachment_types={types}"
+            )
         else:
             await client.delete_webhook(arguments.url)
             print("webhook_deleted=true")
@@ -55,6 +62,8 @@ def main() -> None:
     register = subparsers.add_parser("register")
     register.add_argument("--url", required=True)
     register.add_argument("--update-type", action="append", required=True)
+    inspect_message = subparsers.add_parser("inspect-message")
+    inspect_message.add_argument("--message-id", required=True)
     delete = subparsers.add_parser("delete")
     delete.add_argument("--url", required=True)
     arguments = parser.parse_args()

@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 30.09.2026: A-MVP-1, Z-MVP-1 и локальная часть Z-MVP-2 объединены; четыре PDF из настоящих producer-событий проверены до приватного MAX MockTransport. Общий merge прошёл **301 тест** на чистой PostgreSQL 16.13, Ruff check/format, mypy и Alembic check; ранее A-MVP-1 прошёл 301 тест на PG17/pgvector, Z-MVP-2 — успешный GitHub Actions #36741335490 на PG17/pgvector. PG17 CI объединения ожидается. Единый polling Compose подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox. Допустимый live голос, доменный edit, PDF Z в mobile/web, downstream `problem.detected` и цельный MAX/LLM G3 ещё не подтверждены.
+Проверено 30.09.2026: A-MVP-1, Z-MVP-1 и Z-MVP-2 объединены. A-MVP-2 прошла 314 тестов на чистой PostgreSQL 18/pgvector, Z-MVP-3 — 302 на PG16.13; отдельные PG17 CI успешны. Объединённый набор проверяется. Единый polling Compose ранее подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox; redacted read-back MAX подтверждён отдельно. Допустимый live голос, PDF Z в mobile/web, новый fallback личного сообщения, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены.
 
 ## Факты на дату проверки
 
@@ -45,7 +45,10 @@ K08: CaseService проверяет доверенный event/actor/capability,
 writer под advisory lock повторяет поиск кандидатов, хранит operation hash,
 case messages, versioned events и recurrence. Тест на PostgreSQL 18 провёл
 12 конкурентных сообщений к одному делу, повтор операции, stale version,
-два дела в одном сообщении и чужой дом. Evidence-таблица и application use case есть;
+два дела в одном сообщении и чужой дом. После live recovery найден floor без entrance,
+созданный моделью до production scope handler: `CaseSearch`/`CaseCreate` теперь запрещают такую
+комбинацию на tool schema boundary, а message handler отвечает уточнением места вместо молчания.
+Старое некорректное дело не изменялось. Evidence-таблица и application use case есть;
 полный путь фото MAX → case evidence требует отдельной проверки.
 Для Z06 добавлен scoped reader автора инициативы из неизменяемой origin-связи;
 он не принимает author/house из аргументов модели. Z repository/UoW реализован
@@ -138,13 +141,13 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Сквозная проверка Z14 | Частично: 9 production PostgreSQL 17 сценариев problem/initiative/emergency → request → PDF/FileStore/binding → executor → три исхода и отдельный problem → callback/card → request/PDF → closed/reopened MockTransport путь | `tests/infrastructure/test_g3_runtime.py`, `test_g3_runtime_callback.py`; цельный live MAX/LLM G3 отсутствует |
 | PDF QA Z15 | Частично: 29.09.2026 заново сгенерированы/просмотрены 4 образца (7 страниц) и 4 production PostgreSQL/FileStore документа (6 страниц); embedded fonts, snapshot/hash/поля/приватность сверены | `docs/release/zamira-pdf-qa.md`, `output/pdf/qa-2026-09-29/manifest.json`; MAX mobile/web не проверены |
 | Материалы Z16 | Частично: handoff, 9 локальных G3 исходов, QA manifest, manual demo двух исходов и live PDF smoke готовы | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`; live evidence MAX mobile/web отсутствуют |
-| Python-проект и зависимости A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 30.09.2026 объединённые 301 тест, migration/check, двойной seed, Ruff и mypy прошли на PG17/pgvector; CI merge ожидается |
-| PostgreSQL core A02 | Проверено локально на PostgreSQL 17 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`, `src/dom_domych/demo/house.py`: clean migration/check до `0a7b6c5d4e3f`, повторный runtime seed и 301 тест |
+| Python-проект и зависимости A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; ветка A-MVP-2 прошла 314 тестов на чистой PostgreSQL 18/pgvector, предыдущий clean PG17 прогон — 303 теста; migration/check, двойной seed, Ruff и mypy прошли; CI ожидается |
+| PostgreSQL core A02 | Проверено локально на PostgreSQL 17 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`, `src/dom_domych/demo/house.py`: clean migration/check до `0a7b6c5d4e3f`, повторный runtime seed и 303 теста |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, signed int64 group chat ID, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; реальные `/start <код>` и `bot_added` группы подтверждены | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; mobile и несколько домов ещё не проверены |
 | MAX Bot API A03 | Частично: документированные методы проверены через MockTransport; live `/me`, личная/групповая отправка, `POST /answers` и PDF upload — 29–30.09.2026; MAX TLS объединяет Mozilla/Russian roots и не использует ambient proxy | `infrastructure/max/client.py`, `infrastructure/max/tls.py`, tests; mobile ещё не проверен |
-| Webhook/inbox A04 | Частично: все поддержанные Update, dedupe/durable insert проверены на PostgreSQL; live polling принял `bot_started` и `message_created` | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/postgres/inbox.py`, `tests/infrastructure/test_max_webhook.py`; публичный HTTPS webhook и прочие live-типы ещё не проверены |
-| Inbox worker A07 | Частично: production loop собирает onboarding → K message/continuation handlers; lease/recovery/retry проверены на PostgreSQL 17 | `entrypoints/processes.py`, `application/agent/messages.py`, inbox/K14 tests; Z handlers подключены; live MAX/LLM не проверены |
+| Webhook/inbox A04 | Частично: все поддержанные Update, dedupe/durable insert проверены на PostgreSQL; live polling принял `bot_started`, `message_created` и `message_removed`; non-actionable события завершаются явным redacted audit handler вместо dead-letter | `entrypoints/api.py`, `infrastructure/max/updates.py`, `infrastructure/max/non_actionable.py`, `infrastructure/postgres/inbox.py`, tests; публичный HTTPS webhook и прочие live-типы ещё не проверены |
+| Inbox worker A07 | Частично: production loop собирает onboarding → K message/continuation handlers; lease/recovery/retry проверены на PostgreSQL 17; attachment-only сообщение подтверждённого жителя получает инструкцию вместо молчания | `entrypoints/processes.py`, `application/agent/messages.py`, inbox/K14 tests; обновлённый fallback live ещё не проверен |
 | DeliveryPort/outbox A08 | Частично: enqueue/rollback, signed group ID, DM, карточка/edit, недоступный адресат и отдельный process loop проверены на PostgreSQL 17 + MockTransport; durable DM, group message, карточка с кнопками, PDF и edit того же group message ID реально прошли MAX | `entrypoints/processes.py`, `infrastructure/postgres/delivery.py`, `application/notifications/worker.py`; визуальная mobile/web проверка и доменный edit Z-карточки ещё нужны |
 | JobPort/scheduler A09 | Частично: дедлайны, idempotency, stale no-op и K revision adapter в production loop проверены на PostgreSQL 17 | `entrypoints/processes.py`, `infrastructure/postgres/jobs.py`, `application/jobs/scheduler.py`; K/Z handlers/revisions подключены; live runtime не проверен |
 | MAX poll callbacks A10 | Частично: actor/дом/токен, outcome-specific notification и Z PollRepository проверены на PostgreSQL + MockTransport; live callback группы принят и отказ вне frozen audience подтверждён без записи голоса, notification принят MAX | `infrastructure/postgres/poll_actions.py`, `application/polls/production.py`, `tests/infrastructure/test_z05_poll_callback_postgres.py`; live допустимый голос/edit ещё не проверены |
@@ -197,6 +200,22 @@ PG17/pgvector, миграции, runtime seed, шесть workers, polling, MAX 
 normal group message подтверждённого жителя прошли совместно до sent outbox. Сообщения до
 регистрации не получили trusted actor и ответа. Следующий `problem.detected` остался без
 downstream handler — это открытый Z-MVP-1 стык и причина не объявлять полный live G3.
+
+A-MVP-2 начата в ветке `a-mvp-2`: `entrypoints/diagnostics.py` читает inbox/outbox/jobs в
+read-only PostgreSQL транзакции и выводит только redacted агрегаты status/ready/stale lease и
+alerts. Локальный PostgreSQL-тест подтверждает отсутствие mutation и утечки operation key/text.
+`MaxApiClient.get_message_summary` и `scripts.max_operations inspect-message` через официальный
+`GET /messages/{messageId}` возвращают только признак текста и типы вложений без текста,
+адресатов и токенов. Фактический MAX `mid` содержит точку, хотя страница метода документирует
+более узкий шаблон; клиент принимает точку внутри одного path segment, но запрещает `..` и `/`.
+Команда live нашла отправленное текстовое сообщение и вернула только `has_text=true` и отсутствие
+вложений; PDF и inline keyboard через неё ещё не проверены.
+Live фото, допустимый callback/edit, потеря прав и mobile/web по-прежнему открыты.
+Нормализованные `message.edited`, `message.removed`, attachment audit и изменения membership/admin
+прав теперь принимает последний redacted handler: он не выполняет business mutation и не пишет
+payload/ID в лог, но предотвращает бессмысленный retry/dead-letter. Вложение подтверждённого
+жителя без текста получает инструкцию `/evidence`, а не молчание. Проверено локально; live после
+обновления stand ещё не подтверждён.
 
 ## Как обновлять после задачи
 

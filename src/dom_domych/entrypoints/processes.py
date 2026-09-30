@@ -49,6 +49,7 @@ from dom_domych.infrastructure.llm.ollama import OllamaPort
 from dom_domych.infrastructure.max.client import MAX_API_BASE_URL, MaxApiClient
 from dom_domych.infrastructure.max.evidence import MaxEvidenceLoader
 from dom_domych.infrastructure.max.media import MaxMediaTransport
+from dom_domych.infrastructure.max.non_actionable import MaxNonActionableEventHandler
 from dom_domych.infrastructure.max.onboarding import MaxOnboardingHandler
 from dom_domych.infrastructure.max.polling import MaxPollingConsumer
 from dom_domych.infrastructure.max.rate_limit import MaxRateLimits
@@ -247,6 +248,14 @@ async def run_inbox() -> None:
             PostgresDocuments(sessions),
             status_after_request=resolution.handle_status,
         )
+        for event_name in {
+            EventName.MESSAGE_EDITED,
+            EventName.MESSAGE_REMOVED,
+            EventName.ATTACHMENT_RECEIVED,
+            EventName.HOUSE_BOT_MEMBERSHIP_CHANGED,
+            EventName.HOUSE_BOT_PERMISSIONS_CHANGED,
+        }:
+            dispatcher.register(event_name, MaxNonActionableEventHandler())
         worker = InboxWorker(sessions, dispatcher, clock, f"{settings.worker_id}:inbox")
         await _run_once_loop(stop, worker, "inbox")
 

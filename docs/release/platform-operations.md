@@ -53,6 +53,31 @@ uv run python -m scripts.max_operations register \
   --update-type message_created --update-type message_callback --update-type bot_started
 ```
 
+Состояние durable очередей проверяется отдельной read-only командой. Она открывает PostgreSQL
+транзакцию с `SET TRANSACTION READ ONLY` и выводит только revision, агрегаты статусов, количество
+готовых записей и просроченных lease. Payload, тексты, operation keys, токены, chat/user ID и
+персональные данные не читаются и не печатаются:
+
+```bash
+dom-domych-diagnostics
+dom-domych-diagnostics --fail-on-alert
+```
+
+Вторая команда завершается кодом `2`, если есть stale lease, `dead`, `failed` или
+`delivery_unknown`; сами очереди она не исправляет. `ready` — число уже доступных `pending`
+записей, а не автоматическое утверждение о поломке: его нужно сопоставить с активностью worker.
+
+Уже отправленное сообщение можно проверить через официальный read-only метод MAX, не выводя
+его текст, адресатов или attachment token:
+
+```bash
+uv run python -m scripts.max_operations inspect-message --message-id <MID>
+```
+
+Команда выводит только `message_found`, наличие текста и типы вложений. Это подтверждает, что
+MAX возвращает сообщение и, например, вложение `file` или `inline_keyboard`; открытие PDF в
+web/mobile по-прежнему требует ручной отметки в release matrix.
+
 После очной проверки demo-жителя оператор выдаёт одноразовый код (это чувствительное значение,
 его единственный раз печатает сама команда) и отдельно может связать заранее известный MAX chat ID:
 
