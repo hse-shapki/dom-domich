@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 30.09.2026: A-MVP-1, Z-MVP-1 и Z-MVP-2 объединены; A-MVP-2 добавила диагностику и безопасную обработку событий MAX, Z-MVP-3 провела operator CLI через девять G3 исходов и уточнила K15 оценщик. Ветки отдельно прошли PG17 CI; A-MVP-2 дала 314 тестов на чистой PG18/pgvector, Z-MVP-3 — 302 на PG16.13. Объединённый набор тестируется. Единый polling Compose ранее подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox; redacted read-back MAX подтверждён отдельно. Допустимый live голос, PDF Z в mobile/web, новый fallback личного сообщения, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены.
+Проверено 30.09.2026: A-MVP-1/2 и Z-MVP-1/2/3 объединены в `main`. Общий merge прошёл **315 тестов** на чистой PostgreSQL 16.13, Ruff check/format, mypy и Alembic check; отдельные ветки прошли PG17 CI. A-MVP-2 добавила диагностику и безопасную обработку событий MAX, Z-MVP-3 провела operator CLI через девять G3 исходов и уточнила K15 оценщик. Единый polling Compose ранее подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox; redacted read-back MAX подтверждён отдельно. Допустимый live голос, PDF Z в mobile/web, новый fallback личного сообщения, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены.
 
 ## Факты на дату проверки
 
@@ -146,7 +146,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Сквозная проверка Z14 | Частично: 9 production PostgreSQL сценариев problem/initiative/emergency → request → PDF/FileStore/binding → operator CLI register/done/replay → три исхода прошли на чистой PG16.13; отдельно problem → callback/card → request/PDF → closed/reopened MockTransport путь | `tests/infrastructure/test_g3_runtime.py`, `test_g3_runtime_callback.py`, `docs/release/z-mvp-3-check.md`; цельный live MAX/LLM G3 отсутствует |
 | PDF QA Z15 | Частично: 29.09.2026 заново сгенерированы/просмотрены 4 образца (7 страниц) и 4 production PostgreSQL/FileStore документа (6 страниц); embedded fonts, snapshot/hash/поля/приватность сверены | `docs/release/zamira-pdf-qa.md`, `output/pdf/qa-2026-09-29/manifest.json`; MAX mobile/web не проверены |
 | Материалы Z16 | Частично: handoff, 9 локальных G3 исходов, QA manifest, manual demo двух исходов и live PDF smoke готовы | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`; live evidence MAX mobile/web отсутствуют |
-| Python-проект и зависимости A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; ветка A-MVP-2 прошла 314 тестов на чистой PostgreSQL 18/pgvector, предыдущий clean PG17 прогон — 303 теста; migration/check, двойной seed, Ruff и mypy прошли; CI ожидается |
+| Python-проект и зависимости A00 | Проверено локально для общего merge | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 315 тестов на чистой PostgreSQL 16.13, Alembic check, Ruff и mypy прошли; CI объединённого main ожидается |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`, `src/dom_domych/demo/house.py`: clean migration/check до `0a7b6c5d4e3f`, повторный runtime seed и 303 теста |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, signed int64 group chat ID, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; реальные `/start <код>` и `bot_added` группы подтверждены | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; mobile и несколько домов ещё не проверены |
@@ -206,7 +206,7 @@ normal group message подтверждённого жителя прошли с
 регистрации не получили trusted actor и ответа. Следующий `problem.detected` остался без
 downstream handler — это открытый Z-MVP-1 стык и причина не объявлять полный live G3.
 
-A-MVP-2 начата в ветке `a-mvp-2`: `entrypoints/diagnostics.py` читает inbox/outbox/jobs в
+A-MVP-2 объединена в `main`: `entrypoints/diagnostics.py` читает inbox/outbox/jobs в
 read-only PostgreSQL транзакции и выводит только redacted агрегаты status/ready/stale lease и
 alerts. Локальный PostgreSQL-тест подтверждает отсутствие mutation и утечки operation key/text.
 `MaxApiClient.get_message_summary` и `scripts.max_operations inspect-message` через официальный

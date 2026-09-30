@@ -27,7 +27,7 @@
 
 ## 3. Что уже сделано
 
-**Состояние на 30.09.2026: A-MVP-1, Z-MVP-1 и Z-MVP-2 объединены; A-MVP-2 добавила диагностику и безопасную обработку событий MAX, Z-MVP-3 — operator replay и evals. Отдельные ветки прошли CI, объединённый набор проверяется. Единый polling Compose ранее подтвердил `/me`, Ollama `qwen3:4b` и normal MAX message по durable inbox → agent/tools → sent outbox; redacted read-back MAX подтверждён отдельно. Допустимый live голос, Z PDF в mobile/web и цельный MAX/LLM G3 ещё не подтверждены. Подробности — в [current-state](context/current-state.md).**
+**Состояние на 30.09.2026: A-MVP-1/2 и Z-MVP-1/2/3 объединены в `main`. Общий merge прошёл 315 тестов на чистой PostgreSQL 16.13, Ruff, mypy и Alembic check; отдельные ветки прошли CI. Единый polling Compose ранее подтвердил `/me`, Ollama `qwen3:4b` и normal MAX message по durable inbox → agent/tools → sent outbox; redacted read-back MAX подтверждён отдельно. Допустимый live голос, Z PDF в mobile/web, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены. Подробности — в [current-state](context/current-state.md).**
 
 | Часть | Статус | Подтверждение |
 |---|---|---|
@@ -53,7 +53,7 @@
 | Сквозная проверка Z14 | Частично: 9 production PostgreSQL сценариев problem/initiative/emergency → request/PDF → operator CLI register/done/replay → три исхода проверены на чистой PG16.13; отдельно problem → MAX callback/card → request/PDF → closed/reopened MockTransport путь | `tests/infrastructure/test_g3_runtime.py`, `test_g3_runtime_callback.py`, `docs/release/z-mvp-3-check.md`; цельный live MAX/LLM G3 отсутствует |
 | PDF QA Z15 | Частично: 29.09.2026 заново сгенерированы/просмотрены 4 образца (7 страниц) и 4 production PostgreSQL/FileStore документа (6 страниц); embedded fonts, snapshot/hash/поля/приватность сверены | `docs/release/zamira-pdf-qa.md`, `output/pdf/qa-2026-09-29/manifest.json`; MAX mobile/web не проверены |
 | Материалы Z16 | Частично: handoff, 9 G3 сценариев, четыре PDF/manifest, ручной сценарий двух исходов и live PDF smoke подготовлены | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`; MAX mobile/web evidence отсутствуют |
-| Python-проект, зависимости и CI A00 | Частично: отдельные A-MVP-2 и Z-MVP-3 прошли CI; общий merge проверяется | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; A-MVP-2 прошла 314 тестов на чистой PostgreSQL 18/pgvector, Z-MVP-3 — 302 на PG16.13, отдельные PG17 CI успешны |
+| Python-проект, зависимости и CI A00 | Частично: общий merge прошёл 315 тестов на PG16.13, Ruff, mypy, Alembic check; отдельные A-MVP-2 и Z-MVP-3 прошли CI | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; CI объединённого main ожидается |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`, `src/dom_domych/demo/house.py`; clean migration/check до Z head и повторный runtime seed пройдены в A-MVP-1 |
 | HouseContextPort A05 | Частично: чтение реестра и стык с Z проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, signed int64 group chat ID, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; личное сообщение неподтверждённого жителя теперь получает подсказку `/start` по локальному MockTransport-тесту; прежние live `/start <код>` и привязка группы подтверждены | `entrypoints/demo_operator.py`, `infrastructure/max/onboarding.py`, `tests/infrastructure/test_demo_enrollment.py`; новый fallback в live MAX, mobile и несколько домов ещё не проверены |
@@ -90,7 +90,7 @@
 | Хранение опросов и production-интеграция агента | Частично: ordinary problem open/outcome и initiative open/decision, Z ORM/callback/cards/jobs подключены; автоматический request без actor/rule запрещён | production case/initiative/poll modules, `entrypoints/processes.py`, tests |
 | Z-MVP-1: вход до обращения | Частично: вопрос/уточнение, приватные `/evidence` и `/assess`, авторская `/revise`, проверенное `/prepare`, явные `/approve` и `/send` подключены к production inbox; дедупликация/replay и запрет чужому actor проверены на PG16. Problem/initiative/emergency typed routes сохраняют прежние локальные проверки | `application/agent/resident_actions.py`, `resident_production.py`, `entrypoints/processes.py`, `tests/agent/test_z_mvp1_message_actions.py`, `tests/infrastructure/test_z_mvp1_resident_actions.py`; live MAX/mobile/web и вариативные формулировки ещё не проверены |
 | Z-MVP-2: голос, карточка и PDF | Частично: существующие frozen audience, приглашения, callback/feedback, карточка и ревизия проверены локально; дополнительно настоящие producer-пути всех четырёх PDF проверены через FileStore, приватный outbox и MAX MockTransport на PG16.13 | `tests/infrastructure/test_z05_poll_callback_postgres.py`, `test_z06_initiatives_postgres.py`, `test_z07_cards_outbox.py`, `test_z08_followup_postgres.py`, `test_g3_runtime.py`, `docs/release/z-mvp-2-manual-check.md`; допустимый live голос, доменный edit и открытие четырёх PDF в MAX web/mobile ждут общего стенда A-MVP-1/2 |
-| Тесты и проверенный стенд | Частично: A-MVP-2 и Z-MVP-3 отдельно прошли CI; девять локальных G3 цепей и A-MVP-1 live spine проверены, общий merge тестируется | `tests/`, `migrations/`, `docs/release/a-mvp-1-evidence.md`, `context/current-state.md`; mobile/web и полный live G3 не проверены |
+| Тесты и проверенный стенд | Частично: 315 тестов на чистой PG16.13, Ruff, format, mypy и Alembic check; девять локальных G3 цепей и A-MVP-1 live spine проверены | `tests/`, `migrations/`, `docs/release/a-mvp-1-evidence.md`, `context/current-state.md`; PG17 CI объединённого main, mobile/web и полный live G3 ещё не проверены |
 
 Наличие схем, таблиц, примеров и списка технологий не означает, что функция работает. Доступ к токену MAX, серверу и inference не считается полученным без фактической проверки.
 
@@ -125,7 +125,7 @@ MVP-стыки K (агент/дела/обращения), ранее закре
 `problem.detected` ждёт Z-MVP-1 handler. Evidence и ограничения —
 `docs/release/a-mvp-1-evidence.md`.
 
-Статус A-MVP-2: начата ветка `a-mvp-2`. Добавлена read-only диагностика inbox/outbox/jobs:
+Статус A-MVP-2: локальная реализация объединена в `main`. Добавлена read-only диагностика inbox/outbox/jobs:
 агрегаты status/ready/stale lease и явные alerts без payload, текста, токенов или MAX ID.
 Добавленная redacted проверка отправленного MAX-сообщения по `mid` прошла на реальном текстовом
 сообщении: наружу вышли только признак текста и типы вложений. Она не заменяет ручное открытие
