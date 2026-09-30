@@ -180,6 +180,14 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
             base = await session.get(OutboxDeliveryRow, base_id)
             assert base is not None
             base.max_message_id = "public-card"
+            invite = await session.scalar(
+                select(OutboxDeliveryRow).where(
+                    OutboxDeliveryRow.operation_key
+                    == f"poll:invite:{poll.definition.poll_id}:{first.resident_id}"
+                )
+            )
+            assert invite is not None
+            invite.max_message_id = "private-invite"
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
         ) as http:
@@ -189,9 +197,11 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
             assert (await processor.process(good)).status == CallbackStatus.RECORDED
             worker = DeliveryWorker(sessions, max_client, clock, "z05-delivery")
             assert await worker.run_once() is True
+            assert await worker.run_once() is True
             assert await worker.run_once() is False
             assert {(method, path) for method, path, _, _ in sent} == {("PUT", "/messages")}
             assert any(params.get("message_id") == "public-card" for _, _, params, _ in sent)
+            assert any(params.get("message_id") == "private-invite" for _, _, params, _ in sent)
             assert (await processor.process(good)).status == CallbackStatus.DUPLICATE
             assert (
                 await processor.process(callback_event(token, user_one, chat_one))
@@ -250,7 +260,7 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
                     )
                 ).all()
                 assert len(edits) == 2
-                assert "Подтвердили: 0/12" in next(
+                assert "Поддержали 0 из 12 жителей" in next(
                     row.text for row in edits if row.status == "pending"
                 )
             concurrent = await gather(
@@ -293,17 +303,17 @@ async def test_callback_records_only_verified_actor_and_rejects_stale_action() -
             ).status == CallbackStatus.STALE
         assert len(acknowledged) == 14
         assert [body["notification"] for _, body in acknowledged] == [
-            "Голос учтён.",
-            "Этот голос уже учтён.",
-            "Этот голос уже учтён.",
-            "Голос изменён.",
+            "Вы поддержали.",
+            "Вы поддержали.",
+            "Вы поддержали.",
+            "Вы не поддержали.",
             "Этот опрос доступен только жителям затронутой части дома.",
             "Этот опрос доступен только жителям затронутой части дома.",
             "Этот опрос доступен только жителям затронутой части дома.",
             "Кнопка устарела. Откройте актуальную карточку.",
             "Кнопка устарела. Откройте актуальную карточку.",
-            "Голос учтён.",
-            "Этот голос уже учтён.",
+            "Вы не поддержали.",
+            "Вы не поддержали.",
             "Время голосования истекло.",
             "Опрос уже завершён.",
             "Кнопка устарела. Откройте актуальную карточку.",

@@ -97,7 +97,9 @@ K12: при доверенной регистрации проверенное �
 проверяет house/version/status под lock и сохраняет черновик followup со ссылками
 на регистрацию и источник; отправку не утверждает. K handler/revision reader
 подключены к A scheduler composition и проверены на PostgreSQL 18. Production
-process, live MAX и нормативная ревизия источников не проверены.
+process, live MAX и нормативная ревизия источников не проверены. Тексты problem-опроса и
+личных приглашений переведены в пользовательскую форму; после callback исходное личное
+приглашение редактируется без кнопок и показывает выбор. Live MAX этого UX ещё не проверен.
 K13: bridge принимает poll/evidence/request/resolution/document события только от
 доверенных источников, разрешает case в доме и запускает новый followup run с
 актуальной версией дела. Перед continuation `request.status_changed` перечитывается

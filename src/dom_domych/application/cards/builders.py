@@ -1,8 +1,10 @@
 """Публичные карточки для MAX; персональные ответы не попадают в общий чат."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
+from math import ceil
 from uuid import UUID
 
 from dom_domych.domain.executor.models import DemoOperation, ExternalStatus
@@ -90,6 +92,26 @@ class PublicCard:
     demo: bool
 
 
+_RU_MONTHS = (
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+
+
+def human_poll_deadline(value: datetime) -> str:
+    return f"{value.day} {_RU_MONTHS[value.month - 1]} в {value:%H:%M} (UTC)"
+
+
 def initiative_card(state: InitiativeState, poll: PollState) -> PublicCard:
     """Показывает три знаменателя отдельно; исходные resident IDs не используются."""
 
@@ -154,13 +176,28 @@ def problem_card(title: str, poll: PollState) -> PublicCard:
     if not isinstance(policy, ProblemPolicy):
         raise TypeError("problem card needs problem policy")
     tally = poll.tally
+    progress = ProgressScale.build("Поддержали", tally.yes, tally.eligible)
+    required = ceil(Decimal(tally.eligible) * policy.threshold_ratio)
     lines = [
-        f"Проблема: {title}",
-        ProgressScale.build("Подтвердили", tally.yes, tally.eligible).line(),
-        f"Подходящих жителей: {tally.eligible}. Недоставка ЛС не меняет это число.",
+        f"🏠 {title}",
+        "",
+        f"Поддержали {tally.yes} из {tally.eligible} жителей — {progress.percentage}",
+        progress.bar,
     ]
     if poll.status is PollStatus.OPEN:
-        lines.append("Ожидаем подтверждения до срока опроса.")
+        remaining = max(0, required - tally.yes)
+        lines.extend(
+            [
+                (
+                    "Поддержки уже достаточно для обращения."
+                    if remaining == 0
+                    else f"Для запуска обращения {'нужен' if remaining == 1 else 'нужно'} "
+                    f"ещё {remaining} {'голос' if remaining == 1 else 'голоса'}."
+                ),
+                f"Ответить можно до {human_poll_deadline(definition.closes_at)}.",
+                "Нажмите кнопку ниже.",
+            ]
+        )
     elif poll.status is PollStatus.CANCELLED:
         lines.append("Опрос отменён после изменения предмета обращения.")
     else:
@@ -170,7 +207,7 @@ def problem_card(title: str, poll: PollState) -> PublicCard:
         )
         lines.append(f"Итог: {label}.")
     if policy.demo:
-        lines.append("Порог — демонстрационная настройка, не нормативное требование.")
+        lines.append("ℹ️ Сейчас бот работает в демонстрационном режиме.")
     return PublicCard(
         house_id=definition.house_id,
         case_id=definition.case_id,
