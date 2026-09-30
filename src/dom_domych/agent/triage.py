@@ -117,6 +117,7 @@ class RouteResult(StrictModel):
     next_action: str
     source_refs: tuple[str, ...] = ()
     answer: str | None = None
+    source_title: str | None = None
     entrance: int | None = None
     object_name: str | None = None
 
@@ -160,6 +161,7 @@ class TriageService:
                             next_action="answer_with_sources",
                             source_refs=tuple(f"{hit.source_id}:{hit.revision}" for hit in hits),
                             answer=hits[0].excerpt,
+                            source_title=hits[0].source_title,
                         )
                     )
                 else:

@@ -78,6 +78,7 @@ class RuleVersionRow(Base):
     house_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), ForeignKey("houses.id"))
     topic: Mapped[str] = mapped_column(String(100), nullable=False)
     responsible_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    responsible_name: Mapped[str | None] = mapped_column(String(200))
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     deadline_origin: Mapped[str | None] = mapped_column(String(100))
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

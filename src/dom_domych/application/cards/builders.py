@@ -6,6 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from math import ceil
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from dom_domych.domain.executor.models import DemoOperation, ExternalStatus
 from dom_domych.domain.initiatives.models import InitiativeState
@@ -109,7 +110,16 @@ _RU_MONTHS = (
 
 
 def human_poll_deadline(value: datetime) -> str:
-    return f"{value.day} {_RU_MONTHS[value.month - 1]} в {value:%H:%M} (UTC)"
+    local = value.astimezone(ZoneInfo("Europe/Moscow"))
+    return f"{local.day} {_RU_MONTHS[local.month - 1]} в {local:%H:%M} по Москве"
+
+
+def _votes_word(count: int) -> str:
+    if count % 100 in range(11, 15):
+        return "подтверждений"
+    return {1: "подтверждение", 2: "подтверждения", 3: "подтверждения", 4: "подтверждения"}.get(
+        count % 10, "подтверждений"
+    )
 
 
 def initiative_card(state: InitiativeState, poll: PollState) -> PublicCard:
@@ -130,21 +140,28 @@ def initiative_card(state: InitiativeState, poll: PollState) -> PublicCard:
     if not isinstance(policy, InitiativePolicy):
         raise TypeError("initiative card needs initiative policy")
     progress = initiative_progress(poll.tally)
+    participation = format((policy.min_participation * 100).normalize(), "f").replace(".", ",")
+    support = format((policy.min_support_answered * 100).normalize(), "f").replace(".", ",")
     lines = [
-        f"Инициатива · редакция {revision.revision}",
+        f"🏠 Предложение соседей · версия {revision.revision}",
         revision.wording,
-        ProgressScale.build("Участие", progress.answered, progress.eligible).line(),
-        ProgressScale.build("За от всех", progress.yes, progress.eligible).line(),
-        ProgressScale.build("За среди ответивших", progress.yes, progress.answered).line(),
+        ProgressScale.build("Ответили", progress.answered, progress.eligible).line(),
+        ProgressScale.build("Поддержали", progress.yes, progress.eligible).line(),
+        ProgressScale.build("Из ответивших поддержали", progress.yes, progress.answered).line(),
         (
-            f"Порог участия: {policy.min_participation * 100}% · "
-            f"поддержки среди ответивших: {policy.min_support_answered * 100}%"
+            f"Для положительного итога нужны ответы от {participation}% "
+            f"жителей и поддержка {support}% ответивших."
         ),
     ]
     if progress.eligible == 0:
         lines.append("Подходящих жителей пока нет; позиция не определяется.")
     elif poll.status is PollStatus.OPEN:
-        lines.append("Сбор позиций продолжается. Не ответил — не значит против.")
+        lines.extend(
+            (
+                "Опрос продолжается. Если человек не ответил, это не голос против.",
+                f"Ответить можно до {human_poll_deadline(definition.closes_at)}.",
+            )
+        )
     elif poll.status is PollStatus.CANCELLED:
         lines.append("Опрос этой редакции отменён.")
     else:
@@ -154,9 +171,9 @@ def initiative_card(state: InitiativeState, poll: PollState) -> PublicCard:
             if isinstance(outcome, InitiativeOutcome)
             else "не определён"
         )
-        lines.append(f"Итог позиции: {label}.")
+        lines.append(f"Итог: {label}.")
     if policy.demo:
-        lines.append("Демо-правило; не протокол ОСС и не юридический кворум.")
+        lines.append("ℹ️ Это тестовый опрос, не решение общего собрания собственников.")
     return PublicCard(
         house_id=state.house_id,
         case_id=state.case_id,
@@ -176,12 +193,12 @@ def problem_card(title: str, poll: PollState) -> PublicCard:
     if not isinstance(policy, ProblemPolicy):
         raise TypeError("problem card needs problem policy")
     tally = poll.tally
-    progress = ProgressScale.build("Поддержали", tally.yes, tally.eligible)
+    progress = ProgressScale.build("Подтвердили", tally.yes, tally.eligible)
     required = ceil(Decimal(tally.eligible) * policy.threshold_ratio)
     lines = [
-        f"🏠 {title}",
+        f"🏠 Проверяем проблему: {title}",
         "",
-        f"Поддержали {tally.yes} из {tally.eligible} жителей — {progress.percentage}",
+        f"Подтвердили {tally.yes} из {tally.eligible} жителей ({progress.percentage})",
         progress.bar,
     ]
     if poll.status is PollStatus.OPEN:
@@ -189,13 +206,12 @@ def problem_card(title: str, poll: PollState) -> PublicCard:
         lines.extend(
             [
                 (
-                    "Поддержки уже достаточно для обращения."
+                    "Подтверждений достаточно. Можно готовить обращение."
                     if remaining == 0
-                    else f"Для запуска обращения {'нужен' if remaining == 1 else 'нужно'} "
-                    f"ещё {remaining} {'голос' if remaining == 1 else 'голоса'}."
+                    else f"Для обращения нужно ещё {remaining} {_votes_word(remaining)}."
                 ),
                 f"Ответить можно до {human_poll_deadline(definition.closes_at)}.",
-                "Нажмите кнопку ниже.",
+                "Ответьте кнопкой здесь или в личном сообщении от бота.",
             ]
         )
     elif poll.status is PollStatus.CANCELLED:
@@ -207,7 +223,7 @@ def problem_card(title: str, poll: PollState) -> PublicCard:
         )
         lines.append(f"Итог: {label}.")
     if policy.demo:
-        lines.append("ℹ️ Сейчас бот работает в демонстрационном режиме.")
+        lines.append("ℹ️ Это тестовый опрос. Порог задан для демонстрации.")
     return PublicCard(
         house_id=definition.house_id,
         case_id=definition.case_id,
@@ -225,14 +241,14 @@ def status_card(
     if not workflow_status:
         raise ValueError("workflow status is required")
     lines = [
-        f"Обращение: {title}",
-        f"Тестовая регистрация: {operation.registration_number or 'ожидается'}.",
-        f"Статус тестового исполнителя: {_EXTERNAL_LABELS[operation.status]}.",
-        f"Статус дела: {_WORKFLOW_LABELS.get(workflow_status, 'уточняется')}.",
+        f"🏠 Заявка: {title}",
+        f"Номер: {operation.registration_number or 'ждём регистрации'}.",
+        f"Исполнитель: {_EXTERNAL_LABELS[operation.status]}.",
+        f"Сейчас: {_WORKFLOW_LABELS.get(workflow_status, 'уточняется')}.",
     ]
     if operation.status is ExternalStatus.DONE:
         lines.append("Исполнитель сообщил о выполнении. Результат должны проверить жители.")
-    lines.append("ДЕМО: внешняя система и номер регистрации смоделированы.")
+    lines.append("ℹ️ Это тестовая заявка и тестовый номер регистрации.")
     return PublicCard(
         house_id=operation.draft.house_id,
         case_id=case_id,

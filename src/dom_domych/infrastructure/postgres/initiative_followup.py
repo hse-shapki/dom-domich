@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.cards.builders import human_poll_deadline
 from dom_domych.application.initiatives.followup import InitiativeDecision, ReminderPolicy
 from dom_domych.contracts.max_ids import valid_max_chat_id
 from dom_domych.domain.initiatives.models import InitiativeConflict
@@ -151,9 +152,9 @@ class PostgresInitiativeFollowupRepository:
                         house_id=house_id,
                         operation_key=f"initiative:reminder:{poll_id}:{resident_id}:{number}",
                         text=(
-                            f"Напоминание: демо-опрос по инициативе «{revision.wording[:2000]}» "
-                            f"открыт до {poll.definition.closes_at.isoformat()}. "
-                            "Если ещё не отвечали, проверьте сообщение с опросом."
+                            f"Напоминаю об инициативе «{revision.wording[:2000]}». "
+                            f"Ответить можно до {human_poll_deadline(poll.definition.closes_at)}. "
+                            "Если вы уже ответили, ничего делать не нужно."
                         ),
                         recipient_id=resident_id,
                     )
@@ -297,7 +298,10 @@ class PostgresInitiativeFollowupRepository:
                     DeliveryIntent(
                         house_id=decision.house_id,
                         operation_key=f"initiative:decision:{decision.poll_id}",
-                        text=f"Позиция жителей по инициативе {label}. Это не протокол ОСС.",
+                        text=(
+                            f"Инициатива {label}. "
+                            "Это итог тестового опроса жителей, не официальное решение собрания."
+                        ),
                         chat_id=chat_id,
                     )
                 )

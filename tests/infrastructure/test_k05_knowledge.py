@@ -70,6 +70,7 @@ async def test_reviewed_knowledge_is_house_scoped_and_rule_is_explicit() -> None
             hits = await service.search(query, context, at=now)
             assert len(hits) == 1
             assert hits[0].source_id == source_id and hits[0].revision == 1
+            assert hits[0].source_title == "Освещение"
             assert await service.search(query, _context(other_house), at=now) == ()
             assert await service.applicable_rule("lighting", context, at=now) is None
             rule = RuleVersion(

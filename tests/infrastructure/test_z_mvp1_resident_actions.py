@@ -22,12 +22,13 @@ from dom_domych.infrastructure.postgres.case_models import CaseEvidenceRow, Case
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
 from dom_domych.infrastructure.postgres.initiative_cases import PostgresInitiativeCases
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
+from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
 from dom_domych.infrastructure.postgres.knowledge_models import KnowledgeSourceRow, RuleVersionRow
 from dom_domych.infrastructure.postgres.models import HouseRow, ResidentRow
 from dom_domych.infrastructure.postgres.request_models import RequestRow
 from dom_domych.infrastructure.postgres.session import database_lifespan
-from scripts.seed_demo_house import seed_demo_house
-from tests.fixtures.zamira_house import HOUSE_ONE, synthetic_id
+from scripts.seed_demo_house import seed_demo_house, seed_demo_service_routes
+from tests.fixtures.zamira_house import HOUSE_ONE, HOUSE_TWO, synthetic_id
 
 NOW = datetime(2026, 9, 30, 12, tzinfo=UTC)
 
@@ -94,9 +95,75 @@ def test_exact_resident_command_parser() -> None:
     assert parse_resident_action(f"/assess {case_id} {evidence_id} accepted") == ResidentAction(
         "assess", case_id, evidence_id=evidence_id, assessment="accepted"
     )
+    assert parse_resident_action(f"/assess {case_id} {evidence_id} да") == ResidentAction(
+        "assess", case_id, evidence_id=evidence_id, assessment="accepted"
+    )
     assert parse_resident_action("/sendx anything") is None
     with pytest.raises(ValueError, match="INVALID_ACTION"):
         parse_resident_action(f"/assess {case_id} {evidence_id} maybe")
+
+
+@pytest.mark.asyncio
+async def test_demo_route_selects_service_and_prepares_lighting_request(tmp_path: Path) -> None:
+    database_url = os.environ.get("TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("TEST_DATABASE_URL needs a migrated PostgreSQL database")
+    case_id = uuid4()
+    author_id = synthetic_id("resident-19")
+    async with database_lifespan(database_url) as sessions:
+        async with sessions.begin() as session:
+            await seed_demo_house(session)
+            await seed_demo_service_routes(session)
+            await seed_demo_service_routes(session)
+            session.add(
+                CaseRow(
+                    id=case_id,
+                    house_id=HOUSE_TWO,
+                    kind="problem",
+                    title="Нет света в первом подъезде",
+                    description="Света нет во всём первом подъезде",
+                    entrance=1,
+                    object_name="lighting",
+                    status="request_ready",
+                    version=1,
+                    created_at=NOW,
+                )
+            )
+            await session.flush()
+            session.add(
+                CaseMessageRow(
+                    case_id=case_id,
+                    house_id=HOUSE_TWO,
+                    message_id=uuid4(),
+                    actor_id=author_id,
+                    relation="origin",
+                    linked_at=NOW,
+                )
+            )
+        rules = PostgresKnowledgeRepository(sessions)
+        lighting = await rules.find_rule("lighting", HOUSE_TWO, NOW)
+        elevator = await rules.find_rule("elevator", HOUSE_TWO, NOW)
+        assert lighting is not None and elevator is not None
+        assert lighting.responsible_name == "Аварийно-диспетчерская служба управляющей организации"
+        assert elevator.responsible_name == "Лифтовая диспетчерская служба"
+        assert await rules.find_rule("unknown_topic", HOUSE_TWO, NOW) is None
+        actions = PostgresResidentActions(
+            sessions,
+            Clock(),
+            FakeLoader(LocalFileStore(tmp_path, Clock())),
+            LocalFileStore(tmp_path, Clock()),
+        )
+        event_id = uuid4()
+        reply = await actions.execute(
+            ResidentAction("prepare", case_id),
+            _event(event_id, f"/prepare {case_id}"),
+            _context(HOUSE_TWO, author_id, event_id),
+        )
+        assert lighting.responsible_name in reply
+        assert str(lighting.responsible_id) not in reply
+        async with sessions() as session:
+            request = await session.scalar(select(RequestRow).where(RequestRow.case_id == case_id))
+            assert request is not None and request.responsible_id == lighting.responsible_id
 
 
 @pytest.mark.asyncio
@@ -153,7 +220,7 @@ async def test_photo_assessment_and_request_need_author_and_reviewed_rule(tmp_pa
         photo_event = _event(photo_event_id, f"/evidence {case_id}", image=True)
         author = _context(house_id, author_id, photo_event_id)
         reply = await actions.execute(ResidentAction("evidence", case_id), photo_event, author)
-        assert "без анализа изображения" in reply
+        assert "не проверяю изображение автоматически" in reply
         assert loader.calls == 1
         repeated_reply = await actions.execute(
             ResidentAction("evidence", case_id), photo_event, author
@@ -181,7 +248,7 @@ async def test_photo_assessment_and_request_need_author_and_reviewed_rule(tmp_pa
             _event(assessment_id, f"/assess {case_id} {evidence_id} accepted"),
             _context(house_id, author_id, assessment_id),
         )
-        assert "не автоматическая проверка" in assessed
+        assert "Вы подтвердили, что фото относится к проблеме" in assessed
         assert "уже сохранена" in await actions.execute(
             assessment,
             _event(assessment_id, f"/assess {case_id} {evidence_id} accepted"),
@@ -228,6 +295,7 @@ async def test_photo_assessment_and_request_need_author_and_reviewed_rule(tmp_pa
                     house_id=house_id,
                     topic="lighting",
                     responsible_id=responsible_id,
+                    responsible_name="Аварийно-диспетчерская служба",
                     duration_seconds=None,
                     deadline_origin=None,
                     valid_from=None,
@@ -240,7 +308,8 @@ async def test_photo_assessment_and_request_need_author_and_reviewed_rule(tmp_pa
             _event(prepare_id, f"/prepare {case_id}"),
             _context(house_id, author_id, prepare_id),
         )
-        assert "Проверенный источник" in prepared and str(responsible_id) in prepared
+        assert "Аварийно-диспетчерская служба" in prepared
+        assert str(responsible_id) not in prepared
         async with sessions() as session:
             request = await session.scalar(select(RequestRow).where(RequestRow.case_id == case_id))
             assert request is not None and request.status == "prepared"

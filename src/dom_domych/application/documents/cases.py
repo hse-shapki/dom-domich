@@ -20,6 +20,10 @@ from dom_domych.domain.polls.models import PollStatus
 from dom_domych.domain.ports.core import Clock, DocumentRef
 from dom_domych.infrastructure.postgres.case_models import CaseEventRow, CaseRow
 from dom_domych.infrastructure.postgres.documents import PostgresDocuments
+from dom_domych.infrastructure.postgres.knowledge_models import (
+    KnowledgeSourceRow,
+    RuleVersionRow,
+)
 from dom_domych.infrastructure.postgres.models import HouseRow, OutboxDeliveryRow
 from dom_domych.infrastructure.postgres.original_audience import original_audience_id, original_poll
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
@@ -177,6 +181,12 @@ class CaseDocumentPreparer:
                     or deadline.facts.get("draft_status") != "needs_review"
                 ):
                     raise ValueError("registered request or reviewed source is missing")
+                rule = await session.get(RuleVersionRow, request.rule_id)
+                source = (
+                    await session.get(KnowledgeSourceRow, (rule.source_id, rule.source_revision))
+                    if rule is not None
+                    else None
+                )
                 facts.extend(
                     (
                         DocumentFact(
@@ -185,7 +195,9 @@ class CaseDocumentPreparer:
                             f"case_event:{deadline.id}",
                         ),
                         DocumentFact(
-                            "Источник правила", str(request.rule_id), request.source_refs[0]
+                            "Источник правила",
+                            source.title if source is not None else "Проверенный документ дома",
+                            request.source_refs[0],
                         ),
                         DocumentFact(
                             "Регистрация",

@@ -130,6 +130,7 @@ class PostgresKnowledgeRepository:
                     house_id=rule.house_id,
                     topic=rule.topic,
                     responsible_id=rule.responsible_id,
+                    responsible_name=rule.responsible_name,
                     duration_seconds=int(rule.deadline.total_seconds()) if rule.deadline else None,
                     deadline_origin=rule.deadline_origin,
                     valid_from=rule.valid_from,
@@ -177,6 +178,7 @@ class PostgresKnowledgeRepository:
                     revision=source.revision,
                     excerpt=chunk.text,
                     reviewed=True,
+                    source_title=source.title,
                 )
                 for chunk, source in rows
             ]
@@ -187,7 +189,7 @@ class PostgresKnowledgeRepository:
             ):
                 vector_rows = await session.execute(
                     text(
-                        "SELECT s.source_id, s.revision, c.text "
+                        "SELECT s.source_id, s.revision, c.text, s.title "
                         "FROM knowledge_chunks c JOIN knowledge_sources s "
                         "ON s.source_id = c.source_id AND s.revision = c.revision "
                         "WHERE s.reviewed AND (s.house_id IS NULL OR s.house_id = :house_id) "
@@ -206,7 +208,7 @@ class PostgresKnowledgeRepository:
                     },
                 )
                 seen = {(hit.source_id, hit.revision, hit.excerpt) for hit in hits}
-                for source_id, revision, excerpt in vector_rows:
+                for source_id, revision, excerpt, title in vector_rows:
                     if (source_id, revision, excerpt) not in seen and len(hits) < limit:
                         hits.append(
                             KnowledgeHit(
@@ -214,6 +216,7 @@ class PostgresKnowledgeRepository:
                                 revision=cast(int, revision),
                                 excerpt=cast(str, excerpt),
                                 reviewed=True,
+                                source_title=cast(str, title),
                             )
                         )
             return tuple(hits)
@@ -250,7 +253,12 @@ class PostgresKnowledgeRepository:
                     _valid_at(RuleVersionRow.valid_from, RuleVersionRow.valid_until, at),
                     _valid_at(KnowledgeSourceRow.valid_from, KnowledgeSourceRow.valid_until, at),
                 )
-                .order_by(RuleVersionRow.source_revision.desc())
+                .order_by(
+                    KnowledgeSourceRow.uri.startswith("demo://").asc(),
+                    (RuleVersionRow.house_id == house_id).desc(),
+                    RuleVersionRow.source_revision.desc(),
+                    RuleVersionRow.id.desc(),
+                )
                 .limit(1)
             )
             if row is None:
@@ -262,6 +270,7 @@ class PostgresKnowledgeRepository:
                 house_id=row.house_id,
                 topic=row.topic,
                 responsible_id=row.responsible_id,
+                responsible_name=row.responsible_name,
                 deadline=timedelta(seconds=row.duration_seconds)
                 if row.duration_seconds is not None
                 else None,

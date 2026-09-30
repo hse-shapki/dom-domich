@@ -11,6 +11,10 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dom_domych.demo.house import HOUSE_ONE, HOUSE_TWO, demo_residencies
+from dom_domych.infrastructure.postgres.knowledge_models import (
+    KnowledgeSourceRow,
+    RuleVersionRow,
+)
 from dom_domych.infrastructure.postgres.models import (
     ApartmentRiserRow,
     ApartmentRow,
@@ -109,6 +113,57 @@ async def seed_demo_house(session: AsyncSession) -> None:
         )
 
 
+async def seed_demo_service_routes(session: AsyncSession) -> None:
+    """Только для тестового стенда: проверенные синтетические маршруты, без правовых сроков."""
+
+    routes = (
+        ("lighting", "Аварийно-диспетчерская служба управляющей организации"),
+        ("water_supply", "Аварийно-диспетчерская служба управляющей организации"),
+        ("heating", "Аварийно-диспетчерская служба управляющей организации"),
+        ("elevator", "Лифтовая диспетчерская служба"),
+    )
+    for house_id in (HOUSE_ONE, HOUSE_TWO):
+        for topic, responsible_name in routes:
+            source_id = uuid5(NAMESPACE_URL, f"dom-domich-demo:service-source:{house_id}:{topic}")
+            await _insert_once(
+                session,
+                KnowledgeSourceRow,
+                {
+                    "source_id": source_id,
+                    "revision": 1,
+                    "house_id": house_id,
+                    "title": f"Тестовый маршрут: {topic}",
+                    "uri": f"demo://service-routes/{topic}",
+                    "text": (
+                        f"Для темы {topic} в демонстрационном доме выбрана служба: "
+                        f"{responsible_name}. Это не официальный справочник исполнителей."
+                    ),
+                    "reviewed": True,
+                    "valid_from": None,
+                    "valid_until": None,
+                },
+            )
+            await _insert_once(
+                session,
+                RuleVersionRow,
+                {
+                    "id": uuid5(NAMESPACE_URL, f"dom-domich-demo:service-rule:{house_id}:{topic}"),
+                    "source_id": source_id,
+                    "source_revision": 1,
+                    "house_id": house_id,
+                    "topic": topic,
+                    "responsible_id": uuid5(
+                        NAMESPACE_URL, f"dom-domich-demo:service:{house_id}:{responsible_name}"
+                    ),
+                    "responsible_name": responsible_name,
+                    "duration_seconds": None,
+                    "deadline_origin": None,
+                    "valid_from": None,
+                    "valid_until": None,
+                },
+            )
+
+
 def _demo_seed_allowed(database_url: str, *, explicit_demo: bool) -> bool:
     database = make_url(database_url).database or ""
     return database.startswith("dom_domych_test") or (
@@ -135,6 +190,7 @@ async def main() -> None:
     async with database_lifespan(database_url) as sessions:
         async with sessions.begin() as session:
             await seed_demo_house(session)
+            await seed_demo_service_routes(session)
 
 
 if __name__ == "__main__":

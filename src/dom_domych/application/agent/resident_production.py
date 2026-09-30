@@ -199,8 +199,9 @@ class PostgresResidentActions:
         )
         if rule is None:
             return (
-                "Для этого дела пока нет проверенного правила и ответственного. "
-                "Обращение не подготовлено."
+                "Пока не могу надёжно определить службу для этой проблемы. "
+                "Обращение не подготовлено: уточните, что именно не работает, "
+                "или попросите оператора проверить маршрут."
             )
         prepared = await self.requests.prepare(
             RequestPrepare(
@@ -215,16 +216,17 @@ class PostgresResidentActions:
         return (
             self._prepared_reply(prepared.request_id, prepared.draft_version)
             + f"\nДело: {case.title}. {case.description[:1200]}"
-            + f"\nМесто: {case.location}. Ответственный: {rule.responsible_id}."
-            + f"\nПроверенный источник: {rule.source_id}:{rule.source_revision}."
+            + f"\nМесто: {case.location}."
+            + f"\nКому: {rule.responsible_name or 'название службы нужно уточнить'}."
+            + "\nЭтот черновик ещё не отправлен."
         )
 
     @staticmethod
     def _prepared_reply(request_id: UUID, version: int) -> str:
         return (
-            f"Черновик демо-обращения {request_id}, версия {version}, подготовлен. "
-            f"Проверьте данные ниже, затем отправьте в личке /approve {request_id}. "
-            f"После согласования — /send {request_id}."
+            f"Я подготовил черновик обращения (версия {version}).\n"
+            f"Проверьте описание и адресата. Если всё верно, ответьте /approve {request_id}.\n"
+            f"После согласования отправьте /send {request_id}."
         )
 
     async def _request_for_author(self, request_id: UUID, context: TrustedContext) -> RequestDraft:
@@ -243,15 +245,15 @@ class PostgresResidentActions:
             context.model_copy(update={"capabilities": context.capabilities | {"request.approve"}}),
         )
         return (
-            f"Версия {approved.draft_version} демо-обращения {request_id} согласована. "
-            f"Для передачи тестовому исполнителю отправьте /send {request_id}."
+            f"Вы согласовали обращение (версия {approved.draft_version}). "
+            f"Чтобы передать его тестовому исполнителю, отправьте /send {request_id}."
         )
 
     async def _send(self, request_id: UUID, context: TrustedContext) -> str:
         draft = await self._request_for_author(request_id, context)
         if draft.approval_actor != context.actor_id:
             raise PermissionError("FORBIDDEN")
-        submitted = await self.requests.submit(
+        await self.requests.submit(
             RequestSubmit(
                 request_id=request_id,
                 expected_draft_version=draft.draft_version,
@@ -260,8 +262,8 @@ class PostgresResidentActions:
             context.model_copy(update={"capabilities": context.capabilities | {"request.submit"}}),
         )
         return (
-            f"Демо-обращение {request_id}: {submitted.status}. "
-            "Это передача тестовому исполнителю, не регистрация в УК."
+            f"Обращение {request_id} передано тестовому исполнителю. "
+            "Сообщу отдельно, когда появится регистрация и номер заявки."
         )
 
     async def _revise(self, action: ResidentAction, context: TrustedContext) -> str:
@@ -365,9 +367,9 @@ class PostgresResidentActions:
     @staticmethod
     def _evidence_reply(case_id: UUID, evidence_id: UUID) -> str:
         return (
-            f"Фото {evidence_id} сохранено в деле {case_id} без анализа изображения. "
-            f"Чтобы подтвердить, что оно относится к проблеме, отправьте "
-            f"/assess {case_id} {evidence_id} accepted; для отказа — rejected."
+            "Фото добавлено к делу. Я не проверяю изображение автоматически. "
+            "Если на фото видна именно эта проблема, ответьте "
+            f"/assess {case_id} {evidence_id} да. Если нет — замените «да» на «нет»."
         )
 
     async def _assess(self, action: ResidentAction, context: TrustedContext) -> str:
@@ -420,6 +422,7 @@ class PostgresResidentActions:
             context.model_copy(update={"capabilities": context.capabilities | {"evidence.assess"}}),
         )
         return (
-            f"Ваша оценка фото {action.evidence_id} сохранена: {action.assessment}. "
-            "Это не автоматическая проверка изображения и не отправка обращения."
-        )
+            "Вы подтвердили, что фото относится к проблеме."
+            if action.assessment == "accepted"
+            else "Вы отметили, что фото не относится к проблеме."
+        ) + " Обращение пока не отправлено."

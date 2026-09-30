@@ -40,8 +40,13 @@ class RuleVersion:
     deadline_origin: str | None
     valid_from: datetime | None = None
     valid_until: datetime | None = None
+    responsible_name: str | None = None
 
     def __post_init__(self) -> None:
+        if self.responsible_name is not None and not (
+            1 <= len(self.responsible_name.strip()) <= 200
+        ):
+            raise ValueError("Название ответственной службы должно быть от 1 до 200 символов")
         if self.deadline is not None and (
             self.deadline <= timedelta(0) or self.deadline_origin is None
         ):

@@ -17,7 +17,7 @@ from dom_domych.application.polls.callback import (
 from dom_domych.application.polls.max_callback import MaxPollCallbackTransport
 from dom_domych.application.polls.service import PollService
 from dom_domych.contracts.events import EventEnvelope, EventName
-from dom_domych.domain.polls.models import VoteChoice
+from dom_domych.domain.polls.models import PollKind, VoteChoice
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.infrastructure.max.client import MaxApiClient, MaxApiError
 from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
@@ -36,6 +36,15 @@ _CALLBACK_NOTIFICATIONS = {
 }
 
 
+def _choice_message(kind: PollKind, choice: VoteChoice) -> str:
+    messages = {
+        PollKind.PROBLEM_CONFIRMATION: ("Вы подтвердили проблему.", "Вы не подтвердили проблему."),
+        PollKind.INITIATIVE_POSITION: ("Вы поддержали инициативу.", "Вы не поддержали инициативу."),
+        PollKind.RESOLUTION_CHECK: ("Вы подтвердили выполнение.", "Вы не подтвердили выполнение."),
+    }
+    return messages[kind][0 if choice is VoteChoice.YES else 1]
+
+
 class PostgresPollCallbackProcessor:
     """Коммитит проверенный голос, историю и событие порога одной транзакцией."""
 
@@ -50,28 +59,38 @@ class PostgresPollCallbackProcessor:
         self.clock = clock
 
     async def process(self, event: EventEnvelope) -> CallbackOutcome:
+        personal_choice: str | None = None
         async with self.sessions.begin() as session:
             actions = PostgresPollActionStore(session)
             polls = PostgresPollRepository(session)
             processor = PollCallbackHandler(actions, polls, PollService(polls, self.clock))
             outcome = await MaxPollCallbackTransport(session, actions, processor).handle(event)
-            action = await actions.get(event.callback.action_token) if event.callback else None
             if (
                 outcome.status
                 in {CallbackStatus.RECORDED, CallbackStatus.CHANGED, CallbackStatus.DUPLICATE}
-                and action is not None
                 and outcome.poll_id is not None
                 and outcome.poll_version is not None
                 and outcome.recipient_id is not None
                 and outcome.delivery_house_id is not None
             ):
+                state = await polls.get_state(outcome.poll_id, outcome.delivery_house_id)
+                if state is None:
+                    raise RuntimeError("recorded callback poll disappeared")
+                answer = next(
+                    (item for item in state.answers if item.resident_id == outcome.recipient_id),
+                    None,
+                )
+                if answer is None:
+                    raise RuntimeError("recorded callback answer disappeared")
+                personal_choice = _choice_message(state.definition.kind, answer.choice)
                 await self._enqueue_personal_choice(
                     session,
                     outcome.poll_id,
                     outcome.poll_version,
                     outcome.recipient_id,
                     outcome.delivery_house_id,
-                    action.choice,
+                    state.definition.kind,
+                    personal_choice,
                 )
             if outcome.status in (CallbackStatus.RECORDED, CallbackStatus.CHANGED):
                 if outcome.poll_id is None or outcome.delivery_house_id is None:
@@ -79,7 +98,7 @@ class PostgresPollCallbackProcessor:
                 await PostgresPublicCards(self.sessions, self.clock).enqueue_poll_update(
                     session, outcome.poll_id, outcome.delivery_house_id
                 )
-        await self._acknowledge(event, outcome)
+        await self._acknowledge(event, outcome, personal_choice)
         return outcome
 
     async def _enqueue_personal_choice(
@@ -89,9 +108,11 @@ class PostgresPollCallbackProcessor:
         poll_version: int,
         resident_id: UUID,
         house_id: UUID,
-        choice: VoteChoice,
+        kind: PollKind,
+        choice_message: str,
     ) -> None:
-        edit_key = f"poll:invite:{poll_id}:{resident_id}"
+        prefix = "resolution:check" if kind is PollKind.RESOLUTION_CHECK else "poll:invite"
+        edit_key = f"{prefix}:{poll_id}:{resident_id}"
         base = await session.scalar(
             select(OutboxDeliveryRow).where(
                 OutboxDeliveryRow.house_id == house_id,
@@ -100,33 +121,27 @@ class PostgresPollCallbackProcessor:
         )
         if base is None:
             return
-        choice_text = "Вы поддержали" if choice is VoteChoice.YES else "Вы не поддержали"
-        original = base.text.split("\n\n✅ Ваш выбор:", 1)[0]
+        original = base.text.split("\n\n✅ ", 1)[0]
         await PostgresDeliveryQueue(session, self.clock).enqueue(
             DeliveryIntent(
                 house_id=house_id,
                 operation_key=(f"poll:invite-choice:{poll_id}:{resident_id}:{poll_version}"),
-                text=f"{original}\n\n✅ Ваш выбор: {choice_text}.",
+                text=f"{original}\n\n✅ {choice_message}",
                 recipient_id=resident_id,
                 edit_key=edit_key,
                 buttons=(),
             )
         )
 
-    async def _acknowledge(self, event: EventEnvelope, outcome: CallbackOutcome) -> None:
+    async def _acknowledge(
+        self, event: EventEnvelope, outcome: CallbackOutcome, personal_choice: str | None
+    ) -> None:
         callback = event.callback
         if callback is None:
             raise ValueError("callback payload required")
-        notification = _CALLBACK_NOTIFICATIONS.get(outcome.status)
-        if notification is None:
-            async with self.sessions() as session:
-                action = await PostgresPollActionStore(session).get(callback.action_token)
-            if action is None:
-                notification = "Кнопка устарела. Откройте актуальную карточку."
-            else:
-                notification = (
-                    "Вы поддержали." if action.choice is VoteChoice.YES else "Вы не поддержали."
-                )
+        notification = personal_choice or _CALLBACK_NOTIFICATIONS.get(
+            outcome.status, "Кнопка устарела. Откройте актуальный опрос."
+        )
         try:
             await self.max_client.answer_callback(
                 callback.callback_id,

@@ -29,9 +29,14 @@ class ResidentActionPort(Protocol):
 
 
 _USAGE = (
-    "Команды в личном чате: /confirm; /prepare ID_ДЕЛА; /approve ID_ОБРАЩЕНИЯ; "
-    "/send ID_ОБРАЩЕНИЯ; /revise ID_ДЕЛА РЕДАКЦИЯ НОВЫЙ_ТЕКСТ; "
-    "/evidence ID_ДЕЛА с одним фото; /assess ID_ДЕЛА ID_ФОТО accepted|rejected."
+    "Напишите мне в личном чате:\n"
+    "• /confirm — начать опрос по найденной проблеме;\n"
+    "• /prepare ID_ДЕЛА — подготовить обращение;\n"
+    "• /approve ID_ОБРАЩЕНИЯ — согласовать черновик;\n"
+    "• /send ID_ОБРАЩЕНИЯ — передать тестовому исполнителю;\n"
+    "• /revise ID_ДЕЛА НОМЕР_РЕДАКЦИИ НОВЫЙ_ТЕКСТ — уточнить инициативу;\n"
+    "• /evidence ID_ДЕЛА — добавить фото;\n"
+    "• /assess ID_ДЕЛА ID_ФОТО да или нет — указать, относится ли фото к проблеме."
 )
 
 
@@ -66,13 +71,14 @@ def parse_resident_action(text: str) -> ResidentAction | None:
             raise ValueError("INVALID_ACTION")
         return ResidentAction(name, entity_id, revision, parts[3].strip())
     if name == "assess":
-        if len(parts) != 4 or parts[3] not in {"accepted", "rejected"}:
+        if len(parts) != 4 or parts[3].casefold() not in {"accepted", "rejected", "да", "нет"}:
             raise ValueError("INVALID_ACTION")
         try:
             evidence_id = UUID(parts[2])
         except ValueError as exc:
             raise ValueError("INVALID_ACTION") from exc
-        return ResidentAction(name, entity_id, evidence_id=evidence_id, assessment=parts[3])
+        assessment = "accepted" if parts[3].casefold() in {"accepted", "да"} else "rejected"
+        return ResidentAction(name, entity_id, evidence_id=evidence_id, assessment=assessment)
     if len(parts) != 2:
         raise ValueError("INVALID_ACTION")
     return ResidentAction(name, entity_id)
@@ -148,6 +154,9 @@ class ResidentActionHandler:
         try:
             result = await self.actions.execute(action, event, context)
         except (PermissionError, ValueError, InitiativeError):
-            result = "Действие не выполнено: проверьте ID, актуальную версию и свои права."
+            result = (
+                "Не получилось выполнить действие. Проверьте номер дела или обращения "
+                "и используйте последнее сообщение от бота."
+            )
         await self.replies.enqueue(event, principal, result)
         return True

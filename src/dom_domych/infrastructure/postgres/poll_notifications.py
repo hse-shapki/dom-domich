@@ -36,9 +36,9 @@ async def enqueue_poll_invitations(session: AsyncSession, definition: PollDefini
     if title is None:
         raise ValueError("poll case is missing")
     labels = (
-        ("Поддерживаю", "Не поддерживаю")
+        ("Да, подтверждаю", "Нет, не подтверждаю")
         if definition.kind is PollKind.PROBLEM_CONFIRMATION
-        else ("За", "Против")
+        else ("Поддерживаю", "Не поддерживаю")
     )
     prompt = (
         "Подтвердите, что эта проблема действительно есть."
@@ -65,15 +65,11 @@ async def enqueue_poll_invitations(session: AsyncSession, definition: PollDefini
                 house_id=definition.house_id,
                 operation_key=f"poll:invite:{definition.poll_id}:{resident_id}",
                 text=(
-                    f"🏠 Нужен ваш голос\n{title}\n\n"
+                    f"🏠 {title}\n\n"
                     f"{prompt}\n"
                     f"Ответить можно до {human_poll_deadline(definition.closes_at)}.\n"
-                    "Ваш выбор останется личным — в группе будет виден только общий результат."
-                    + (
-                        "\nℹ️ Сейчас бот работает в демонстрационном режиме."
-                        if definition.policy.demo
-                        else ""
-                    )
+                    "Ваш ответ увидите только вы. В группе появится общий итог без имён."
+                    + ("\nℹ️ Это тестовый опрос." if definition.policy.demo else "")
                 ),
                 recipient_id=resident_id,
                 buttons=tuple(buttons),

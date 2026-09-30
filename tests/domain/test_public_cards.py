@@ -64,10 +64,10 @@ async def test_initiative_card_separates_participation_and_support() -> None:
 
     card = initiative_card(state, poll)
 
-    assert "Участие: 3/12 (25,0%)" in card.text
-    assert "За от всех: 2/12 (16,7%)" in card.text
-    assert "За среди ответивших: 2/3 (66,7%)" in card.text
-    assert "не протокол ОСС" in card.text
+    assert "Ответили: 3/12 (25,0%)" in card.text
+    assert "Поддержали: 2/12 (16,7%)" in card.text
+    assert "Из ответивших поддержали: 2/3 (66,7%)" in card.text
+    assert "не решение общего собрания собственников" in card.text
     assert all(str(answer.resident_id) not in card.text for answer in poll.answers)
     assert card.edit_key == f"initiative:{CASE_ID}"
     assert card.source_version == f"1:{poll.version}"
@@ -116,8 +116,8 @@ async def test_problem_card_uses_frozen_denominator_not_reachable_count() -> Non
 
     card = problem_card("Не горит свет", poll)
 
-    assert "Поддержали 0 из 12 жителей" in card.text
-    assert "Для запуска обращения нужно ещё 3 голоса" in card.text
+    assert "Подтвердили 0 из 12 жителей" in card.text
+    assert "Для обращения нужно ещё 3 подтверждения" in card.text
     assert "Ответить можно до" in card.text
     assert card.demo is True
 
@@ -134,4 +134,4 @@ async def test_done_status_card_does_not_claim_resident_confirmation() -> None:
     assert "Исполнитель сообщил о выполнении" in card.text
     assert "жители проверяют результат" in card.text
     assert "закрыто" not in card.text
-    assert "ДЕМО" in card.text
+    assert "тестовая заявка" in card.text

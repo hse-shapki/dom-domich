@@ -142,7 +142,7 @@ class MessageAgentHandler:
             return True
         answers = [
             (
-                f"{route.answer}\nИсточник: {', '.join(route.source_refs)}"
+                f"{route.answer}\nИсточник: {route.source_title or 'проверенный документ дома'}"
                 if route.next_action == "answer_with_sources" and route.answer
                 else (
                     "Уточните, пожалуйста, вопрос или место: "
@@ -173,6 +173,8 @@ class MessageAgentHandler:
                     "content": (
                         "Типизированный triage уже выполнен backend. Следуй маршрутам, "
                         "не объявляй регистрацию или выполнение без результата tool. "
+                        "Отвечай жителю коротко и понятными русскими словами. "
+                        "Не показывай внутренние ID, версии, имена tools и коды статусов. "
                         f"Маршруты: {route_facts}"
                     ),
                 },

@@ -157,11 +157,11 @@ class DocumentWorker:
                     house_id=row.house_id,
                     operation_key=f"document:file:{row.id}",
                     text=(
-                        "Подготовлен документ Дом Домыч. "
+                        f"Готов документ «{snapshot.title}». "
                         + (
-                            "Данные и действия в нём отмечены как демо."
+                            "Это тестовый документ."
                             if snapshot.mode is DocumentMode.DEMO
-                            else "Это проект документа; официальная отправка не выполнена."
+                            else "Это черновик: официальной отправки ещё не было."
                         )
                     ),
                     recipient_id=row.recipient_id,

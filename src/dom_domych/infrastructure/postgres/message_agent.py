@@ -107,8 +107,8 @@ class PostgresMessageReplies:
             ).one_or_none()
             if case is not None and case.status == "awaiting_confirmation":
                 text = (
-                    f"Похожих активных обращений не найдено. Запустить опрос по проблеме "
-                    f"«{case.title}»?"
+                    f"Я записал проблему «{case.title}». "
+                    "Запустить опрос соседей, чтобы её подтвердить?"
                 )
                 direct = True
                 buttons = (
@@ -119,7 +119,9 @@ class PostgresMessageReplies:
                 marker in text.casefold()
                 for marker in ("<think", "</think", "case.search", "case.create", "tool_call")
             ):
-                text = "Сообщение обработано, но безопасный ответ не сформирован. Уточните запрос."
+                text = (
+                    "Я не смог разобраться в сообщении. Опишите проблему ещё раз обычными словами."
+                )
                 buttons = ()
             else:
                 buttons = ()
@@ -192,6 +194,23 @@ _ORDINALS = {
     "девят": 9,
     "десят": 10,
 }
+_PROBLEM_TOPICS = (
+    (re.compile(r"\b(?:свет\w*|освещ\w*|электр\w*|ламп\w*)\b", re.IGNORECASE), "lighting"),
+    (re.compile(r"\b(?:лифт\w*)\b", re.IGNORECASE), "elevator"),
+    (re.compile(r"\b(?:вод\w*|кран\w*|труб\w*|протеч\w*)\b", re.IGNORECASE), "water_supply"),
+    (re.compile(r"\b(?:отоп\w*|батар\w*|радиатор\w*)\b", re.IGNORECASE), "heating"),
+)
+
+
+def _matched_problem_topics(text: str) -> tuple[str, ...]:
+    return tuple(topic for pattern, topic in _PROBLEM_TOPICS if pattern.search(text))
+
+
+def problem_topic(text: str) -> str | None:
+    """Возвращает тему только для одной явно названной неисправности."""
+
+    topics = _matched_problem_topics(text)
+    return topics[0] if len(topics) == 1 else None
 
 
 def _location_number(text: str, numeric: re.Pattern[str], noun: str) -> int | None:
@@ -219,22 +238,12 @@ class PostgresProblemDrafts:
                 "Не удалось безопасно определить место. Уточните номер подъезда; "
                 "например: «5 подъезд»."
             )
-        folded = text.casefold()
-        object_name = next(
-            (
-                value
-                for marker, value in (
-                    ("вод", "water_supply"),
-                    ("свет", "lighting"),
-                    ("ламп", "lighting"),
-                    ("лифт", "elevator"),
-                    ("отоп", "heating"),
-                    ("батар", "heating"),
-                )
-                if marker in folded
-            ),
-            None,
-        )
+        topics = _matched_problem_topics(text)
+        if len(topics) > 1:
+            return "Вы описали несколько неполадок. Напишите о каждой отдельно."
+        if not topics:
+            return "Уточните, пожалуйста, что именно не работает. Тогда я найду нужную службу."
+        object_name = topics[0]
         candidates = await self.cases.search(
             CaseSearch(
                 query=text[:500],

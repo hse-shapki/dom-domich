@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.application.cards.builders import human_poll_deadline
 from dom_domych.application.polls.callback import StoredPollAction
 from dom_domych.contracts.events import EntityEventPayload, EventEnvelope, EventName, EventSource
 from dom_domych.domain.polls.models import PollState, PollStatus, VoteChoice
@@ -218,11 +219,17 @@ class PostgresResolutionStore:
                         house_id=state.house_id,
                         operation_key=f"resolution:check:{state.poll_id}:{resident_id}",
                         text=(
-                            "Демо-исполнитель отметил выполнение. "
-                            "Подтвердите фактический результат в опросе дома."
+                            f"🏠 Проверяем результат по проблеме «{case.title}».\n"
+                            "Тестовый исполнитель сообщил, что работа выполнена. "
+                            "Стало ли лучше на самом деле?\n"
+                            f"Ответить можно до {human_poll_deadline(poll.definition.closes_at)}. "
+                            "Ваш ответ останется личным."
                         ),
                         recipient_id=resident_id,
-                        buttons=(("Подтверждаю", yes_token), ("Не подтверждаю", no_token)),
+                        buttons=(
+                            ("Да, исправлено", yes_token),
+                            ("Нет, проблема осталась", no_token),
+                        ),
                     )
                 )
             return state
@@ -314,7 +321,7 @@ class PostgresResolutionStore:
                     DeliveryIntent(
                         house_id=house_id,
                         operation_key=f"resolution:outcome:{check_id}",
-                        text=f"{text} Правило проверки: демо.",
+                        text=f"{text}\nℹ️ Проверка проходит по тестовым правилам.",
                         chat_id=house.max_chat_id,
                     )
                 )

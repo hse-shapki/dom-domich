@@ -91,6 +91,7 @@ class KnowledgeHit(StrictModel):
     revision: int = Field(ge=1)
     excerpt: str
     reviewed: bool
+    source_title: str | None = None
     rule_id: UUID | None = None
     deadline_origin: str | None = None
 

@@ -278,7 +278,7 @@ async def test_reminders_are_addressed_bounded_and_decision_is_published_once(
             )
             assert public is not None
             assert "поддержана по демонстрационному правилу" in public.text
-            assert "не протокол ОСС" in public.text
+            assert "не официальное решение собрания" in public.text
         documents = CaseDocumentPreparer(sessions, clock)
         owner = PositionWorkerContext(HOUSE_ONE, author_id)
         with pytest.raises(PermissionError, match="NOTICE_REGISTER_FORBIDDEN"):

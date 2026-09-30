@@ -13,6 +13,7 @@ from dom_domych.domain.documents.snapshot import (
 from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.postgres.case_models import CaseRow
 from dom_domych.infrastructure.postgres.documents import PostgresDocuments
+from dom_domych.infrastructure.postgres.knowledge_models import RuleVersionRow
 from dom_domych.infrastructure.postgres.models import HouseRow
 from dom_domych.infrastructure.postgres.original_audience import original_audience_id, original_poll
 from dom_domych.infrastructure.postgres.polls import PostgresPollRepository
@@ -97,10 +98,20 @@ class RequestDocumentEventHandler:
             location = self._location(case)
             case_ref = f"case:{case.id}:v{case.version}"
             rule_ref = request.source_refs[0]
+            rule = await session.get(RuleVersionRow, request.rule_id)
+            responsible_name = (
+                rule.responsible_name
+                if rule is not None and rule.responsible_id == request.responsible_id
+                else None
+            )
             facts = [
                 DocumentFact("Тема", case.title, case_ref),
                 DocumentFact("Описание", case.description, case_ref),
-                DocumentFact("Ответственный", str(request.responsible_id), rule_ref),
+                DocumentFact(
+                    "Ответственная служба",
+                    responsible_name or "Название не указано в проверенном правиле",
+                    rule_ref,
+                ),
                 DocumentFact(
                     "Регистрация demo executor",
                     request.registration_id,

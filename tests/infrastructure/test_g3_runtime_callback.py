@@ -198,7 +198,7 @@ async def test_problem_callback_card_request_pdf_and_resolution_through_runtime(
             ).all()
             assert len(edits) == 3
             latest = next(item for item in edits if item.status == "pending")
-            assert "Поддержали 3 из 12 жителей" in latest.text
+            assert "Подтвердили 3 из 12 жителей" in latest.text
             assert all(str(resident_id) not in latest.text for resident_id in eligible_residents)
         assert await worker.run_once()
 

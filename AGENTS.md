@@ -29,6 +29,8 @@
 
 **Состояние на 30.09.2026: A-MVP-1/2 и Z-MVP-1/2/3 объединены в `main`. Общий merge прошёл 315 тестов на чистой PostgreSQL 16.13, Ruff, mypy и Alembic check; отдельные ветки прошли CI. Единый polling Compose ранее подтвердил `/me`, Ollama `qwen3:4b` и normal MAX message по durable inbox → agent/tools → sent outbox; redacted read-back MAX подтверждён отдельно. Допустимый live голос, Z PDF в mobile/web, K01/K15 model metrics и цельный MAX/LLM G3 ещё не подтверждены. Подробности — в [current-state](context/current-state.md).**
 
+**Дополнение 30.09.2026:** `release-main` включён в `main` вместе со всеми новыми коммитами `a-mvp-2`. Карточки, личные опросы и ответы бота стали понятнее; личные кнопки после ответа заменяются отметкой о текущем выборе. Добавлены синтетические маршруты служб по четырём темам, название службы в проверенном правиле и заявке, осторожная обработка нескольких тем. Новый набор прошёл 319 тестов на чистой PostgreSQL 17; live MAX и настоящие адресаты служб этим не подтверждены. Детали — в [current-state](context/current-state.md).
+
 | Часть | Статус | Подтверждение |
 |---|---|---|
 | Концепция, backlog и продуктовые решения | Документация подготовлена | `IDEA.md`, `docs/backlog.md`, `docs/open-questions.md` |

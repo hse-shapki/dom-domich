@@ -119,7 +119,9 @@ async def test_reviewed_question_answers_without_mutating_agent() -> None:
         replies,
     )
     assert await handler(_event("Кто отвечает за свет?"))
-    assert replies.messages == ["Ответственный указан в правиле.\nИсточник: source:1"]
+    assert replies.messages == [
+        "Ответственный указан в правиле.\nИсточник: проверенный документ дома"
+    ]
 
 
 @pytest.mark.asyncio

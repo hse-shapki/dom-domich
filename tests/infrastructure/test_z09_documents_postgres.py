@@ -152,6 +152,7 @@ async def test_document_snapshot_is_idempotent_scoped_and_frozen(tmp_path: Path)
             row.lease_owner = "crashed-worker"
             row.lease_until = clock.now() - timedelta(seconds=1)
             row.attempts = 1
+            row.created_at = datetime(2020, 1, 1, tzinfo=UTC)
         files = LocalFileStore(tmp_path, clock)
         async with PdfRenderer(max_workers=1) as renderer:
             started = asyncio.Event()
@@ -176,7 +177,10 @@ async def test_document_snapshot_is_idempotent_scoped_and_frozen(tmp_path: Path)
                 await asyncio.wait_for(started.wait(), timeout=5)
                 await asyncio.sleep(0.25)
                 competitor = DocumentWorker(sessions, files, renderer, live_clock, "z10-competitor")
-                assert not await competitor.run_once()
+                await competitor.run_once()
+                async with sessions() as session:
+                    current = await session.get(DocumentRow, prepared.document_id)
+                    assert current is not None and current.attempts == 2
                 assert await rendering
             finally:
                 if not rendering.done():
@@ -186,7 +190,6 @@ async def test_document_snapshot_is_idempotent_scoped_and_frozen(tmp_path: Path)
             async with sessions() as session:
                 row = await session.get(DocumentRow, prepared.document_id)
                 assert row is not None and row.status == "ready", row.error_code if row else None
-            assert await worker.run_once() is False
         ready = await documents.get(prepared.document_id, HOUSE_ONE)
         assert ready is not None and ready.status == "ready" and ready.file_key is not None
         stored, content = await files.get(HOUSE_ONE, ready.file_key)

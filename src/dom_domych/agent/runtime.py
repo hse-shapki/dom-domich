@@ -206,7 +206,11 @@ class AgentRuntime:
                     )
                 )
                 if call.name == "case.create" and result.ok:
-                    return RunOutcome("completed", "Сообщение обработано.", tuple(audit))
+                    return RunOutcome(
+                        "completed",
+                        "Я записал проблему и сообщу о следующем шаге после проверки данных.",
+                        tuple(audit),
+                    )
                 conversation.append(
                     {
                         "role": "tool",
