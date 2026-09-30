@@ -143,7 +143,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Сквозная проверка Z14 | Частично: PostgreSQL/MockTransport цепь карточка → callback → голос → edit, отдельные PDF/Executor/result сценарии и retry проверены | `tests/infrastructure/test_z07_cards_outbox.py`, `test_z09_documents_postgres.py`, `test_z11_demo_executor_postgres.py`, `test_z12_resolution_postgres.py`; единый K/Z G3 и live MAX отсутствуют |
 | PDF QA Z15 | Частично: 4 образца, все 7 страниц, hash и локальный PostgreSQL/FileStore/outbox путь проверены | `docs/release/zamira-pdf-qa.md`, `tests/infrastructure/test_z09_documents_postgres.py`; mobile/web MAX не проверены |
 | Материалы Z16 | Частично: handoff, демо-политики, синтетические данные, обе развилки результата и воспроизведение PDF описаны | `docs/release/zamira-handoff.md`, `scripts/generate_zamira_demo_pdfs.py`; live G3 runbook ждёт K/Z orchestration и MAX |
-| Python-проект и зависимости A00 | Проверено локально; предыдущий набор — GitHub Actions #35 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; локально на целевом PG17/pgvector migration/check, Ruff, mypy по `src` и 275 тестов прошли; CI нового набора ожидается |
+| Python-проект и зависимости A00 | Проверено локально и в GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; CI на целевом PG17/pgvector и локально migration/check, Ruff, mypy по `src` и 275 тестов прошли |
 | PostgreSQL core A02 | Проверено локально на PostgreSQL 17.8 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`: единая migration/check до `0a7b6c5d4e3f` и 275 тестов на чистой БД |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, signed int64 group chat ID, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; реальные `/start <код>` и `bot_added` группы подтверждены | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; mobile и несколько домов ещё не проверены |
@@ -159,7 +159,7 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Composition/polling A14 | Частично: локальная production-цепь problem → request → PDF binding → demo executor → resolution → closed проверена; initiative/emergency handlers подключены | `tests/infrastructure/test_g3_runtime.py`; без LLM/MAX upload это не live G3 |
 | Backup/restore A15 | Проверено локально на PostgreSQL 17.8/pgvector и FileStore | `scripts/runtime_backup.py`, `application/jobs/maintenance.py`, retention tests; восстановлены Z head `0a7b6c5d4e3f`, vector, 40 public tables и 5 файлов с теми же SHA-256; временные данные удалены |
 | MAX mobile/web A16 | Не проверено; подготовлен честный протокол | `docs/release/max-mobile-web-matrix.md`; нужен live бот, два клиента и общий G3 runtime |
-| Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов | `scripts/release_audit.py`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
+| Release A17 | Частично: secret audit текущих файлов/истории прошёл, 41 installed package инвентаризирован, archive/evidence tool готов, CI Actions закреплены по SHA актуальных релизов | `scripts/release_audit.py`, `.github/workflows/python.yml`, `docs/release/platform-operations.md`; лицензия самого `dom-domych` не выбрана, tag/image digests нельзя фиксировать до G3 |
 | Агент K00–K04 | Частично: contracts, dataset, production K tool composition и durable continuation проверены; нативный Ollama `qwen3:4b` прошёл PostgreSQL problem path `case.search` → `case.create` → reply outbox | `src/dom_domych/agent/`, `infrastructure/llm/ollama.py`, `application/agent/composition.py`, tests/evals; полный live MAX/G3 и реальные метрики ещё открыты |
 | Хранение опросов | Частично: PostgreSQL repository/migration, callback и jobs проверены локально | `infrastructure/postgres/polls.py`, `application/polls/production.py`, `tests/infrastructure/test_z04_polls_postgres.py`; K route/live MAX не проверены |
 | Рабочий стенд и внешние проверки | Частично | Целевой PG17/pgvector, production image и полный local Compose lifecycle проверены; live MAX bot identity/polling/DM onboarding и одна outbox DM пройдены, local-LLM problem path проверен отдельно; публичный HTTPS, mobile, group/callback/files и цельный live G3 ещё не проверены |
@@ -178,8 +178,8 @@ pgvector 0.8.1 с полной миграцией с нуля прошли 275 �
 check без новых операций; тот же набор ранее прошёл на PostgreSQL 16. Старое
 предупреждение Alembic о неизвестном типе `vector` сохраняется. A-пул повторно
 проверил полный Compose lifecycle уже с Z document worker и восстановление нового
-Z head. CI workflow поднимает тот же PG17/pgvector; GitHub Actions #31 на `6c11ce9`
-завершился успешно 27.09.2026.
+Z head. CI workflow поднимает тот же PG17/pgvector; GitHub Actions #50 на `2c6af2b`
+с 275 тестами завершился успешно 30.09.2026.
 
 ## Как обновлять после задачи
 

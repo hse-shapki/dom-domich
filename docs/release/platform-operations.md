@@ -103,6 +103,9 @@ GitHub Actions run [#26](https://github.com/hse-shapki/dom-domich/actions/runs/3
 После подключения ordinary problem runtime run
 [#31](https://github.com/hse-shapki/dom-domich/actions/runs/36337214973) на `6c11ce9`
 успешно выполнил тот же workflow уже с 247 тестами.
+После обновления workflow и закрепления `actions/checkout` и `setup-uv` по SHA актуальных
+релизов run [#50](https://github.com/hse-shapki/dom-domich/actions/runs/36716287223) на
+`2c6af2b` успешно выполнил целевой PG17/pgvector workflow с 275 тестами.
 
 ## Перед релизом
 
