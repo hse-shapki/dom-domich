@@ -88,6 +88,7 @@ class PostgresMessageReplies:
         if event.message is None:
             raise ValueError("MESSAGE_REQUIRED")
         direct = event.message.chat_id.startswith("dm:")
+        buttons: tuple[tuple[str, str], ...] = ()
         async with self.sessions.begin() as session:
             case = (
                 await session.execute(
@@ -107,20 +108,28 @@ class PostgresMessageReplies:
             if case is not None and case.status == "awaiting_confirmation":
                 text = (
                     f"Похожих активных обращений не найдено. Запустить опрос по проблеме "
-                    f"«{case.title}»? Ответьте «Да» в этом чате."
+                    f"«{case.title}»?"
                 )
                 direct = True
+                buttons = (
+                    ("Да, запустить", f"problem-confirm:{case.id}:yes"),
+                    ("Нет", f"problem-confirm:{case.id}:no"),
+                )
             elif any(
                 marker in text.casefold()
                 for marker in ("<think", "</think", "case.search", "case.create", "tool_call")
             ):
                 text = "Сообщение обработано, но безопасный ответ не сформирован. Уточните запрос."
+                buttons = ()
+            else:
+                buttons = ()
             intent = DeliveryIntent(
                 house_id=principal.house_id,
                 operation_key=f"agent-reply:{event.event_id}",
                 text=text,
                 recipient_id=principal.actor_id if direct else None,
                 chat_id=None if direct else event.message.chat_id,
+                buttons=buttons,
             )
             return await PostgresDeliveryQueue(session, self.clock).enqueue(intent)
 

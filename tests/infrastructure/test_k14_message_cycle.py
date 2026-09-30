@@ -14,11 +14,15 @@ from dom_domych.application.agent.composition import (
     build_k_message_agent,
 )
 from dom_domych.application.agent.messages import register_message_agent
-from dom_domych.application.agent.resident_actions import ResidentAction
-from dom_domych.application.agent.resident_production import PostgresResidentActions
+from dom_domych.application.cases.confirmation import PostgresProblemConfirmationCallbacks
 from dom_domych.application.jobs.inbox_worker import EventDispatcher, InboxWorker
-from dom_domych.contracts.base import ExecutionMode, PrincipalType, TrustedContext
-from dom_domych.contracts.events import EventEnvelope, EventName, EventSource, MessagePayload
+from dom_domych.contracts.events import (
+    CallbackPayload,
+    EventEnvelope,
+    EventName,
+    EventSource,
+    MessagePayload,
+)
 from dom_domych.domain.executor.models import ApprovedDraft, DemoOperation
 from dom_domych.infrastructure.postgres.agent_models import AgentRunRow
 from dom_domych.infrastructure.postgres.case_models import (
@@ -52,6 +56,14 @@ class UnusedSubmitter:
         self, draft: ApprovedDraft, operation_key: str, house_id: UUID
     ) -> DemoOperation:
         raise AssertionError("triage must not submit an unapproved request")
+
+
+class CallbackAcks:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    async def answer_callback(self, callback_id, notification, *, dialog_key=None):
+        self.messages.append(notification)
 
 
 @pytest.mark.asyncio
@@ -185,9 +197,11 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                 assert delivery.house_id == house_id and delivery.chat_id is None
                 assert delivery.recipient_id == resident_id
                 assert delivery.status == "pending"
-                assert "Ответьте «Да»" in delivery.text
+                assert "Запустить опрос" in delivery.text
                 assert str(case.id) not in delivery.text
                 assert "case.create" not in delivery.text
+                assert [item["text"] for item in delivery.buttons] == ["Да, запустить", "Нет"]
+                yes_token = delivery.buttons[0]["payload"]
                 inbox = await session.get(InboxEventRow, event_id)
                 assert inbox is not None and inbox.status == "done"
                 problem_event = await session.scalar(
@@ -197,27 +211,31 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                 )
                 assert problem_event is None
 
-            confirm_id = uuid4()
-            confirmed = await PostgresResidentActions(
+            confirm_id, acks = uuid4(), CallbackAcks()
+            confirmed = await PostgresProblemConfirmationCallbacks(
                 sessions,
-                clock,
-                object(),
-                object(),  # type: ignore[arg-type]
-            ).execute(
-                ResidentAction("confirm", None),
-                event,
-                TrustedContext(
-                    run_id=uuid4(),
+                acks,
+                clock,  # type: ignore[arg-type]
+            ).handle(
+                EventEnvelope(
                     event_id=confirm_id,
-                    house_id=house_id,
-                    actor_id=resident_id,
-                    principal_type=PrincipalType.RESIDENT,
-                    capabilities=frozenset(),
+                    source=EventSource.MAX,
+                    source_key=f"callback:{confirm_id}",
+                    name=EventName.CALLBACK_RECEIVED,
+                    occurred_at=NOW,
+                    received_at=NOW,
                     correlation_id=confirm_id,
-                    mode=ExecutionMode.DEMO,
+                    actor_user_id="42",
+                    callback=CallbackPayload(
+                        callback_id="confirm-callback",
+                        sender_user_id="42",
+                        action_token=yes_token,
+                        chat_id="dm:42",
+                    ),
                 ),
             )
-            assert "Опрос запускается" in confirmed
+            assert confirmed is True
+            assert acks.messages == ["Запускаю опрос в группе."]
             async with sessions() as session:
                 case = await session.scalar(select(CaseRow).where(CaseRow.house_id == house_id))
                 assert case is not None and case.status == "detected" and case.version == 2

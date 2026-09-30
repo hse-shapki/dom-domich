@@ -19,6 +19,10 @@ from dom_domych.application.agent.composition import (
 from dom_domych.application.agent.messages import register_message_agent
 from dom_domych.application.agent.resident_actions import ResidentActionHandler
 from dom_domych.application.agent.resident_production import PostgresResidentActions
+from dom_domych.application.cases.confirmation import (
+    PostgresProblemConfirmationCallbacks,
+    register_problem_confirmation_callbacks,
+)
 from dom_domych.application.cases.production import register_problem_events
 from dom_domych.application.documents.followup import RequestComplaintEventHandler
 from dom_domych.application.documents.production import RequestDocumentEventHandler
@@ -231,6 +235,9 @@ async def run_inbox() -> None:
                 coordinator,
                 _RESIDENT_AGENT_CAPABILITIES,
             ),
+        )
+        register_problem_confirmation_callbacks(
+            dispatcher, PostgresProblemConfirmationCallbacks(sessions, max_client, clock)
         )
         register_poll_callbacks(
             dispatcher, PostgresPollCallbackProcessor(sessions, max_client, clock)

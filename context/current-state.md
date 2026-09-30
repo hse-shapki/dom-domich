@@ -61,8 +61,10 @@ case messages, versioned events и recurrence. Тест на PostgreSQL 18 пр�
 и проверен; K case command автоматически открывает инициативу через durable событие.
 K09: ProblemWorkflow проверяет scope дела и доверенный итог Z. В MAX message route
 `case.create` сначала сохраняет скрытый draft `awaiting_confirmation` и ставит автору
-детерминированное личное предложение ответить «Да»; tool trace, рассуждения модели и
-UUID дела наружу не отправляются. Только явное подтверждение выпускает durable
+детерминированную личную карточку с кнопками «Да, запустить» и «Нет»; callback
+проверяет trusted MAX actor, положительный выбор выпускает durable `problem.detected`,
+отрицательный закрывает draft и оба показывают понятный popup. Tool trace и UUID дела
+наружу не отправляются. Только явное подтверждение выпускает durable
 `problem.detected`, после чего production handler одной UoW сохраняет frozen audience,
 poll, deadline, переход case и публичную карточку/outbox; отсутствие group chat откатывает весь переход.
 Trusted итог poll до agent continuation переводит дело в `request_ready` либо
