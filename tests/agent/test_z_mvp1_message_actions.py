@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from dom_domych.agent.runtime import RunOutcome, ToolAudit
 from dom_domych.agent.triage import MessageKind, RouteResult
 from dom_domych.application.agent.messages import MessageAgentHandler, MessagePrincipal
 from dom_domych.application.agent.resident_actions import ResidentActionHandler
@@ -64,6 +65,15 @@ class Triage:
 class ForbiddenCoordinator:
     async def run_event(self, *args, **kwargs):
         raise AssertionError("question or clarification must not mutate a case")
+
+
+class ValidationFailedCoordinator:
+    async def run_event(self, *args, **kwargs):
+        return RunOutcome(
+            "failed",
+            "",
+            (ToolAudit("case.create", "VALIDATION_ERROR", None, ()),),
+        )
 
 
 class Actions:
@@ -135,6 +145,29 @@ async def test_private_greeting_gets_reply_without_mutating_agent() -> None:
     assert replies.messages and "Расскажите о проблеме" in replies.messages[0]
     assert await handler(_event("Привет", chat_id="group"))
     assert len(replies.messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_invalid_case_location_gets_actionable_reply_instead_of_silence() -> None:
+    replies = Replies()
+    handler = MessageAgentHandler(
+        Principals(),
+        Triage(
+            RouteResult(
+                kind=MessageKind.PROBLEM,
+                text="Не горит свет на пятом этаже",
+                next_action="problem.assess",
+            )
+        ),
+        ValidationFailedCoordinator(),
+        replies,
+    )
+
+    assert await handler(_event("Не горит свет на пятом этаже"))
+    assert replies.messages == [
+        "Не удалось безопасно определить место. Уточните: весь дом или номер подъезда; "
+        "если указываете этаж — обязательно укажите подъезд."
+    ]
 
 
 @pytest.mark.asyncio

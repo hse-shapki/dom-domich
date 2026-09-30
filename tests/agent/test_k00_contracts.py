@@ -44,6 +44,20 @@ def test_k_tools_exclude_trusted_identity_fields() -> None:
         CaseSearch.model_validate({"query": "Лампа на лестнице", "house_id": str(uuid4())})
 
 
+def test_case_location_rejects_floor_without_verified_entrance() -> None:
+    with pytest.raises(ValidationError, match="floor requires a verified entrance"):
+        CaseSearch(query="лампа на пятом этаже", floor=5)
+    with pytest.raises(ValidationError, match="floor requires a verified entrance"):
+        CaseCreate(
+            kind=CaseKind.PROBLEM,
+            title="Лампа на пятом этаже",
+            description="Не горит свет на лестнице",
+            floor=5,
+            source_message_id=uuid4(),
+            operation_id=uuid4(),
+        )
+
+
 @pytest.mark.asyncio
 async def test_fake_case_and_request_keep_tenant_version_and_registration_separate() -> None:
     context = _context()

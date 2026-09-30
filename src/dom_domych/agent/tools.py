@@ -26,7 +26,7 @@ def build_k_tool_definitions(handlers: KToolHandlers) -> tuple[ToolDefinition, .
     specs = (
         (
             "case.search",
-            "Найти похожие активные или недавно закрытые дела этого дома.",
+            "Найти похожие дела дома; floor допустим только вместе с entrance.",
             frozenset({AgentMode.TRIAGE, AgentMode.PROBLEM, AgentMode.INITIATIVE}),
             "read",
             "case.read",
@@ -40,7 +40,7 @@ def build_k_tool_definitions(handlers: KToolHandlers) -> tuple[ToolDefinition, .
         ),
         (
             "case.create",
-            "Создать новое дело после проверки кандидатов.",
+            "Создать дело после проверки кандидатов; floor допустим только с entrance.",
             frozenset({AgentMode.TRIAGE, AgentMode.PROBLEM, AgentMode.INITIATIVE}),
             "write",
             "case.write",

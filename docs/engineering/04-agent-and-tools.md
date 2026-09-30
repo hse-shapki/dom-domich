@@ -83,9 +83,9 @@ ToolResult:
 |---|---|---|---|
 | `house.get_context` | нужные разделы | HouseContextService; минимум данных текущего дома | Структура, ссылки на источники |
 | `knowledge.search` | вопрос, scope | KnowledgeService; house/global scope, проверенные источники | Фрагменты, source ID, revision |
-| `case.search` | описание, известная локация, время | SearchService; tenant filter, FTS/vector | Кандидаты с фактами, score и versions |
+| `case.search` | описание, известная локация, время | SearchService; tenant filter, FTS/vector; этаж допустим только с подтверждённым подъездом | Кандидаты с фактами, score и versions |
 | `case.get` | case ID | CaseService; принадлежность дому | Состояние, evidence, pending actions |
-| `case.create` | тип, факты, источник | CaseService; повторная проверка кандидатов | ID, version либо конфликт кандидата |
+| `case.create` | тип, факты, источник | CaseService; повторная проверка кандидатов; floor без entrance отклоняется до handler | ID, version либо конфликт кандидата |
 | `case.attach_message` | case/message ID, expectedVersion | CaseService; ownership, уникальность, версия | Привязка и новая версия |
 | `conversation.ask` | вопрос, цель, допустимый получатель | ConversationService; scope, одна pending question | Question ID и delivery operation |
 | `audience.resolve` | scope: дом/подъезд/этаж/стояк | AudienceService; реестр и критерии | Snapshot ID, eligible/reachable count |

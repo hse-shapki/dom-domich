@@ -25,6 +25,12 @@ class CaseSearch(StrictModel):
     floor: int | None = None
     object_name: str | None = Field(default=None, max_length=100)
 
+    @model_validator(mode="after")
+    def require_entrance_for_floor(self) -> CaseSearch:
+        if self.floor is not None and self.entrance is None:
+            raise ValueError("floor requires a verified entrance")
+        return self
+
 
 class CaseGet(StrictModel):
     case_id: UUID
@@ -51,6 +57,12 @@ class CaseCreate(StrictModel):
     source_message_id: UUID
     candidate_case_ids: tuple[UUID, ...] = ()
     operation_id: UUID
+
+    @model_validator(mode="after")
+    def require_entrance_for_floor(self) -> CaseCreate:
+        if self.floor is not None and self.entrance is None:
+            raise ValueError("floor requires a verified entrance")
+        return self
 
 
 class CaseAttachMessage(StrictModel):

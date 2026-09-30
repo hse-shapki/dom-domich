@@ -260,3 +260,56 @@ async def test_runtime_injects_trusted_event_and_operation_fields() -> None:
     assert isinstance(parameters, dict)
     assert "source_message_id" not in parameters["properties"]
     assert "operation_id" not in parameters["properties"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_rejects_floor_without_entrance_before_case_handler() -> None:
+    context = _context(frozenset({"case.write"}))
+    handler_called = False
+
+    class InvalidLocationLlm:
+        calls = 0
+
+        async def complete(
+            self, messages: list[dict[str, object]], tools: list[dict[str, object]]
+        ) -> LlmResponse:
+            self.calls += 1
+            if self.calls > 1:
+                return LlmResponse("Уточните подъезд")
+            return LlmResponse(
+                "",
+                (
+                    LlmToolCall(
+                        "case.create",
+                        '{"kind":"problem","title":"Темно на этаже",'
+                        '"description":"Не горит свет на пятом этаже","entrance":null,'
+                        '"floor":5,"object_name":"lighting","candidate_case_ids":[]}',
+                    ),
+                ),
+            )
+
+    async def handler(args: StrictModel, trusted: TrustedContext) -> ToolResult:
+        nonlocal handler_called
+        handler_called = True
+        return ToolResult(ok=True)
+
+    runtime = AgentRuntime(
+        InvalidLocationLlm(),
+        [
+            ToolDefinition(
+                "case.create",
+                "Создаёт дело; floor только вместе с entrance.",
+                CaseCreate,
+                frozenset({AgentMode.TRIAGE}),
+                "write",
+                "case.write",
+                handler,
+            )
+        ],
+    )
+
+    result = await runtime.run([], context, AgentMode.TRIAGE)
+
+    assert result.status == "failed"
+    assert handler_called is False
+    assert result.audit[0].outcome == "VALIDATION_ERROR"
