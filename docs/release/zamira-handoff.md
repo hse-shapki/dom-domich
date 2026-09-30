@@ -131,6 +131,11 @@ uv run python scripts/generate_zamira_demo_pdfs.py --output-dir /tmp/dom-domich-
 Два дела с порогами `3/12`, позитивным `12/12` и негативным `3/12` описаны в
 [`zamira-manual-demo.md`](zamira-manual-demo.md). Все четыре приватных PDF
 проверяются по [`zamira-live-pdf-smoke.md`](zamira-live-pdf-smoke.md).
+Полный контрольный лист Z-MVP-3 по трём типам дела, трём исходам,
+replay/недоставке, deadline и K01/K15 — в
+[`z-mvp-3-check.md`](z-mvp-3-check.md). На чистой PG16.13 все девять локальных
+G3 сочетаний теперь проходят именно через operator CLI register/done/replay;
+live MAX/LLM G3 и реальные метрики модели ещё открыты.
 Локальный CLI поддерживает и `--request-id`, и `--operation-id`; команды
 `list`/`done` удобны для ручного демо. Повтор с тем же `event-id` не создаёт
 второе событие.

@@ -55,3 +55,27 @@ def test_claim_without_verified_source_fails_source_check() -> None:
     )
     result = score([case], {case.id: trace})
     assert result.invalid_source_case_ids == (case.id,)
+
+
+def test_required_alternatives_accept_a_real_action_and_reject_symbolic_label() -> None:
+    cases = load_cases(Path(__file__).resolve().parents[2] / "evals/k01_cases.jsonl")
+    by_id = {case.id: case for case in cases}
+    for case_id, accepted, rejected in (
+        ("p01", ("case.search", "case.attach_message"), ("case.search", "case.create_or_attach")),
+        ("p03", ("case.search", "conversation.ask"), ("case.search", "case.attach_or_clarify")),
+        (
+            "p05",
+            ("case.search", "case.recurrence.create"),
+            ("case.search", "create_recurrence_or_clarify"),
+        ),
+        ("i01", ("initiative.create",), ("initiative.create_or_clarify",)),
+    ):
+        case = by_id[case_id]
+        good = EvalTrace(
+            id=case_id, routes=case.routes, actions=accepted, latency_ms=1, tool_calls=1
+        )
+        bad = EvalTrace(
+            id=case_id, routes=case.routes, actions=rejected, latency_ms=1, tool_calls=1
+        )
+        assert score([case], {case_id: good}).required_covered == 1
+        assert score([case], {case_id: bad}).required_covered == 0
