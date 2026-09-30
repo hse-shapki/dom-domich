@@ -164,7 +164,7 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
             worker = InboxWorker(sessions, dispatcher, clock, "k14-message-worker")
 
             assert await worker.run_once()
-            assert llm.call_count == 2
+            assert llm.call_count == 0
 
             async with sessions() as session:
                 case = await session.scalar(select(CaseRow).where(CaseRow.house_id == house_id))
@@ -175,7 +175,7 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                 run = await session.scalar(
                     select(AgentRunRow).where(AgentRunRow.event_id == event_id)
                 )
-                assert run is not None and run.status == "completed"
+                assert run is None
                 delivery = await session.scalar(
                     select(OutboxDeliveryRow).where(
                         OutboxDeliveryRow.operation_key == f"agent-reply:{event_id}"

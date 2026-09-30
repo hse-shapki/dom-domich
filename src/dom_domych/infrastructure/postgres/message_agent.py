@@ -1,13 +1,16 @@
 """PostgreSQL adapters доверенного MAX actor/house и ответа agent в outbox."""
 
+import re
 from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.agent.contracts import CaseAttachMessage, CaseCreate, CaseKind, CaseSearch
 from dom_domych.application.agent.messages import MessagePrincipal
-from dom_domych.contracts.base import ExecutionMode
+from dom_domych.application.cases.service import CaseService
+from dom_domych.contracts.base import ExecutionMode, TrustedContext
 from dom_domych.contracts.events import EventEnvelope
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
 from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseRow
@@ -164,3 +167,99 @@ class PostgresMessageHistory:
             if isinstance(text, str) and len(text.strip()) >= 8:
                 return text.strip()
         return None
+
+
+_ENTRANCE = re.compile(r"(?:в\s+)?(\d+)\s*(?:-?(?:й|ый|ой))?\s*подъезд", re.IGNORECASE)
+_FLOOR = re.compile(r"(?:на\s+)?(\d+)\s*(?:-?(?:м|ом))?\s*этаж", re.IGNORECASE)
+_ORDINALS = {
+    "перв": 1,
+    "втор": 2,
+    "трет": 3,
+    "четвер": 4,
+    "пят": 5,
+    "шест": 6,
+    "седьм": 7,
+    "восьм": 8,
+    "девят": 9,
+    "десят": 10,
+}
+
+
+def _location_number(text: str, numeric: re.Pattern[str], noun: str) -> int | None:
+    match = numeric.search(text)
+    if match is not None:
+        return int(match.group(1))
+    folded = text.casefold()
+    for stem, value in _ORDINALS.items():
+        if re.search(rf"\b{stem}\w*\s+{noun}", folded):
+            return value
+    return None
+
+
+class PostgresProblemDrafts:
+    """Надёжный backend-path для очевидной обычной проблемы без второго LLM шага."""
+
+    def __init__(self, cases: CaseService) -> None:
+        self.cases = cases
+
+    async def assess(self, text: str, event: EventEnvelope, context: TrustedContext) -> str:
+        entrance = _location_number(text, _ENTRANCE, "подъезд")
+        floor = _location_number(text, _FLOOR, "этаж")
+        if floor is not None and entrance is None:
+            return (
+                "Не удалось безопасно определить место. Уточните номер подъезда; "
+                "например: «5 подъезд»."
+            )
+        folded = text.casefold()
+        object_name = next(
+            (
+                value
+                for marker, value in (
+                    ("вод", "water_supply"),
+                    ("свет", "lighting"),
+                    ("ламп", "lighting"),
+                    ("лифт", "elevator"),
+                    ("отоп", "heating"),
+                    ("батар", "heating"),
+                )
+                if marker in folded
+            ),
+            None,
+        )
+        candidates = await self.cases.search(
+            CaseSearch(
+                query=text[:500],
+                entrance=entrance,
+                floor=floor,
+                object_name=object_name,
+            ),
+            context,
+        )
+        if candidates:
+            candidate = candidates[0]
+            await self.cases.attach_message(
+                CaseAttachMessage(
+                    case_id=candidate.case_id,
+                    message_id=event.event_id,
+                    expected_version=candidate.version,
+                    operation_id=event.event_id,
+                ),
+                context,
+            )
+            return "Похожая проблема уже есть. Я добавил ваше сообщение к текущему опросу."
+        title = text.replace("\nУточнение пользователя:", ";").strip()[:200]
+        await self.cases.create(
+            CaseCreate(
+                kind=CaseKind.PROBLEM,
+                title=title,
+                description=text[:2000],
+                entrance=entrance,
+                floor=floor,
+                object_name=object_name,
+                source_message_id=event.event_id,
+                candidate_case_ids=(),
+                operation_id=event.event_id,
+            ),
+            context,
+        )
+        return "Проблема подготовлена. Подтвердите запуск опроса в личном чате."

@@ -41,9 +41,22 @@ class MessageHistoryPort(Protocol):
     ) -> str | None: ...
 
 
+class ProblemDraftPort(Protocol):
+    async def assess(self, text: str, event: EventEnvelope, context: TrustedContext) -> str: ...
+
+
 _SHORT_SCOPE_REPLY = re.compile(
     r"^(?:в\s+)?(?:весь\s+дом|по\s+всему\s+дому|(?:подъезд\s*)?\d+\s*"
     r"(?:-?(?:й|ый|ой))?\s*(?:подъезд(?:е|а)?|п\.?)?)[.!]?$",
+    re.IGNORECASE,
+)
+_OBVIOUS_PROBLEM = re.compile(
+    r"(?:нет\s+воды|не\s+горит|не\s+работает|сломал|протеч|теч[её]т|"
+    r"нет\s+света|холодн|не\s+греет|застрял\s+лифт)",
+    re.IGNORECASE,
+)
+_OBVIOUS_EMERGENCY = re.compile(
+    r"(?:пахнет\s+газом|утечка\s+газа|искрит|горит\s+щиток|прорвало\s+трубу)",
     re.IGNORECASE,
 )
 
@@ -58,12 +71,14 @@ class MessageAgentHandler:
         coordinator: AgentCoordinator,
         replies: MessageReplyPort,
         history: MessageHistoryPort | None = None,
+        problem_drafts: ProblemDraftPort | None = None,
     ) -> None:
         self.principals = principals
         self.triage = triage
         self.coordinator = coordinator
         self.replies = replies
         self.history = history
+        self.problem_drafts = problem_drafts
 
     async def __call__(self, event: EventEnvelope) -> bool:
         if event.name is not EventName.MESSAGE_RECEIVED:
@@ -105,6 +120,14 @@ class MessageAgentHandler:
             previous = await self.history.previous_text(event, principal)
             if previous is not None:
                 model_text = f"{previous}\nУточнение пользователя: {text}"
+        if (
+            self.problem_drafts is not None
+            and _OBVIOUS_PROBLEM.search(model_text)
+            and not _OBVIOUS_EMERGENCY.search(model_text)
+        ):
+            reply = await self.problem_drafts.assess(model_text, event, context)
+            await self.replies.enqueue(event, principal, reply)
+            return True
         routes = await self.triage.route(model_text, context, at=event.received_at)
         if not routes:
             return True
