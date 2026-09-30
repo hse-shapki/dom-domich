@@ -56,9 +56,11 @@ class PostgresCaseWriter:
         sessions: async_sessionmaker[AsyncSession],
         *,
         emit_workflow_events: bool = False,
+        require_problem_confirmation: bool = False,
     ) -> None:
         self.sessions = sessions
         self.emit_workflow_events = emit_workflow_events
+        self.require_problem_confirmation = require_problem_confirmation
 
     @staticmethod
     async def _lock(session: AsyncSession, scope: str) -> None:
@@ -116,6 +118,11 @@ class PostgresCaseWriter:
                 ),
                 None,
             )
+            needs_problem_confirmation = (
+                self.emit_workflow_events
+                and self.require_problem_confirmation
+                and command.kind is CaseKind.PROBLEM
+            )
             row = CaseRow(
                 id=uuid4(),
                 house_id=context.house_id,
@@ -125,7 +132,7 @@ class PostgresCaseWriter:
                 entrance=command.entrance,
                 floor=command.floor,
                 object_name=command.object_name,
-                status="detected",
+                status="awaiting_confirmation" if needs_problem_confirmation else "detected",
                 version=1,
                 created_at=now,
                 closed_at=None,
@@ -179,7 +186,11 @@ class PostgresCaseWriter:
                 CaseKind.EMERGENCY: EventName.EMERGENCY_DETECTED,
                 CaseKind.INITIATIVE: EventName.INITIATIVE_DETECTED,
             }.get(command.kind)
-            if self.emit_workflow_events and workflow_event is not None:
+            if (
+                self.emit_workflow_events
+                and workflow_event is not None
+                and not needs_problem_confirmation
+            ):
                 workflow_source = workflow_event.value.replace(".", "-")
                 await save_domain_event(
                     session,

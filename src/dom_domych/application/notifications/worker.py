@@ -143,7 +143,8 @@ class DeliveryWorker:
                         if delivery.chat_id is not None
                         else f"resident:{delivery.recipient_id}"
                     ),
-                    attachments=attachments,
+                    # Empty attachments explicitly remove the old inline keyboard.
+                    attachments=attachments if attachments is not None else [],
                 )
                 message_id = edit_message_id
             elif user_id is not None:

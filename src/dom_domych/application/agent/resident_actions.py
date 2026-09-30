@@ -15,7 +15,7 @@ from dom_domych.domain.initiatives.models import InitiativeError
 @dataclass(frozen=True, slots=True)
 class ResidentAction:
     name: str
-    entity_id: UUID
+    entity_id: UUID | None
     expected_revision: int | None = None
     wording: str | None = None
     evidence_id: UUID | None = None
@@ -29,7 +29,7 @@ class ResidentActionPort(Protocol):
 
 
 _USAGE = (
-    "Команды в личном чате: /prepare ID_ДЕЛА; /approve ID_ОБРАЩЕНИЯ; "
+    "Команды в личном чате: /confirm; /prepare ID_ДЕЛА; /approve ID_ОБРАЩЕНИЯ; "
     "/send ID_ОБРАЩЕНИЯ; /revise ID_ДЕЛА РЕДАКЦИЯ НОВЫЙ_ТЕКСТ; "
     "/evidence ID_ДЕЛА с одним фото; /assess ID_ДЕЛА ID_ФОТО accepted|rejected."
 )
@@ -39,6 +39,8 @@ def parse_resident_action(text: str) -> ResidentAction | None:
     """Команда распознаётся только по целому первому слову, UUID обязателен."""
 
     parts = text.strip().split(maxsplit=3)
+    if len(parts) == 1 and parts[0].casefold() in {"да", "/confirm"}:
+        return ResidentAction("confirm", None)
     if not parts or parts[0].casefold() not in {
         "/prepare",
         "/approve",
@@ -46,6 +48,7 @@ def parse_resident_action(text: str) -> ResidentAction | None:
         "/revise",
         "/evidence",
         "/assess",
+        "/confirm",
     }:
         return None
     name = parts[0].casefold()[1:]
@@ -108,6 +111,7 @@ class ResidentActionHandler:
                 "/revise",
                 "/evidence",
                 "/assess",
+                "/confirm",
             }:
                 return False
             principal = await self.principals.resolve(event)

@@ -86,6 +86,8 @@ def _event(event_id: UUID, text: str, *, image: bool = False) -> EventEnvelope:
 
 def test_exact_resident_command_parser() -> None:
     case_id, evidence_id = uuid4(), uuid4()
+    assert parse_resident_action("/confirm") == ResidentAction("confirm", None)
+    assert parse_resident_action("Да") == ResidentAction("confirm", None)
     assert parse_resident_action(f"/revise {case_id} 1 Новая версия текста") == ResidentAction(
         "revise", case_id, 1, "Новая версия текста"
     )

@@ -1,17 +1,26 @@
 """PostgreSQL adapters доверенного MAX actor/house и ответа agent в outbox."""
 
+import re
+from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from dom_domych.agent.contracts import CaseAttachMessage, CaseCreate, CaseKind, CaseSearch
 from dom_domych.application.agent.messages import MessagePrincipal
-from dom_domych.contracts.base import ExecutionMode
+from dom_domych.application.cases.service import CaseService
+from dom_domych.contracts.base import ExecutionMode, TrustedContext
 from dom_domych.contracts.events import EventEnvelope
 from dom_domych.domain.ports.core import Clock, DeliveryIntent
-from dom_domych.infrastructure.postgres.case_models import CaseMessageRow
+from dom_domych.infrastructure.postgres.case_models import CaseMessageRow, CaseRow
 from dom_domych.infrastructure.postgres.delivery import PostgresDeliveryQueue
-from dom_domych.infrastructure.postgres.models import HouseRow, ResidencyRow, ResidentRow
+from dom_domych.infrastructure.postgres.models import (
+    HouseRow,
+    InboxEventRow,
+    ResidencyRow,
+    ResidentRow,
+)
 
 
 class PostgresMessagePrincipals:
@@ -79,21 +88,187 @@ class PostgresMessageReplies:
         if event.message is None:
             raise ValueError("MESSAGE_REQUIRED")
         direct = event.message.chat_id.startswith("dm:")
+        buttons: tuple[tuple[str, str], ...] = ()
         async with self.sessions.begin() as session:
-            case_id = await session.scalar(
-                select(CaseMessageRow.case_id).where(
-                    CaseMessageRow.house_id == principal.house_id,
-                    CaseMessageRow.message_id == event.event_id,
-                    CaseMessageRow.actor_id == principal.actor_id,
+            case = (
+                await session.execute(
+                    select(CaseRow.id, CaseRow.title, CaseRow.status)
+                    .join(
+                        CaseMessageRow,
+                        (CaseMessageRow.case_id == CaseRow.id)
+                        & (CaseMessageRow.house_id == CaseRow.house_id),
+                    )
+                    .where(
+                        CaseMessageRow.house_id == principal.house_id,
+                        CaseMessageRow.message_id == event.event_id,
+                        CaseMessageRow.actor_id == principal.actor_id,
+                    )
                 )
-            )
-            if case_id is not None and str(case_id) not in text:
-                text = f"{text}\nID дела: {case_id}"
+            ).one_or_none()
+            if case is not None and case.status == "awaiting_confirmation":
+                text = (
+                    f"Похожих активных обращений не найдено. Запустить опрос по проблеме "
+                    f"«{case.title}»?"
+                )
+                direct = True
+                buttons = (
+                    ("Да, запустить", f"problem-confirm:{case.id}:yes"),
+                    ("Нет", f"problem-confirm:{case.id}:no"),
+                )
+            elif any(
+                marker in text.casefold()
+                for marker in ("<think", "</think", "case.search", "case.create", "tool_call")
+            ):
+                text = "Сообщение обработано, но безопасный ответ не сформирован. Уточните запрос."
+                buttons = ()
+            else:
+                buttons = ()
             intent = DeliveryIntent(
                 house_id=principal.house_id,
                 operation_key=f"agent-reply:{event.event_id}",
                 text=text,
                 recipient_id=principal.actor_id if direct else None,
                 chat_id=None if direct else event.message.chat_id,
+                buttons=buttons,
             )
             return await PostgresDeliveryQueue(session, self.clock).enqueue(intent)
+
+
+class PostgresMessageHistory:
+    """Возвращает только недавний текст того же MAX actor и чата."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self.sessions = sessions
+
+    async def previous_text(self, event: EventEnvelope, principal: MessagePrincipal) -> str | None:
+        if event.message is None:
+            return None
+        async with self.sessions() as session:
+            rows = (
+                await session.scalars(
+                    select(InboxEventRow)
+                    .where(
+                        InboxEventRow.source == "max",
+                        InboxEventRow.event_name == "message.received",
+                        or_(
+                            InboxEventRow.house_id.is_(None),
+                            InboxEventRow.house_id == principal.house_id,
+                        ),
+                        InboxEventRow.id != event.event_id,
+                        InboxEventRow.received_at < event.received_at,
+                        InboxEventRow.received_at >= event.received_at - timedelta(minutes=15),
+                    )
+                    .order_by(InboxEventRow.received_at.desc())
+                    .limit(20)
+                )
+            ).all()
+        for row in rows:
+            payload = row.normalized_event or {}
+            message = payload.get("message")
+            if not isinstance(message, dict):
+                continue
+            if (
+                payload.get("actor_user_id") != event.actor_user_id
+                or message.get("chat_id") != event.message.chat_id
+            ):
+                continue
+            text = message.get("text")
+            if isinstance(text, str) and len(text.strip()) >= 8:
+                return text.strip()
+        return None
+
+
+_ENTRANCE = re.compile(r"(?:в\s+)?(\d+)\s*(?:-?(?:й|ый|ой))?\s*подъезд", re.IGNORECASE)
+_FLOOR = re.compile(r"(?:на\s+)?(\d+)\s*(?:-?(?:м|ом))?\s*этаж", re.IGNORECASE)
+_ORDINALS = {
+    "перв": 1,
+    "втор": 2,
+    "трет": 3,
+    "четвер": 4,
+    "пят": 5,
+    "шест": 6,
+    "седьм": 7,
+    "восьм": 8,
+    "девят": 9,
+    "десят": 10,
+}
+
+
+def _location_number(text: str, numeric: re.Pattern[str], noun: str) -> int | None:
+    match = numeric.search(text)
+    if match is not None:
+        return int(match.group(1))
+    folded = text.casefold()
+    for stem, value in _ORDINALS.items():
+        if re.search(rf"\b{stem}\w*\s+{noun}", folded):
+            return value
+    return None
+
+
+class PostgresProblemDrafts:
+    """Надёжный backend-path для очевидной обычной проблемы без второго LLM шага."""
+
+    def __init__(self, cases: CaseService) -> None:
+        self.cases = cases
+
+    async def assess(self, text: str, event: EventEnvelope, context: TrustedContext) -> str:
+        entrance = _location_number(text, _ENTRANCE, "подъезд")
+        floor = _location_number(text, _FLOOR, "этаж")
+        if floor is not None and entrance is None:
+            return (
+                "Не удалось безопасно определить место. Уточните номер подъезда; "
+                "например: «5 подъезд»."
+            )
+        folded = text.casefold()
+        object_name = next(
+            (
+                value
+                for marker, value in (
+                    ("вод", "water_supply"),
+                    ("свет", "lighting"),
+                    ("ламп", "lighting"),
+                    ("лифт", "elevator"),
+                    ("отоп", "heating"),
+                    ("батар", "heating"),
+                )
+                if marker in folded
+            ),
+            None,
+        )
+        candidates = await self.cases.search(
+            CaseSearch(
+                query=text[:500],
+                entrance=entrance,
+                floor=floor,
+                object_name=object_name,
+            ),
+            context,
+        )
+        if candidates:
+            candidate = candidates[0]
+            await self.cases.attach_message(
+                CaseAttachMessage(
+                    case_id=candidate.case_id,
+                    message_id=event.event_id,
+                    expected_version=candidate.version,
+                    operation_id=event.event_id,
+                ),
+                context,
+            )
+            return "Похожая проблема уже есть. Я добавил ваше сообщение к текущему опросу."
+        title = text.replace("\nУточнение пользователя:", ";").strip()[:200]
+        await self.cases.create(
+            CaseCreate(
+                kind=CaseKind.PROBLEM,
+                title=title,
+                description=text[:2000],
+                entrance=entrance,
+                floor=floor,
+                object_name=object_name,
+                source_message_id=event.event_id,
+                candidate_case_ids=(),
+                operation_id=event.event_id,
+            ),
+            context,
+        )
+        return "Проблема подготовлена. Подтвердите запуск опроса в личном чате."

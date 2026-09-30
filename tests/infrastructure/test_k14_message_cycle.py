@@ -14,8 +14,15 @@ from dom_domych.application.agent.composition import (
     build_k_message_agent,
 )
 from dom_domych.application.agent.messages import register_message_agent
+from dom_domych.application.cases.confirmation import PostgresProblemConfirmationCallbacks
 from dom_domych.application.jobs.inbox_worker import EventDispatcher, InboxWorker
-from dom_domych.contracts.events import EventEnvelope, EventName, EventSource, MessagePayload
+from dom_domych.contracts.events import (
+    CallbackPayload,
+    EventEnvelope,
+    EventName,
+    EventSource,
+    MessagePayload,
+)
 from dom_domych.domain.executor.models import ApprovedDraft, DemoOperation
 from dom_domych.infrastructure.postgres.agent_models import AgentRunRow
 from dom_domych.infrastructure.postgres.case_models import (
@@ -49,6 +56,14 @@ class UnusedSubmitter:
         self, draft: ApprovedDraft, operation_key: str, house_id: UUID
     ) -> DemoOperation:
         raise AssertionError("triage must not submit an unapproved request")
+
+
+class CallbackAcks:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    async def answer_callback(self, callback_id, notification, *, dialog_key=None):
+        self.messages.append(notification)
 
 
 @pytest.mark.asyncio
@@ -99,7 +114,6 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
                 '"entrance":1,"object_name":"lighting"}]}'
             ),
             LlmResponse("", (LlmToolCall("case.create", create_arguments),)),
-            LlmResponse("Создала дело о неработающем освещении."),
         ]
     )
     async with database_lifespan(database_url) as sessions:
@@ -162,29 +176,69 @@ async def test_message_creates_one_scoped_case_and_queues_reply() -> None:
             worker = InboxWorker(sessions, dispatcher, clock, "k14-message-worker")
 
             assert await worker.run_once()
-            assert llm.call_count == 3
+            assert llm.call_count == 0
 
             async with sessions() as session:
                 case = await session.scalar(select(CaseRow).where(CaseRow.house_id == house_id))
                 assert case is not None
-                assert case.kind == "problem" and case.status == "detected"
+                assert case.kind == "problem" and case.status == "awaiting_confirmation"
                 origin = await session.get(CaseMessageRow, (case.id, event_id))
                 assert origin is not None and origin.actor_id == resident_id
                 run = await session.scalar(
                     select(AgentRunRow).where(AgentRunRow.event_id == event_id)
                 )
-                assert run is not None and run.status == "completed"
+                assert run is None
                 delivery = await session.scalar(
                     select(OutboxDeliveryRow).where(
                         OutboxDeliveryRow.operation_key == f"agent-reply:{event_id}"
                     )
                 )
                 assert delivery is not None
-                assert delivery.house_id == house_id and delivery.chat_id == "777"
+                assert delivery.house_id == house_id and delivery.chat_id is None
+                assert delivery.recipient_id == resident_id
                 assert delivery.status == "pending"
-                assert f"ID дела: {case.id}" in delivery.text
+                assert "Запустить опрос" in delivery.text
+                assert str(case.id) not in delivery.text
+                assert "case.create" not in delivery.text
+                assert [item["text"] for item in delivery.buttons] == ["Да, запустить", "Нет"]
+                yes_token = delivery.buttons[0]["payload"]
                 inbox = await session.get(InboxEventRow, event_id)
                 assert inbox is not None and inbox.status == "done"
+                problem_event = await session.scalar(
+                    select(InboxEventRow).where(
+                        InboxEventRow.source_key == f"problem-detected:{case.id}"
+                    )
+                )
+                assert problem_event is None
+
+            confirm_id, acks = uuid4(), CallbackAcks()
+            confirmed = await PostgresProblemConfirmationCallbacks(
+                sessions,
+                acks,
+                clock,  # type: ignore[arg-type]
+            ).handle(
+                EventEnvelope(
+                    event_id=confirm_id,
+                    source=EventSource.MAX,
+                    source_key=f"callback:{confirm_id}",
+                    name=EventName.CALLBACK_RECEIVED,
+                    occurred_at=NOW,
+                    received_at=NOW,
+                    correlation_id=confirm_id,
+                    actor_user_id="42",
+                    callback=CallbackPayload(
+                        callback_id="confirm-callback",
+                        sender_user_id="42",
+                        action_token=yes_token,
+                        chat_id="dm:42",
+                    ),
+                ),
+            )
+            assert confirmed is True
+            assert acks.messages == ["Запускаю опрос в группе."]
+            async with sessions() as session:
+                case = await session.scalar(select(CaseRow).where(CaseRow.house_id == house_id))
+                assert case is not None and case.status == "detected" and case.version == 2
                 problem_event = await session.scalar(
                     select(InboxEventRow).where(
                         InboxEventRow.source_key == f"problem-detected:{case.id}"

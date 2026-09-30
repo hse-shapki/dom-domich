@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -23,7 +23,12 @@ from dom_domych.application.executor.service import DemoExecutorService
 from dom_domych.application.initiatives.service import InitiativeService
 from dom_domych.application.requests.service import RequestDraft, RequestService
 from dom_domych.contracts.base import TrustedContext
-from dom_domych.contracts.events import EventEnvelope
+from dom_domych.contracts.events import (
+    EntityEventPayload,
+    EventEnvelope,
+    EventName,
+    EventSource,
+)
 from dom_domych.domain.polls.policy import demo_initiative_policy
 from dom_domych.domain.ports.core import Clock
 from dom_domych.infrastructure.files.local import LocalFileStore
@@ -38,6 +43,7 @@ from dom_domych.infrastructure.postgres.case_models import (
 )
 from dom_domych.infrastructure.postgres.demo_executor import PostgresDemoExecutor
 from dom_domych.infrastructure.postgres.house_context import PostgresHouseContext
+from dom_domych.infrastructure.postgres.inbox import save_domain_event
 from dom_domych.infrastructure.postgres.initiative_cases import PostgresInitiativeCases
 from dom_domych.infrastructure.postgres.initiatives import PostgresInitiativeRepository
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
@@ -79,6 +85,9 @@ class PostgresResidentActions:
     ) -> str:
         if context.actor_id is None or event.message is None:
             raise PermissionError("FORBIDDEN")
+        if action.name == "confirm":
+            return await self._confirm(context)
+        assert action.entity_id is not None
         if action.name == "prepare":
             return await self._prepare(action.entity_id, context)
         if action.name == "approve":
@@ -94,6 +103,71 @@ class PostgresResidentActions:
             assert action.evidence_id is not None and action.assessment is not None
             return await self._assess(action, context)
         raise ValueError("INVALID_ACTION")
+
+    async def _confirm(self, context: TrustedContext) -> str:
+        """Автор явно запускает workflow последнего ожидающего problem draft."""
+
+        assert context.actor_id is not None
+        async with self.sessions.begin() as session:
+            case = await session.scalar(
+                select(CaseRow)
+                .join(
+                    CaseMessageRow,
+                    (CaseMessageRow.case_id == CaseRow.id)
+                    & (CaseMessageRow.house_id == CaseRow.house_id),
+                )
+                .where(
+                    CaseRow.house_id == context.house_id,
+                    CaseRow.kind == "problem",
+                    CaseRow.status == "awaiting_confirmation",
+                    CaseMessageRow.actor_id == context.actor_id,
+                    CaseMessageRow.relation == "origin",
+                )
+                .order_by(CaseRow.created_at.desc())
+                .with_for_update()
+                .limit(1)
+            )
+            if case is None:
+                return "Нет проблемы, которая ждёт запуска опроса. Опишите проблему заново."
+            previous_version = case.version
+            case.version += 1
+            case.status = "detected"
+            session.add(
+                CaseEventRow(
+                    id=uuid4(),
+                    case_id=case.id,
+                    house_id=case.house_id,
+                    event_type="problem.confirmed",
+                    before_version=previous_version,
+                    after_version=case.version,
+                    actor_id=context.actor_id,
+                    source_message_id=None,
+                    operation_id=context.event_id,
+                    occurred_at=self.clock.now(),
+                    facts={},
+                )
+            )
+            event_id = uuid4()
+            await save_domain_event(
+                session,
+                EventEnvelope(
+                    event_id=event_id,
+                    source=EventSource.DOMAIN,
+                    source_key=f"problem-detected:{case.id}",
+                    name=EventName.PROBLEM_DETECTED,
+                    occurred_at=self.clock.now(),
+                    received_at=self.clock.now(),
+                    correlation_id=context.correlation_id,
+                    house_id=context.house_id,
+                    entity=EntityEventPayload(
+                        entity_id=case.id,
+                        entity_version=case.version,
+                        case_id=case.id,
+                        causation_id=context.event_id,
+                    ),
+                ),
+            )
+        return "Опрос запускается в группе. Я сообщу результат после голосования."
 
     async def _require_author(
         self, session: AsyncSession, case_id: UUID, context: TrustedContext
@@ -192,6 +266,7 @@ class PostgresResidentActions:
 
     async def _revise(self, action: ResidentAction, context: TrustedContext) -> str:
         assert context.actor_id is not None
+        assert action.entity_id is not None
         assert action.expected_revision is not None and action.wording is not None
         repository = PostgresInitiativeRepository(self.sessions)
         operation_key = f"initiative:revision:message:{context.event_id}"

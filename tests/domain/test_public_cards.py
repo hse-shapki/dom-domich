@@ -116,8 +116,9 @@ async def test_problem_card_uses_frozen_denominator_not_reachable_count() -> Non
 
     card = problem_card("Не горит свет", poll)
 
-    assert "Подтвердили: 0/12" in card.text
-    assert "Недоставка ЛС не меняет это число" in card.text
+    assert "Поддержали 0 из 12 жителей" in card.text
+    assert "Для запуска обращения нужно ещё 3 голоса" in card.text
+    assert "Ответить можно до" in card.text
     assert card.demo is True
 
 

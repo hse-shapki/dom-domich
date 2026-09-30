@@ -99,6 +99,23 @@ async def test_client_sends_and_edits_inline_callback_keyboard() -> None:
 
 
 @pytest.mark.asyncio
+async def test_client_can_remove_inline_keyboard_on_edit() -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"success": True})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
+    ) as http:
+        await MaxApiClient(http, "secret-token").edit_text(
+            "mid.poll", "✅ Ваш выбор: Вы поддержали.", attachments=[]
+        )
+    assert json.loads(seen[0].content)["attachments"] == []
+
+
+@pytest.mark.asyncio
 async def test_client_requests_upload_slot_without_leaking_token_to_url() -> None:
     seen: list[httpx.Request] = []
 

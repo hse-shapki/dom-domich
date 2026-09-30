@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dom_domych.application.cards.builders import human_poll_deadline
 from dom_domych.application.polls.callback import StoredPollAction
 from dom_domych.domain.polls.models import PollDefinition, PollKind, VoteChoice
 from dom_domych.domain.ports.core import DeliveryIntent
@@ -35,9 +36,14 @@ async def enqueue_poll_invitations(session: AsyncSession, definition: PollDefini
     if title is None:
         raise ValueError("poll case is missing")
     labels = (
-        ("Подтверждаю", "Не подтверждаю")
+        ("Поддерживаю", "Не поддерживаю")
         if definition.kind is PollKind.PROBLEM_CONFIRMATION
         else ("За", "Против")
+    )
+    prompt = (
+        "Подтвердите, что эта проблема действительно есть."
+        if definition.kind is PollKind.PROBLEM_CONFIRMATION
+        else "Поддерживаете эту инициативу?"
     )
     for resident_id in sorted(definition.eligible_residents):
         buttons: list[tuple[str, str]] = []
@@ -59,11 +65,15 @@ async def enqueue_poll_invitations(session: AsyncSession, definition: PollDefini
                 house_id=definition.house_id,
                 operation_key=f"poll:invite:{definition.poll_id}:{resident_id}",
                 text=(
-                    f"Опрос Дом Домыч: {title}\n"
-                    f"Редакция {definition.subject_revision}. "
-                    f"Ответ принимается до {definition.closes_at.isoformat()}.\n"
-                    "Ваш ответ не публикуется в общем чате. "
-                    + ("Демо-опрос по тестовым правилам." if definition.policy.demo else "")
+                    f"🏠 Нужен ваш голос\n{title}\n\n"
+                    f"{prompt}\n"
+                    f"Ответить можно до {human_poll_deadline(definition.closes_at)}.\n"
+                    "Ваш выбор останется личным — в группе будет виден только общий результат."
+                    + (
+                        "\nℹ️ Сейчас бот работает в демонстрационном режиме."
+                        if definition.policy.demo
+                        else ""
+                    )
                 ),
                 recipient_id=resident_id,
                 buttons=tuple(buttons),

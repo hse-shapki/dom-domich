@@ -113,9 +113,9 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
         async with sessions.begin() as session:
             base = await session.get(OutboxDeliveryRow, base_id)
             assert base is not None
-            assert "Подтвердили: 0/12" in base.text
-            assert "демонстрационная настройка" in base.text
-            assert [item["text"] for item in base.buttons] == ["Подтверждаю", "Не подтверждаю"]
+            assert "Поддержали 0 из 12 жителей" in base.text
+            assert "работает в демонстрационном режиме" in base.text
+            assert [item["text"] for item in base.buttons] == ["Поддерживаю", "Не поддерживаю"]
             action = await PostgresPollActionStore(session).get(base.buttons[0]["payload"])
             assert action is not None and action.poll_id == poll.definition.poll_id
             assert action.choice is VoteChoice.YES
@@ -173,7 +173,7 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
                     OutboxDeliveryRow.status == "pending",
                 )
             )
-            assert callback_edit is not None and "Подтвердили: 1/12" in callback_edit.text
+            assert callback_edit is not None and "Поддержали 1 из 12 жителей" in callback_edit.text
         for member in audience.members[1:2]:
             async with sessions.begin() as session:
                 await PostgresPollRepository(session).record_answer_atomic(
@@ -197,7 +197,7 @@ async def test_problem_card_uses_frozen_denominator_and_coalesces_edits() -> Non
             assert len(rows) == 2
             assert {row.status for row in rows} == {"pending", "superseded"}
             latest = next(row for row in rows if row.status == "pending")
-            assert "Подтвердили: 2/12" in latest.text
+            assert "Поддержали 2 из 12 жителей" in latest.text
             assert "resident_id" not in latest.text
             assert latest.buttons == base.buttons
         clock.current = poll.definition.closes_at

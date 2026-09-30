@@ -222,7 +222,7 @@ class PostgresPublicCards:
             ):
                 return prior
         labels = (
-            ("Подтверждаю", "Не подтверждаю")
+            ("Поддерживаю", "Не поддерживаю")
             if poll.definition.kind is PollKind.PROBLEM_CONFIRMATION
             else ("За", "Против")
         )

@@ -38,8 +38,10 @@ from dom_domych.infrastructure.postgres.case_writer import PostgresCaseWriter
 from dom_domych.infrastructure.postgres.emergency_evidence import PostgresEmergencyEvidenceQueue
 from dom_domych.infrastructure.postgres.knowledge import PostgresKnowledgeRepository
 from dom_domych.infrastructure.postgres.message_agent import (
+    PostgresMessageHistory,
     PostgresMessagePrincipals,
     PostgresMessageReplies,
+    PostgresProblemDrafts,
 )
 from dom_domych.infrastructure.postgres.requests import (
     PostgresRequestCases,
@@ -72,7 +74,11 @@ def build_k_tool_handlers(
     reader = PostgresCaseReader(sessions)
     cases = CaseService(
         CandidateService(reader, embeddings),
-        PostgresCaseWriter(sessions, emit_workflow_events=True),
+        PostgresCaseWriter(
+            sessions,
+            emit_workflow_events=True,
+            require_problem_confirmation=True,
+        ),
         clock,
     )
     knowledge_repository = PostgresKnowledgeRepository(sessions)
@@ -135,11 +141,22 @@ def build_k_message_agent(
         frozenset(),
         embeddings,
     )
+    cases = CaseService(
+        CandidateService(PostgresCaseReader(sessions), embeddings),
+        PostgresCaseWriter(
+            sessions,
+            emit_workflow_events=True,
+            require_problem_confirmation=True,
+        ),
+        clock,
+    )
     return MessageAgentHandler(
         PostgresMessagePrincipals(sessions, clock, resident_capabilities),
         TriageService(LlmTriagePort(llm), knowledge),
         coordinator,
         PostgresMessageReplies(sessions, clock),
+        PostgresMessageHistory(sessions),
+        PostgresProblemDrafts(cases),
     )
 
 

@@ -60,8 +60,10 @@ class Replies:
 class Triage:
     def __init__(self, route: RouteResult) -> None:
         self.result = route
+        self.texts: list[str] = []
 
     async def route(self, text, context, *, at):
+        self.texts.append(text)
         return (self.result,)
 
 
@@ -77,6 +79,16 @@ class ValidationFailedCoordinator:
             "",
             (ToolAudit("case.create", "VALIDATION_ERROR", None, ()),),
         )
+
+
+class CompletedCoordinator:
+    async def run_event(self, *args, **kwargs):
+        return RunOutcome("completed", "Принято", ())
+
+
+class History:
+    async def previous_text(self, event, principal):
+        return "Воды нет на третьем этаже"
 
 
 class Actions:
@@ -192,6 +204,23 @@ async def test_invalid_case_location_gets_actionable_reply_instead_of_silence() 
         "Не удалось безопасно определить место. Уточните: весь дом или номер подъезда; "
         "если указываете этаж — обязательно укажите подъезд."
     ]
+
+
+@pytest.mark.asyncio
+async def test_short_scope_reply_continues_previous_group_problem() -> None:
+    replies = Replies()
+    triage = Triage(
+        RouteResult(
+            kind=MessageKind.PROBLEM,
+            text="Воды нет на третьем этаже в пятом подъезде",
+            next_action="problem.assess",
+        )
+    )
+    handler = MessageAgentHandler(Principals(), triage, CompletedCoordinator(), replies, History())
+
+    assert await handler(_event("5 подъезд", chat_id="group"))
+    assert triage.texts == ["Воды нет на третьем этаже\nУточнение пользователя: 5 подъезд"]
+    assert replies.messages == ["Принято"]
 
 
 @pytest.mark.asyncio
