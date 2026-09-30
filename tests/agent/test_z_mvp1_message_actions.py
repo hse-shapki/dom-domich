@@ -117,6 +117,27 @@ async def test_unreviewed_question_asks_for_clarification() -> None:
 
 
 @pytest.mark.asyncio
+async def test_private_greeting_gets_reply_without_mutating_agent() -> None:
+    replies = Replies()
+    handler = MessageAgentHandler(
+        Principals(),
+        Triage(
+            RouteResult(
+                kind=MessageKind.CONVERSATION,
+                text="Привет",
+                next_action="none",
+            )
+        ),
+        ForbiddenCoordinator(),
+        replies,
+    )
+    assert await handler(_event("Привет"))
+    assert replies.messages and "Расскажите о проблеме" in replies.messages[0]
+    assert await handler(_event("Привет", chat_id="group"))
+    assert len(replies.messages) == 1
+
+
+@pytest.mark.asyncio
 async def test_mutating_command_requires_private_chat_and_exact_shape() -> None:
     replies, actions = Replies(), Actions()
     handler = ResidentActionHandler(Principals(), replies, actions)

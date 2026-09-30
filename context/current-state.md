@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 30.09.2026: в ветке `z-mvp-1` локальные Z изменения объединены с MAX/callback/Ollama, а явные команды жителя Z-MVP-1 подключены к inbox. **297 тестов** прошли на чистой PostgreSQL 16.13 после полной миграции; Ruff check/format, mypy и Alembic check — локальные ворота этой ветки. Предыдущие отдельные прогоны: 261 тест на PostgreSQL 17.8/pgvector (Z) и 279 на PostgreSQL 16.13 (remote); PG17/CI и live MAX для Z-MVP-1 ещё нужны. Ранее live MAX подтвердил `/me`, polling, demo onboarding, групповую карточку/edit сообщения, отказ callback вне аудитории и транспорт синтетического PDF. Допустимый live голос, PDF Z в mobile/web и цельный MAX/LLM G3 не подтверждены. Исторические проверки ниже не следует читать как состояние live-стенда.
+Проверено 30.09.2026: Z-MVP-1 объединён с `main`; после сообщения о молчании бота добавлены локальные ответы на личное приветствие и подсказка `/start` неподтверждённому жителю. **299 тестов** прошли на чистой PostgreSQL 16.13 после полной миграции; Ruff check/format, mypy и Alembic check — локальные ворота. Предыдущие отдельные прогоны: 261 тест на PostgreSQL 17.8/pgvector (Z) и 279 на PostgreSQL 16.13 (remote); PG17/CI и live MAX для нового fallback ещё нужны. Ранее live MAX подтвердил `/me`, polling, demo onboarding, групповую карточку/edit сообщения, отказ callback вне аудитории и транспорт синтетического PDF. На текущем компьютере нет запущенного runtime, Docker daemon недоступен и MAX-конфигурация отсутствует; push в Git не означает deploy. Допустимый live голос, PDF Z в mobile/web и цельный MAX/LLM G3 не подтверждены.
 
 ## Факты на дату проверки
 
@@ -174,8 +174,9 @@ Update привязывается к K evidence в FileStore. Отправите
 релевантность фото, автоматического vision нет. `prepare` проверяет автора,
 актуальный case, reviewed rule и ответственного; `approve` и `send` — отдельные
 личные действия, отправка идёт только demo executor. Вопрос из reviewed source
-отвечает без mutation tools. На чистой PostgreSQL 16.13 30.09.2026 прошли
-297 тестов; live MAX UX, вариативные формулировки и полный MAX/LLM G3 открыты.
+отвечает без mutation tools. После исправления личных ответов на чистой
+PostgreSQL 16.13 30.09.2026 прошли 299 тестов; live MAX UX, вариативные
+формулировки и полный MAX/LLM G3 открыты.
 Целевой PG17/pgvector для этого commit и CI ещё не повторён; предыдущий
 набор PG17/pgvector и Compose lifecycle проверены. GitHub Actions #50 до
 объединения прошёл 275 тестов на PG17/pgvector. Публичный HTTPS, mobile/web

@@ -88,6 +88,15 @@ async def test_demo_invitation_onboards_from_max_dm_and_marks_stopped_chat_unrea
         ) as http:
             handler = MaxOnboardingHandler(sessions, MaxApiClient(http, "test-token"), clock)
             assert await handler.handle(event)
+            ordinary_message = {
+                **raw_message,
+                "message": {
+                    **raw_message["message"],
+                    "body": {"mid": "hello.1", "text": "Привет"},
+                },
+            }
+            _, ordinary_event = normalize_update(ordinary_message, clock.now())
+            assert ordinary_event is not None and not await handler.handle(ordinary_event)
             stopped_raw: dict[str, object] = {
                 "update_type": "bot_stopped",
                 "timestamp": int(clock.now().timestamp() * 1000),
@@ -120,6 +129,36 @@ async def test_demo_invitation_onboards_from_max_dm_and_marks_stopped_chat_unrea
                 .values(confirmed=False, source="demo")
             )
     assert len(seen) == 1 and seen[0].url.params["user_id"] == "313"
+
+
+@pytest.mark.asyncio
+async def test_unonboarded_dm_receives_start_instruction() -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"message": {"body": {"mid": "welcome.1"}}})
+
+    raw_message: dict[str, object] = {
+        "update_type": "message_created",
+        "timestamp": int(FixedClock().now().timestamp() * 1000),
+        "message": {
+            "sender": {"user_id": 991313},
+            "recipient": {"chat_id": 12345, "user_id": 900, "chat_type": "dialog"},
+            "timestamp": int(FixedClock().now().timestamp() * 1000),
+            "body": {"mid": "hello.1", "text": "Привет"},
+        },
+    }
+    _, event = normalize_update(raw_message, FixedClock().now())
+    assert event is not None
+    async with database_lifespan(database_url_for_test()) as sessions:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(respond), base_url="https://platform-api2.max.ru"
+        ) as http:
+            handler = MaxOnboardingHandler(sessions, MaxApiClient(http, "test-token"), FixedClock())
+            assert await handler.handle(event)
+    assert len(seen) == 1 and seen[0].url.params["user_id"] == "991313"
+    assert "/start" in seen[0].content.decode()
 
 
 @pytest.mark.asyncio

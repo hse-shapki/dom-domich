@@ -49,7 +49,16 @@ class MaxOnboardingHandler:
             return False
         parts = message.text.strip().split(maxsplit=1)
         if not parts or parts[0].lower() not in {"/start", "/house"}:
-            return False
+            async with self.sessions.begin() as session:
+                selection = await DemoEnrollmentService(
+                    PostgresEnrollment(session), self.clock
+                ).current_house(message.sender_user_id)
+            if selection.selected_house_id is not None:
+                return False
+            await self.max_client.send_text(
+                self._status_text(selection), user_id=int(message.sender_user_id)
+            )
+            return True
         async with self.sessions.begin() as session:
             service = DemoEnrollmentService(PostgresEnrollment(session), self.clock)
             try:

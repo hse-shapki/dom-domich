@@ -77,6 +77,13 @@ class MessageAgentHandler:
         if not routes:
             return True
         if all(route.kind is MessageKind.CONVERSATION for route in routes):
+            if event.message.chat_id.startswith("dm:"):
+                await self.replies.enqueue(
+                    event,
+                    principal,
+                    "Здравствуйте! Расскажите о проблеме дома, задайте вопрос "
+                    "или предложите инициативу.",
+                )
             return True
         answers = [
             (
