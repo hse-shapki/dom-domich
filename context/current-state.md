@@ -1,6 +1,6 @@
 # Проверенное состояние проекта
 
-Проверено 30.09.2026: A-MVP-1 и локальная часть Z-MVP-1 объединены. **301 тест** прошёл на чистой PostgreSQL 17/pgvector после полной миграции и двойного runtime seed; Ruff check/format, mypy и Alembic check прошли. Единый polling Compose подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox. Допустимый live голос, PDF Z в mobile/web, downstream `problem.detected`, новый fallback личного сообщения и цельный MAX/LLM G3 ещё не подтверждены.
+Проверено 30.09.2026: A-MVP-1 и локальная часть Z-MVP-1 объединены. С read-only диагностикой A-MVP-2 **303 теста** прошли на чистой PostgreSQL 17/pgvector после полной миграции и двойного runtime seed; Ruff check/format, mypy и Alembic check прошли. Единый polling Compose подтвердил MAX `/me`, Ollama `qwen3:4b`, onboarding и normal group message по durable inbox → agent/tools → sent outbox. Допустимый live голос, PDF Z в mobile/web, downstream `problem.detected`, новый fallback личного сообщения и цельный MAX/LLM G3 ещё не подтверждены.
 
 ## Факты на дату проверки
 
@@ -138,8 +138,8 @@ K16: четыре вариативных демо-пути, ссылки на п
 | Сквозная проверка Z14 | Частично: 9 production PostgreSQL 17 сценариев problem/initiative/emergency → request → PDF/FileStore/binding → executor → три исхода и отдельный problem → callback/card → request/PDF → closed/reopened MockTransport путь | `tests/infrastructure/test_g3_runtime.py`, `test_g3_runtime_callback.py`; цельный live MAX/LLM G3 отсутствует |
 | PDF QA Z15 | Частично: 29.09.2026 заново сгенерированы/просмотрены 4 образца (7 страниц) и 4 production PostgreSQL/FileStore документа (6 страниц); embedded fonts, snapshot/hash/поля/приватность сверены | `docs/release/zamira-pdf-qa.md`, `output/pdf/qa-2026-09-29/manifest.json`; MAX mobile/web не проверены |
 | Материалы Z16 | Частично: handoff, 9 локальных G3 исходов, QA manifest, manual demo двух исходов и live PDF smoke готовы | `docs/release/zamira-handoff.md`, `zamira-manual-demo.md`, `zamira-live-pdf-smoke.md`; live evidence MAX mobile/web отсутствуют |
-| Python-проект и зависимости A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; 30.09.2026 объединённые 301 тест, migration/check, двойной seed, Ruff и mypy прошли на PG17/pgvector; CI merge ожидается |
-| PostgreSQL core A02 | Проверено локально на PostgreSQL 17 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`, `src/dom_domych/demo/house.py`: clean migration/check до `0a7b6c5d4e3f`, повторный runtime seed и 301 тест |
+| Python-проект и зависимости A00 | Проверено локально; предыдущий remote набор — GitHub Actions #50 | `pyproject.toml`, `uv.lock`, `.python-version`, `.github/workflows/python.yml`; ветка A-MVP-2 прошла 303 теста, migration/check, двойной seed, Ruff и mypy на PG17/pgvector; CI ожидается |
+| PostgreSQL core A02 | Проверено локально на PostgreSQL 17 + pgvector 0.8.1 | `migrations/`, `infrastructure/postgres/`, `scripts/seed_demo_house.py`, `src/dom_domych/demo/house.py`: clean migration/check до `0a7b6c5d4e3f`, повторный runtime seed и 303 теста |
 | HouseContextPort A05 | Частично: выборка и интеграция с Z AudienceService проверены на PostgreSQL 18 | `infrastructure/postgres/house_context.py`, `tests/infrastructure/test_house_context_postgres.py`; запись demo-проживания добавлена отдельно в A06 |
 | Demo onboarding A06 | Частично: operator CLI, приглашение, signed int64 group chat ID, привязка MAX ID/чата, stopped и выбор дома проверены на PostgreSQL; реальные `/start <код>` и `bot_added` группы подтверждены | `entrypoints/demo_operator.py`, `application/residents/enrollment.py`, `infrastructure/postgres/enrollment.py`, `infrastructure/max/onboarding.py`, tests; mobile и несколько домов ещё не проверены |
 | MAX Bot API A03 | Частично: документированные методы проверены через MockTransport; live `/me`, личная/групповая отправка, `POST /answers` и PDF upload — 29–30.09.2026; MAX TLS объединяет Mozilla/Russian roots и не использует ambient proxy | `infrastructure/max/client.py`, `infrastructure/max/tls.py`, tests; mobile ещё не проверен |
@@ -196,6 +196,11 @@ PG17/pgvector, миграции, runtime seed, шесть workers, polling, MAX 
 normal group message подтверждённого жителя прошли совместно до sent outbox. Сообщения до
 регистрации не получили trusted actor и ответа. Следующий `problem.detected` остался без
 downstream handler — это открытый Z-MVP-1 стык и причина не объявлять полный live G3.
+
+A-MVP-2 начата в ветке `a-mvp-2`: `entrypoints/diagnostics.py` читает inbox/outbox/jobs в
+read-only PostgreSQL транзакции и выводит только redacted агрегаты status/ready/stale lease и
+alerts. Локальный PostgreSQL-тест подтверждает отсутствие mutation и утечки operation key/text.
+Live фото, допустимый callback/edit, потеря прав и mobile/web по-прежнему открыты.
 
 ## Как обновлять после задачи
 
