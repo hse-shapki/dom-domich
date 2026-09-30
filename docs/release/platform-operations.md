@@ -1,18 +1,43 @@
 # Эксплуатация платформы A12–A17
 
-## Развёртывание
+## A-MVP-1: единый demo-стенд
 
-1. Скопировать `.env.example` в `.env` вне Git и задать `POSTGRES_PASSWORD`, production
-   `DATABASE_URL`, `MAX_BOT_TOKEN`, `MAX_WEBHOOK_SECRET`, `PUBLIC_HOST`, а также доступные
-   контейнерам `LLM_BASE_URL` и `LLM_MODEL`. Образ/веса модели в Compose не зафиксированы,
-   пока K15 не выбрал прошедшую evals модель; endpoint поднимается отдельно или override-файлом.
-2. Проверить `docker compose -f deploy/compose.yml config`, затем собрать образы без `latest`.
-3. Запустить `docker compose -f deploy/compose.yml up -d --build`. Одноразовый `migrate`
-   применяет единственную Alembic history до старта API/outbox/maintenance.
-4. Проверить `/health/live` и `/health/ready`. Readiness возвращает `503`, если недоступна БД;
-   при доступной БД и недоступном inference возвращает HTTP 200 со статусом `degraded`, чтобы
-   ingress продолжал надёжно принимать события. Затем отдельно зарегистрировать MAX webhook на
-   `https://<PUBLIC_HOST>/webhook/max` с тем же secret.
+Локальный принимаемый режим — MAX long polling и Ollama на хосте. Веса не попадают в Git или
+Docker image. Проверенная конфигурация 30.09.2026: base commit `c79454168706682a6a1a909812da30cb7bf27dde`,
+Ollama `0.32.1`, модель `qwen3:4b` с digest
+`359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7`, PostgreSQL image
+`pgvector/pgvector@sha256:3e8b3adfd27b5707128f60956f62a793c3c9326ea8cfaf0eab7adccb5d700b21`.
+Это фиксация реально поднятого стенда, но не результат K15 evals и не доказательство качества модели.
+
+1. Установить Ollama `0.32.1`, выполнить `ollama pull qwen3:4b` и оставить Ollama запущенным.
+2. Скопировать `.env.example` в игнорируемый `.env`, заменить `POSTGRES_PASSWORD` и
+   `MAX_BOT_TOKEN`. Не коммитить `.env`. Для macOS/Windows оставить
+   `LLM_BASE_URL=http://host.docker.internal:11434`, `LLM_BACKEND=ollama`,
+   `MAX_INGRESS_MODE=polling`; `DATABASE_URL` внутри Compose должен содержать host `postgres` и
+   имя `dom_domych_demo`.
+3. Убедиться, что у бота нет активного webhook, затем поднять весь stand одной командой:
+
+```bash
+docker compose --env-file .env -p dom-domych --profile polling \
+  -f deploy/compose.yml up -d --build --wait
+docker compose --env-file .env -p dom-domych --profile polling \
+  -f deploy/compose.yml logs preflight
+```
+
+Одноразовые процессы `migrate`, затем `seed`, затем `preflight` обязаны завершиться кодом 0.
+`preflight` печатает только redacted JSON и в том же Compose stand проверяет Alembic head,
+pgvector, MAX `/me`, список webhook и реальный ответ выбранной модели. После seed стартуют
+polling, inbox, scheduler, outbox, documents и maintenance. PostgreSQL остаётся только во
+внутренней сети; app-контейнеры получают отдельный egress для MAX и Ollama.
+
+Для публичного HTTPS вместо polling задать `MAX_INGRESS_MODE=webhook`, непустые
+`MAX_WEBHOOK_SECRET`/`PUBLIC_HOST` и использовать `--profile webhook`. Затем зарегистрировать
+`https://<PUBLIC_HOST>/webhook/max`. Одновременно polling и webhook не запускать.
+
+Текущие фактические ограничения: Ollama работает на Mac, поэтому бот доступен, только пока Mac,
+Ollama и Compose запущены; внешний TLS/webhook и mobile/web матрица этим smoke не проверены;
+модель ещё не прошла K15 evals. Demo seed разрешён только для `dom_domych_test*` либо при явном
+флаге для БД с именем `dom_domych_demo`.
 
 Операционные команды не печатают токен/secret:
 

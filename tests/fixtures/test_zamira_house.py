@@ -1,5 +1,8 @@
 import asyncio
+from dataclasses import asdict
 
+from dom_domych.demo.house import demo_residencies
+from scripts.seed_demo_house import _demo_seed_allowed
 from tests.fixtures.zamira_house import (
     HOUSE_ONE,
     HOUSE_TWO,
@@ -8,6 +11,20 @@ from tests.fixtures.zamira_house import (
     synthetic_id,
     zamira_fixture,
 )
+
+
+def test_runtime_demo_seed_matches_fixture_registry() -> None:
+    fixture_rows = zamira_fixture().residencies
+    runtime_rows = demo_residencies()
+
+    assert tuple(asdict(row) for row in runtime_rows) == tuple(asdict(row) for row in fixture_rows)
+
+
+def test_demo_seed_needs_test_database_or_explicit_demo_database() -> None:
+    assert _demo_seed_allowed("postgresql+asyncpg://u@db/dom_domych_test", explicit_demo=False)
+    assert _demo_seed_allowed("postgresql+asyncpg://u@db/dom_domych_demo", explicit_demo=True)
+    assert not _demo_seed_allowed("postgresql+asyncpg://u@db/dom_domych", explicit_demo=True)
+    assert not _demo_seed_allowed("postgresql+asyncpg://u@db/dom_domych_demo", explicit_demo=False)
 
 
 def test_fixture_has_twelve_distinct_reporters_and_a_repeat() -> None:

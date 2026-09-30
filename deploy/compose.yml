@@ -9,11 +9,12 @@ x-app: &app
     DATABASE_URL: ${DATABASE_URL:?Set container DATABASE_URL with postgres host}
     FILE_STORE_DIR: /var/lib/dom-domych/files
     MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?Set MAX_BOT_TOKEN outside Git}
-    MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:?Set MAX_WEBHOOK_SECRET outside Git}
-    MAX_INGRESS_MODE: webhook
+    MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-}
+    MAX_INGRESS_MODE: ${MAX_INGRESS_MODE:-webhook}
     PAYLOAD_RETENTION_DAYS: ${PAYLOAD_RETENTION_DAYS:-30}
     LLM_BASE_URL: ${LLM_BASE_URL:?Set reachable OpenAI-compatible llama-server URL}
     LLM_MODEL: ${LLM_MODEL:?Set served model alias}
+    LLM_BACKEND: ${LLM_BACKEND:-openai_compatible}
     LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-512}
     LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
     LLM_ATTEMPTS: ${LLM_ATTEMPTS:-2}
@@ -22,19 +23,28 @@ x-app: &app
       condition: service_completed_successfully
   volumes:
     - files_data:/var/lib/dom-domych/files
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   networks:
     - backend
+    - egress
+
+x-runtime: &runtime
+  <<: *app
+  depends_on:
+    seed:
+      condition: service_completed_successfully
 
 services:
   postgres:
     image: pgvector/pgvector:0.8.1-pg17
     restart: unless-stopped
     environment:
-      POSTGRES_DB: dom_domych
+      POSTGRES_DB: ${POSTGRES_DB:-dom_domych_demo}
       POSTGRES_USER: dom_domych
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD outside Git}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dom_domych -d dom_domych"]
+      test: ["CMD-SHELL", "pg_isready -U dom_domych -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -51,8 +61,14 @@ services:
       postgres:
         condition: service_healthy
 
-  api:
+  seed:
     <<: *app
+    restart: "no"
+    command: ["python", "-m", "scripts.seed_demo_house", "--allow-demo-database"]
+
+  api:
+    <<: *runtime
+    profiles: ["webhook"]
     read_only: true
     tmpfs:
       - /tmp
@@ -69,48 +85,63 @@ services:
       retries: 10
 
   outbox:
-    <<: *app
+    <<: *runtime
     command: ["dom-domych-process", "outbox"]
     read_only: true
     tmpfs:
       - /tmp
 
   inbox:
-    <<: *app
+    <<: *runtime
     command: ["dom-domych-process", "inbox"]
     read_only: true
     tmpfs:
       - /tmp
 
   scheduler:
-    <<: *app
+    <<: *runtime
     command: ["dom-domych-process", "scheduler"]
     read_only: true
     tmpfs:
       - /tmp
 
   documents:
-    <<: *app
+    <<: *runtime
     command: ["dom-domych-process", "documents"]
     read_only: true
     tmpfs:
       - /tmp
 
   maintenance:
-    <<: *app
+    <<: *runtime
     command: ["dom-domych-process", "maintenance"]
     read_only: true
     tmpfs:
       - /tmp
 
+  polling:
+    <<: *runtime
+    profiles: ["polling"]
+    command: ["dom-domych-process", "polling"]
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  preflight:
+    <<: *runtime
+    profiles: ["webhook", "polling"]
+    restart: "no"
+    command: ["dom-domych-preflight"]
+
   caddy:
     image: caddy:2.10.2-alpine
     restart: unless-stopped
+    profiles: ["webhook"]
     depends_on:
       api:
         condition: service_healthy
     environment:
-      PUBLIC_HOST: ${PUBLIC_HOST:?Set public webhook hostname}
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
     ports:
       - "80:80"
       - "443:443"
@@ -125,6 +156,7 @@ services:
 
 networks:
   edge:
+  egress:
   backend:
     internal: true
 
